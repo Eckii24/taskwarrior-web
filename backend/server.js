@@ -13,7 +13,7 @@ const MAX_PORT = 65535;
 
 // Validate if a port number is valid
 function isValidPort(port) {
-    return !isNaN(port) && port >= MIN_PORT && port <= MAX_PORT;
+    return Number.isInteger(port) && port >= MIN_PORT && port <= MAX_PORT;
 }
 
 // Parse command-line arguments for port
@@ -21,12 +21,16 @@ function getPort() {
     const args = process.argv.slice(2);
     const portIndex = args.findIndex(arg => arg === '--port' || arg === '-p');
     
-    if (portIndex !== -1 && portIndex + 1 < args.length) {
-        const port = parseInt(args[portIndex + 1], 10);
-        if (isValidPort(port)) {
-            return port;
+    if (portIndex !== -1) {
+        if (portIndex + 1 >= args.length) {
+            console.warn(`Warning: Port argument '${args[portIndex]}' provided without a value. Using default port ${DEFAULT_PORT}.`);
+        } else {
+            const port = parseInt(args[portIndex + 1], 10);
+            if (isValidPort(port)) {
+                return port;
+            }
+            console.warn(`Warning: Invalid port argument '${args[portIndex + 1]}'. Using default port ${DEFAULT_PORT}.`);
         }
-        console.warn(`Warning: Invalid port argument '${args[portIndex + 1]}'. Using default port ${DEFAULT_PORT}.`);
     }
     
     // Validate environment variable PORT as well
