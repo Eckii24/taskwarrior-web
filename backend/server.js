@@ -19,7 +19,15 @@ function getPort() {
         }
     }
     
-    return process.env.PORT || 3000;
+    // Validate environment variable PORT as well
+    if (process.env.PORT) {
+        const port = parseInt(process.env.PORT, 10);
+        if (!isNaN(port) && port > 0 && port < 65536) {
+            return port;
+        }
+    }
+    
+    return 3000;
 }
 
 const PORT = getPort();
