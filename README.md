@@ -62,15 +62,27 @@ npm install
 
 ## Usage
 
-1. Start the server:
+### Starting the Server
+
+**Default port (3000):**
 ```bash
 npm start
 ```
 
-2. Open your browser and navigate to:
+**Custom port using environment variable:**
+```bash
+PORT=4000 npm start
 ```
-http://localhost:3000
+
+**Custom port using command-line argument:**
+```bash
+node backend/server.js --port 4000
+# or
+node backend/server.js -p 4000
 ```
+
+**Open your browser:**
+Navigate to `http://localhost:3000` (or your custom port)
 
 ## Interface Guide
 

@@ -6,7 +6,23 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 const app = express();
-const PORT = process.env.PORT || 3000;
+
+// Parse command-line arguments for port
+function getPort() {
+    const args = process.argv.slice(2);
+    const portIndex = args.findIndex(arg => arg === '--port' || arg === '-p');
+    
+    if (portIndex !== -1 && args[portIndex + 1]) {
+        const port = parseInt(args[portIndex + 1], 10);
+        if (!isNaN(port) && port > 0 && port < 65536) {
+            return port;
+        }
+    }
+    
+    return process.env.PORT || 3000;
+}
+
+const PORT = getPort();
 
 // Middleware
 app.use(cors());
