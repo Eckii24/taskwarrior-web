@@ -12,11 +12,12 @@ function getPort() {
     const args = process.argv.slice(2);
     const portIndex = args.findIndex(arg => arg === '--port' || arg === '-p');
     
-    if (portIndex !== -1 && args[portIndex + 1]) {
+    if (portIndex !== -1 && portIndex + 1 < args.length) {
         const port = parseInt(args[portIndex + 1], 10);
         if (!isNaN(port) && port > 0 && port < 65536) {
             return port;
         }
+        console.warn(`Warning: Invalid port argument '${args[portIndex + 1]}'. Using default port 3000.`);
     }
     
     // Validate environment variable PORT as well
@@ -25,6 +26,7 @@ function getPort() {
         if (!isNaN(port) && port > 0 && port < 65536) {
             return port;
         }
+        console.warn(`Warning: Invalid PORT environment variable '${process.env.PORT}'. Using default port 3000.`);
     }
     
     return 3000;
