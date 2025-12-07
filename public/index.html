@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Taskwarrior Web Interface</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Taskwarrior Web Interface</h1>
+            <p class="subtitle">A web interface wrapping the taskwarrior CLI</p>
+        </header>
+
+        <main>
+            <!-- Command Input Section -->
+            <section class="command-section">
+                <h2>Add Task (CLI Syntax)</h2>
+                <div class="command-input-group">
+                    <span class="command-prefix">task add</span>
+                    <input 
+                        type="text" 
+                        id="addTaskInput" 
+                        class="command-input"
+                        placeholder="Buy milk project:groceries +shopping due:tomorrow"
+                        autocomplete="off"
+                    >
+                    <button onclick="addTask()" class="btn btn-primary">Add Task</button>
+                </div>
+                <div id="addTaskAutocomplete" class="autocomplete-list"></div>
+            </section>
+
+            <!-- Custom Report Section -->
+            <section class="report-section">
+                <h2>View Tasks (Custom Report)</h2>
+                <div class="command-input-group">
+                    <span class="command-prefix">task</span>
+                    <input 
+                        type="text" 
+                        id="reportInput" 
+                        class="command-input"
+                        placeholder="list, next, pending, all, etc."
+                        value="list"
+                        autocomplete="off"
+                    >
+                    <button onclick="loadTasks()" class="btn btn-primary">Show Tasks</button>
+                </div>
+                <div class="report-suggestions">
+                    <small>Common reports: 
+                        <a href="#" onclick="setReport('list'); return false;">list</a>, 
+                        <a href="#" onclick="setReport('next'); return false;">next</a>, 
+                        <a href="#" onclick="setReport('pending'); return false;">pending</a>, 
+                        <a href="#" onclick="setReport('all'); return false;">all</a>, 
+                        <a href="#" onclick="setReport('completed'); return false;">completed</a>
+                    </small>
+                </div>
+            </section>
+
+            <!-- Execute Custom Command Section -->
+            <section class="command-section">
+                <h2>Execute Custom Command (Advanced)</h2>
+                <div class="command-input-group">
+                    <span class="command-prefix">task</span>
+                    <input 
+                        type="text" 
+                        id="customCommandInput" 
+                        class="command-input"
+                        placeholder="1 modify priority:H, 2 annotate 'Important note', etc."
+                        autocomplete="off"
+                    >
+                    <button onclick="executeCustomCommand()" class="btn btn-secondary">Execute</button>
+                </div>
+            </section>
+
+            <!-- Output Section -->
+            <section class="output-section">
+                <div id="outputMessage" class="message"></div>
+            </section>
+
+            <!-- Tasks Table -->
+            <section class="tasks-section">
+                <h2>Tasks</h2>
+                <div id="tasksContainer" class="tasks-container">
+                    <p class="loading">Click "Show Tasks" to load tasks...</p>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Using Taskwarrior CLI as backend database</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
