@@ -7,6 +7,8 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const app = express();
 
+const DEFAULT_PORT = 3000;
+
 // Parse command-line arguments for port
 function getPort() {
     const args = process.argv.slice(2);
@@ -17,7 +19,7 @@ function getPort() {
         if (!isNaN(port) && port > 0 && port < 65536) {
             return port;
         }
-        console.warn(`Warning: Invalid port argument '${args[portIndex + 1]}'. Using default port 3000.`);
+        console.warn(`Warning: Invalid port argument '${args[portIndex + 1]}'. Using default port ${DEFAULT_PORT}.`);
     }
     
     // Validate environment variable PORT as well
@@ -26,10 +28,10 @@ function getPort() {
         if (!isNaN(port) && port > 0 && port < 65536) {
             return port;
         }
-        console.warn(`Warning: Invalid PORT environment variable '${process.env.PORT}'. Using default port 3000.`);
+        console.warn(`Warning: Invalid PORT environment variable '${process.env.PORT}'. Using default port ${DEFAULT_PORT}.`);
     }
     
-    return 3000;
+    return DEFAULT_PORT;
 }
 
 const PORT = getPort();
