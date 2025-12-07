@@ -13,207 +13,41 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Helper function to execute taskwarrior commands safely
-async function executeTaskCommand(args) {
+// Single endpoint to execute taskwarrior commands
+app.post('/api/task', async (req, res) => {
     try {
-        // Use execFile instead of exec to prevent command injection
-        // args should be an array of arguments or a string that will be safely split
-        let argsArray;
+        const { args } = req.body;
         
+        if (!args || (!Array.isArray(args) && typeof args !== 'string')) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'args parameter is required (array or string)' 
+            });
+        }
+        
+        // Convert args to array if it's a string
+        let argsArray;
         if (Array.isArray(args)) {
             argsArray = args;
-        } else if (typeof args === 'string') {
+        } else {
             // Simple whitespace split - taskwarrior handles complex parsing
-            // Filter out empty strings
             argsArray = args.split(/\s+/).filter(arg => arg.length > 0);
-        } else {
-            throw new Error('Invalid arguments type');
         }
         
+        // Execute taskwarrior command using execFile for security
         const { stdout, stderr } = await execFileAsync('task', argsArray);
-        return { success: true, output: stdout, error: stderr };
-    } catch (error) {
-        return { success: false, output: error.stdout || '', error: error.stderr || error.message };
-    }
-}
-
-// API Endpoints
-
-// Get tasks - supports custom report commands
-app.post('/api/tasks/list', async (req, res) => {
-    try {
-        const { command = 'status:pending' } = req.body;
-        // Allow custom report commands/filters like 'status:pending', 'project:work', etc.
-        // Export command uses filter syntax, not report names
-        let filter = command;
-        
-        // Map common report names to filters
-        const reportMap = {
-            'list': 'status:pending',
-            'pending': 'status:pending',
-            'all': '',
-            'completed': 'status:completed',
-            'next': 'status:pending limit:page',
-        };
-        
-        if (reportMap[command]) {
-            filter = reportMap[command];
-        }
-        
-        // Build command array - filter can be empty string for 'all'
-        const cmdArgs = filter ? `${filter} export` : 'export';
-        const result = await executeTaskCommand(cmdArgs);
-        
-        if (result.success || result.output) {
-            try {
-                const tasks = JSON.parse(result.output || '[]');
-                res.json({ success: true, tasks, raw: result.output });
-            } catch (parseError) {
-                // If JSON parsing fails, return raw output
-                res.json({ success: true, tasks: [], raw: result.output });
-            }
-        } else {
-            res.status(500).json({ success: false, error: result.error, output: result.output });
-        }
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Add a new task
-app.post('/api/tasks/add', async (req, res) => {
-    try {
-        const { taskDescription } = req.body;
-        
-        if (!taskDescription) {
-            return res.status(400).json({ success: false, error: 'Task description is required' });
-        }
-        
-        // Execute task add command with the full CLI syntax
-        const result = await executeTaskCommand(`add ${taskDescription}`);
         
         res.json({
-            success: result.success,
-            output: result.output,
-            error: result.error
+            success: true,
+            output: stdout,
+            error: stderr
         });
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Edit/modify a task
-app.post('/api/tasks/modify', async (req, res) => {
-    try {
-        const { taskId, modifications } = req.body;
-        
-        if (!taskId || !modifications) {
-            return res.status(400).json({ success: false, error: 'Task ID and modifications are required' });
-        }
-        
-        // Execute task modify command with CLI syntax
-        const result = await executeTaskCommand(`${taskId} modify ${modifications}`);
-        
         res.json({
-            success: result.success,
-            output: result.output,
-            error: result.error
+            success: false,
+            output: error.stdout || '',
+            error: error.stderr || error.message
         });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Execute custom taskwarrior command
-app.post('/api/tasks/execute', async (req, res) => {
-    try {
-        const { command } = req.body;
-        
-        if (!command) {
-            return res.status(400).json({ success: false, error: 'Command is required' });
-        }
-        
-        // Execute any taskwarrior command directly
-        const result = await executeTaskCommand(command);
-        
-        res.json({
-            success: result.success,
-            output: result.output,
-            error: result.error
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Mark task as done
-app.post('/api/tasks/done', async (req, res) => {
-    try {
-        const { taskId } = req.body;
-        
-        if (!taskId) {
-            return res.status(400).json({ success: false, error: 'Task ID is required' });
-        }
-        
-        const result = await executeTaskCommand(`${taskId} done`);
-        
-        res.json({
-            success: result.success,
-            output: result.output,
-            error: result.error
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Delete a task
-app.post('/api/tasks/delete', async (req, res) => {
-    try {
-        const { taskId } = req.body;
-        
-        if (!taskId) {
-            return res.status(400).json({ success: false, error: 'Task ID is required' });
-        }
-        
-        const result = await executeTaskCommand(`${taskId} delete`);
-        
-        res.json({
-            success: result.success,
-            output: result.output,
-            error: result.error
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Get task attributes for autocompletion
-app.get('/api/tasks/attributes', async (req, res) => {
-    try {
-        const result = await executeTaskCommand('_columns');
-        
-        res.json({
-            success: result.success,
-            attributes: result.output.split('\n').filter(a => a.trim()),
-            output: result.output
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Get task reports
-app.get('/api/tasks/reports', async (req, res) => {
-    try {
-        const result = await executeTaskCommand('reports');
-        
-        res.json({
-            success: result.success,
-            output: result.output
-        });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
     }
 });
 

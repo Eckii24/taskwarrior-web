@@ -4,6 +4,7 @@
   "description": "Web Interface for Task Warrior",
   "main": "index.js",
   "scripts": {
+    "postinstall": "cp node_modules/vue/dist/vue.global.js public/vue.js",
     "start": "node backend/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -12,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "vue": "^3.5.25"
   }
 }

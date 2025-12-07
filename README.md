@@ -5,12 +5,27 @@ A simple web interface that wraps the taskwarrior CLI, allowing you to manage yo
 
 ## Features
 
-- ✅ **Backend that wraps taskwarrior CLI**: Directly calls the native taskwarrior executable
+- ✅ **Simplified Backend**: Single endpoint that executes taskwarrior commands
+- ✅ **Vue.js Frontend**: Modern reactive UI with CQRS architecture
+- ✅ **CQRS Pattern**: Separate query (read) and command (write) services
 - ✅ **Add tasks with CLI syntax**: Full support for taskwarrior's powerful command syntax
 - ✅ **Edit tasks with CLI syntax**: Modify tasks using the same syntax as the command line
 - ✅ **Custom report commands**: Execute any taskwarrior report command (list, next, pending, all, etc.)
 - ✅ **Task management**: View, add, edit, complete, and delete tasks
 - ✅ **Execute custom commands**: Advanced users can execute any taskwarrior command directly
+
+## Architecture
+
+### Backend (Simplified)
+- **Single Endpoint**: `POST /api/task` - Accepts any taskwarrior command arguments
+- **Direct CLI Execution**: Uses `execFile()` for secure command execution
+- **No Business Logic**: Frontend decides what commands to execute
+
+### Frontend (Vue.js + CQRS)
+- **TaskQueryService**: Handles read operations (queries)
+- **TaskCommandService**: Handles write operations (commands)
+- **TaskApiClient**: Single point of communication with backend
+- **Reactive UI**: Vue.js 3 Composition API
 
 ## Prerequisites
 
@@ -96,28 +111,99 @@ For advanced operations, use the "Execute Custom Command" section:
 - `2 annotate 'Important note'` - Add annotation to task 2
 - `project:work done` - Mark all work tasks as done
 
-## API Endpoints
+## API Endpoint
 
-The backend provides the following REST API endpoints:
+The backend provides a single simplified endpoint:
 
-- `POST /api/tasks/list` - List tasks using custom report command
-- `POST /api/tasks/add` - Add a new task
-- `POST /api/tasks/modify` - Modify an existing task
-- `POST /api/tasks/done` - Mark task as done
-- `POST /api/tasks/delete` - Delete a task
-- `POST /api/tasks/execute` - Execute any taskwarrior command
-- `GET /api/tasks/attributes` - Get available task attributes
-- `GET /api/tasks/reports` - Get available reports
+### `POST /api/task`
 
-## Architecture
+Execute any taskwarrior command by passing arguments.
 
-### Backend
-- **Node.js + Express**: Lightweight REST API server
-- **Direct CLI Integration**: Executes taskwarrior commands using child_process
-- **No Database**: Uses taskwarrior's native file-based storage
+**Request Body:**
+```json
+{
+  "args": "add Buy milk project:groceries +shopping"
+}
+```
 
-### Frontend
-- **Vanilla JavaScript**: No framework dependencies
+**Response:**
+```json
+{
+  "success": true,
+  "output": "Created task 1.\n",
+  "error": ""
+}
+```
+
+**Examples:**
+
+```bash
+# Add a task
+curl -X POST http://localhost:3000/api/task \
+  -H "Content-Type: application/json" \
+  -d '{"args": "add Buy milk project:groceries +shopping"}'
+
+# List tasks (export as JSON)
+curl -X POST http://localhost:3000/api/task \
+  -H "Content-Type: application/json" \
+  -d '{"args": "status:pending export"}'
+
+# Modify a task
+curl -X POST http://localhost:3000/api/task \
+  -H "Content-Type: application/json" \
+  -d '{"args": "1 modify priority:H"}'
+
+# Mark task as done
+curl -X POST http://localhost:3000/api/task \
+  -H "Content-Type: application/json" \
+  -d '{"args": "1 done"}'
+```
+
+## CQRS Architecture
+
+The frontend implements Command Query Responsibility Segregation:
+
+### Query Service (Read Operations)
+```javascript
+class TaskQueryService {
+  async getTasks(filter) {
+    // Executes: task <filter> export
+    // Returns parsed JSON array of tasks
+  }
+}
+```
+
+### Command Service (Write Operations)
+```javascript
+class TaskCommandService {
+  async addTask(description) { }
+  async modifyTask(taskId, modifications) { }
+  async completeTask(taskId) { }
+  async deleteTask(taskId) { }
+  async executeCustom(command) { }
+}
+```
+
+### API Client
+```javascript
+class TaskApiClient {
+  async execute(args) {
+    // Calls POST /api/task with args
+  }
+}
+```
+
+## Technical Details
+
+### Backend (60 lines)
+- **Single Endpoint**: `POST /api/task` - executes any taskwarrior command
+- **Security**: Uses `execFile()` to prevent command injection
+- **No Business Logic**: Frontend controls all task operations
+
+### Frontend (Vue.js)
+- **Vue.js 3**: Reactive UI with Composition API
+- **CQRS Pattern**: Separated read/write operations
+- **Service Layer**: TaskQueryService, TaskCommandService, TaskApiClient
 - **Responsive Design**: Works on desktop and mobile
 - **CLI Syntax First**: Maintains taskwarrior's command syntax
 

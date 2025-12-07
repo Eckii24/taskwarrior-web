@@ -1,310 +1,257 @@
-// API base URL
-const API_BASE = '/api';
+// CQRS - Command Query Responsibility Segregation
 
-// Current tasks data
-let currentTasks = [];
+// Query Service - Read operations
+class TaskQueryService {
+    constructor(apiClient) {
+        this.apiClient = apiClient;
+    }
 
-// Initialize app
-document.addEventListener('DOMContentLoaded', () => {
-    // Add event listeners for Enter key
-    document.getElementById('addTaskInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') addTask();
-    });
-    
-    document.getElementById('reportInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') loadTasks();
-    });
-    
-    document.getElementById('customCommandInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') executeCustomCommand();
-    });
-});
+    async getTasks(filter = 'status:pending') {
+        const reportMap = {
+            'list': 'status:pending',
+            'pending': 'status:pending',
+            'all': '',
+            'completed': 'status:completed',
+            'next': 'status:pending limit:page',
+        };
 
-// Show message to user
-function showMessage(message, type = 'success') {
-    const messageDiv = document.getElementById('outputMessage');
-    messageDiv.textContent = message;
-    messageDiv.className = `message ${type}`;
-    
-    setTimeout(() => {
-        messageDiv.className = 'message';
-    }, 5000);
+        const actualFilter = reportMap[filter] || filter;
+        const args = actualFilter ? `${actualFilter} export` : 'export';
+        
+        const result = await this.apiClient.execute(args);
+        
+        if (result.success && result.output) {
+            try {
+                return JSON.parse(result.output);
+            } catch (e) {
+                return [];
+            }
+        }
+        return [];
+    }
 }
 
-// Set report command
-function setReport(report) {
-    document.getElementById('reportInput').value = report;
-    loadTasks();
+// Command Service - Write operations
+class TaskCommandService {
+    constructor(apiClient) {
+        this.apiClient = apiClient;
+    }
+
+    async addTask(description) {
+        return await this.apiClient.execute(`add ${description}`);
+    }
+
+    async modifyTask(taskId, modifications) {
+        return await this.apiClient.execute(`${taskId} modify ${modifications}`);
+    }
+
+    async completeTask(taskId) {
+        return await this.apiClient.execute(`${taskId} done`);
+    }
+
+    async deleteTask(taskId) {
+        return await this.apiClient.execute(`${taskId} delete`);
+    }
+
+    async executeCustom(command) {
+        return await this.apiClient.execute(command);
+    }
 }
 
-// Load tasks using custom report
-async function loadTasks() {
-    const reportInput = document.getElementById('reportInput').value.trim();
-    const command = reportInput || 'list';
-    
-    try {
-        const response = await fetch(`${API_BASE}/tasks/list`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
+// API Client - Single endpoint communication
+class TaskApiClient {
+    constructor(baseUrl = '/api') {
+        this.baseUrl = baseUrl;
+    }
+
+    async execute(args) {
+        try {
+            const response = await fetch(`${this.baseUrl}/task`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ args })
+            });
+
+            return await response.json();
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+}
+
+// Initialize services
+const apiClient = new TaskApiClient();
+const queryService = new TaskQueryService(apiClient);
+const commandService = new TaskCommandService(apiClient);
+
+// Vue Application
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            addTaskInput: '',
+            reportInput: 'list',
+            customCommandInput: '',
+            tasks: [],
+            message: {
+                text: '',
+                type: 'success'
             },
-            body: JSON.stringify({ command })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            currentTasks = data.tasks || [];
-            displayTasks(currentTasks);
-            showMessage(`Loaded ${currentTasks.length} task(s) using report: ${command}`, 'success');
-        } else {
-            showMessage(`Error: ${data.error}`, 'error');
-            document.getElementById('tasksContainer').innerHTML = `
-                <div class="raw-output">
-                    <details>
-                        <summary>Raw Output</summary>
-                        <pre>${data.output || data.error}</pre>
-                    </details>
-                </div>
-            `;
+            emptyMessage: 'Click "Show Tasks" to load tasks...'
+        };
+    },
+    methods: {
+        showMessage(text, type = 'success') {
+            this.message = { text, type };
+            setTimeout(() => {
+                this.message = { text: '', type: 'success' };
+            }, 5000);
+        },
+
+        setReport(report) {
+            this.reportInput = report;
+            this.loadTasks();
+        },
+
+        async loadTasks() {
+            try {
+                const filter = this.reportInput.trim() || 'list';
+                this.tasks = await queryService.getTasks(filter);
+                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found' : '';
+                this.showMessage(`Loaded ${this.tasks.length} task(s)`, 'success');
+            } catch (error) {
+                this.showMessage(`Error loading tasks: ${error.message}`, 'error');
+            }
+        },
+
+        async addTask() {
+            if (!this.addTaskInput.trim()) {
+                this.showMessage('Please enter a task description', 'error');
+                return;
+            }
+
+            try {
+                const result = await commandService.addTask(this.addTaskInput);
+                
+                if (result.success) {
+                    this.showMessage('Task added successfully!', 'success');
+                    this.addTaskInput = '';
+                    await this.loadTasks();
+                } else {
+                    this.showMessage(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                this.showMessage(`Error adding task: ${error.message}`, 'error');
+            }
+        },
+
+        async editTask(taskId) {
+            const modifications = prompt(
+                `Edit task ${taskId} using taskwarrior CLI syntax:\n\n` +
+                `Examples:\n` +
+                `- priority:H\n` +
+                `- project:work due:tomorrow\n` +
+                `- +urgent\n` +
+                `- New description text\n\n` +
+                `Enter modifications:`
+            );
+
+            if (modifications === null || modifications.trim() === '') {
+                return;
+            }
+
+            try {
+                const result = await commandService.modifyTask(taskId, modifications.trim());
+                
+                if (result.success) {
+                    this.showMessage(`Task ${taskId} modified successfully!`, 'success');
+                    await this.loadTasks();
+                } else {
+                    this.showMessage(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                this.showMessage(`Error modifying task: ${error.message}`, 'error');
+            }
+        },
+
+        async markDone(taskId) {
+            try {
+                const result = await commandService.completeTask(taskId);
+                
+                if (result.success) {
+                    this.showMessage(`Task ${taskId} marked as done!`, 'success');
+                    await this.loadTasks();
+                } else {
+                    this.showMessage(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                this.showMessage(`Error marking task as done: ${error.message}`, 'error');
+            }
+        },
+
+        async deleteTask(taskId) {
+            if (!confirm(`Are you sure you want to delete task ${taskId}?`)) {
+                return;
+            }
+
+            try {
+                const result = await commandService.deleteTask(taskId);
+                
+                if (result.success) {
+                    this.showMessage(`Task ${taskId} deleted successfully!`, 'success');
+                    await this.loadTasks();
+                } else {
+                    this.showMessage(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                this.showMessage(`Error deleting task: ${error.message}`, 'error');
+            }
+        },
+
+        async executeCustomCommand() {
+            if (!this.customCommandInput.trim()) {
+                this.showMessage('Please enter a command', 'error');
+                return;
+            }
+
+            try {
+                const result = await commandService.executeCustom(this.customCommandInput);
+                
+                if (result.success) {
+                    this.showMessage('Command executed successfully!', 'success');
+                    this.customCommandInput = '';
+                    
+                    // Reload tasks immediately
+                    await this.loadTasks();
+                } else {
+                    this.showMessage(`Error: ${result.error}`, 'error');
+                }
+            } catch (error) {
+                this.showMessage(`Error executing command: ${error.message}`, 'error');
+            }
+        },
+
+        getStatusClass(status) {
+            return status === 'completed' ? 'status-completed' : 'status-pending';
+        },
+
+        formatTags(tags) {
+            return tags ? tags.join(', ') : '';
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                return new Date(dateStr).toLocaleDateString();
+            } catch {
+                return '';
+            }
         }
-    } catch (error) {
-        showMessage(`Error loading tasks: ${error.message}`, 'error');
     }
-}
-
-// Display tasks in table
-function displayTasks(tasks) {
-    const container = document.getElementById('tasksContainer');
-    
-    if (!tasks || tasks.length === 0) {
-        container.innerHTML = '<p class="loading">No tasks found</p>';
-        return;
-    }
-    
-    let html = '<table><thead><tr>';
-    html += '<th>ID</th>';
-    html += '<th>Description</th>';
-    html += '<th>Status</th>';
-    html += '<th>Project</th>';
-    html += '<th>Tags</th>';
-    html += '<th>Due</th>';
-    html += '<th>Actions</th>';
-    html += '</tr></thead><tbody>';
-    
-    tasks.forEach(task => {
-        const status = task.status || 'pending';
-        const statusClass = status === 'completed' ? 'status-completed' : 'status-pending';
-        const tags = task.tags ? task.tags.join(', ') : '';
-        const due = task.due ? new Date(task.due).toLocaleDateString() : '';
-        
-        html += '<tr>';
-        html += `<td class="task-id">${task.id || task.uuid}</td>`;
-        html += `<td class="task-description">${escapeHtml(task.description || '')}</td>`;
-        html += `<td><span class="task-status ${statusClass}">${status}</span></td>`;
-        html += `<td>${escapeHtml(task.project || '')}</td>`;
-        html += `<td>${escapeHtml(tags)}</td>`;
-        html += `<td>${due}</td>`;
-        html += `<td class="task-actions">`;
-        
-        if (status === 'pending') {
-            html += `<button class="btn btn-success" onclick="markDone(${task.id})">Done</button>`;
-            html += `<button class="btn btn-primary" onclick="editTask(${task.id})">Edit</button>`;
-        }
-        
-        html += `<button class="btn btn-danger" onclick="deleteTask(${task.id})">Delete</button>`;
-        html += '</td>';
-        html += '</tr>';
-    });
-    
-    html += '</tbody></table>';
-    container.innerHTML = html;
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Add task
-async function addTask() {
-    const input = document.getElementById('addTaskInput');
-    const taskDescription = input.value.trim();
-    
-    if (!taskDescription) {
-        showMessage('Please enter a task description', 'error');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/tasks/add`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ taskDescription })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage('Task added successfully!', 'success');
-            input.value = '';
-            loadTasks(); // Reload tasks
-        } else {
-            showMessage(`Error: ${data.error || data.output}`, 'error');
-        }
-    } catch (error) {
-        showMessage(`Error adding task: ${error.message}`, 'error');
-    }
-}
-
-// Edit task - prompt for modifications using CLI syntax
-function editTask(taskId) {
-    const modifications = prompt(
-        `Edit task ${taskId} using taskwarrior CLI syntax:\n\n` +
-        `Examples:\n` +
-        `- priority:H\n` +
-        `- project:work due:tomorrow\n` +
-        `- +urgent\n` +
-        `- New description text\n\n` +
-        `Enter modifications:`
-    );
-    
-    if (modifications === null || modifications.trim() === '') {
-        return;
-    }
-    
-    modifyTask(taskId, modifications.trim());
-}
-
-// Modify task
-async function modifyTask(taskId, modifications) {
-    try {
-        const response = await fetch(`${API_BASE}/tasks/modify`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ taskId, modifications })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage(`Task ${taskId} modified successfully!`, 'success');
-            loadTasks(); // Reload tasks
-        } else {
-            showMessage(`Error: ${data.error || data.output}`, 'error');
-        }
-    } catch (error) {
-        showMessage(`Error modifying task: ${error.message}`, 'error');
-    }
-}
-
-// Mark task as done
-async function markDone(taskId) {
-    try {
-        const response = await fetch(`${API_BASE}/tasks/done`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ taskId })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage(`Task ${taskId} marked as done!`, 'success');
-            loadTasks(); // Reload tasks
-        } else {
-            showMessage(`Error: ${data.error || data.output}`, 'error');
-        }
-    } catch (error) {
-        showMessage(`Error marking task as done: ${error.message}`, 'error');
-    }
-}
-
-// Delete task
-async function deleteTask(taskId) {
-    if (!confirm(`Are you sure you want to delete task ${taskId}?`)) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/tasks/delete`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ taskId })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage(`Task ${taskId} deleted successfully!`, 'success');
-            loadTasks(); // Reload tasks
-        } else {
-            showMessage(`Error: ${data.error || data.output}`, 'error');
-        }
-    } catch (error) {
-        showMessage(`Error deleting task: ${error.message}`, 'error');
-    }
-}
-
-// Execute custom command
-async function executeCustomCommand() {
-    const input = document.getElementById('customCommandInput');
-    const command = input.value.trim();
-    
-    if (!command) {
-        showMessage('Please enter a command', 'error');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${API_BASE}/tasks/execute`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ command })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showMessage('Command executed successfully!', 'success');
-            input.value = '';
-            
-            // Show raw output
-            const container = document.getElementById('tasksContainer');
-            container.innerHTML = `
-                <div class="raw-output">
-                    <h3>Command Output:</h3>
-                    <pre>${escapeHtml(data.output)}</pre>
-                </div>
-            `;
-            
-            // Optionally reload tasks
-            setTimeout(() => loadTasks(), 1000);
-        } else {
-            showMessage(`Error: ${data.error}`, 'error');
-            
-            // Show error output
-            const container = document.getElementById('tasksContainer');
-            container.innerHTML = `
-                <div class="raw-output">
-                    <h3>Error Output:</h3>
-                    <pre>${escapeHtml(data.output || data.error)}</pre>
-                </div>
-            `;
-        }
-    } catch (error) {
-        showMessage(`Error executing command: ${error.message}`, 'error');
-    }
-}
+}).mount('#app');
