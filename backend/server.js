@@ -1,23 +1,36 @@
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const path = require('path');
 const { promisify } = require('util');
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Helper function to execute taskwarrior commands
-async function executeTaskCommand(command) {
+// Helper function to execute taskwarrior commands safely
+async function executeTaskCommand(args) {
     try {
-        const { stdout, stderr } = await execAsync(`task ${command}`);
+        // Use execFile instead of exec to prevent command injection
+        // args should be an array of arguments or a string that will be safely split
+        let argsArray;
+        
+        if (Array.isArray(args)) {
+            argsArray = args;
+        } else if (typeof args === 'string') {
+            // Simple whitespace split - taskwarrior handles complex parsing
+            // Filter out empty strings
+            argsArray = args.split(/\s+/).filter(arg => arg.length > 0);
+        } else {
+            throw new Error('Invalid arguments type');
+        }
+        
+        const { stdout, stderr } = await execFileAsync('task', argsArray);
         return { success: true, output: stdout, error: stderr };
     } catch (error) {
         return { success: false, output: error.stdout || '', error: error.stderr || error.message };
@@ -47,7 +60,9 @@ app.post('/api/tasks/list', async (req, res) => {
             filter = reportMap[command];
         }
         
-        const result = await executeTaskCommand(`${filter} export`);
+        // Build command array - filter can be empty string for 'all'
+        const cmdArgs = filter ? `${filter} export` : 'export';
+        const result = await executeTaskCommand(cmdArgs);
         
         if (result.success || result.output) {
             try {
