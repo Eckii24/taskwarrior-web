@@ -8,6 +8,13 @@ const execFileAsync = promisify(execFile);
 const app = express();
 
 const DEFAULT_PORT = 3000;
+const MIN_PORT = 1;
+const MAX_PORT = 65535;
+
+// Validate if a port number is valid
+function isValidPort(port) {
+    return !isNaN(port) && port >= MIN_PORT && port <= MAX_PORT;
+}
 
 // Parse command-line arguments for port
 function getPort() {
@@ -16,7 +23,7 @@ function getPort() {
     
     if (portIndex !== -1 && portIndex + 1 < args.length) {
         const port = parseInt(args[portIndex + 1], 10);
-        if (!isNaN(port) && port > 0 && port < 65536) {
+        if (isValidPort(port)) {
             return port;
         }
         console.warn(`Warning: Invalid port argument '${args[portIndex + 1]}'. Using default port ${DEFAULT_PORT}.`);
@@ -25,7 +32,7 @@ function getPort() {
     // Validate environment variable PORT as well
     if (process.env.PORT) {
         const port = parseInt(process.env.PORT, 10);
-        if (!isNaN(port) && port > 0 && port < 65536) {
+        if (isValidPort(port)) {
             return port;
         }
         console.warn(`Warning: Invalid PORT environment variable '${process.env.PORT}'. Using default port ${DEFAULT_PORT}.`);
