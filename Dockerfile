@@ -15,19 +15,20 @@ COPY package*.json ./
 # Create public directory for postinstall script
 RUN mkdir -p public
 
-# Install Node.js dependencies
-# Note: SSL verification is disabled during build due to sandbox/CI environment constraints
-# In production environments with proper SSL certificates, remove the strict-ssl config lines
+# Install Node.js dependencies (disable SSL verification due to environment)
 RUN npm config set strict-ssl false && \
-    npm ci && \
+    (npm ci || npm install) && \
     npm config set strict-ssl true
 
 # Copy application files
 COPY backend ./backend
 COPY public ./public
 
-# Create directory for taskwarrior data
-RUN mkdir -p /root/.task
+# Create directory for taskwarrior data and configure sync server
+RUN mkdir -p /root/.task && \
+    echo "# Taskwarrior configuration" > /root/.taskrc && \
+    echo "data.location=/root/.task" >> /root/.taskrc && \
+    echo "sync.server.url=http://taskchampion-sync:8080" >> /root/.taskrc
 
 # Expose port
 EXPOSE 3000

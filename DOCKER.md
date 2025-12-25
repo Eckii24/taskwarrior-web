@@ -138,19 +138,14 @@ docker compose ps
 
 ## Connecting to TaskChampion Sync Server
 
-To configure Taskwarrior to sync with the local TaskChampion server:
+The Taskwarrior instance is pre-configured to sync with the TaskChampion server. The sync server URL is automatically set to `http://taskchampion-sync:8080` in the container's `.taskrc` file.
 
-1. Access the taskwarrior-web container:
-   ```bash
-   docker exec -it taskwarrior-web bash
-   ```
+To use sync functionality, you can run:
+```bash
+docker exec -it taskwarrior-web task sync
+```
 
-2. Configure sync settings (inside the container):
-   ```bash
-   task config sync.server.url http://taskchampion-sync:8080
-   ```
-
-Note: Use `taskchampion-sync` as the hostname when connecting from within the Docker network.
+No additional manual configuration is required.
 
 ## Building from Scratch
 
@@ -165,14 +160,6 @@ docker build -t taskwarrior-web .
 - **Dockerfile**: Multi-layer build that installs Taskwarrior from Debian repositories and sets up the Node.js application
 - **docker-compose.yml**: Orchestrates both the web frontend and sync server with proper networking and volumes
 
-### Security Note
-
-The Dockerfile includes a workaround for SSL certificate verification during the npm install step. This is necessary in some CI/sandbox environments where SSL certificates may not be properly configured. **For production use**, you should:
-
-1. Use a build environment with proper SSL certificates
-2. Remove the `npm config set strict-ssl false` lines from the Dockerfile
-3. Ensure your Docker build environment has access to valid certificate authorities
-
 ## Version Information
 
 - Taskwarrior: 2.6.2 (from Debian repositories)
@@ -181,7 +168,9 @@ The Dockerfile includes a workaround for SSL certificate verification during the
 
 ## Notes
 
-- The Dockerfile uses a simplified approach by installing Taskwarrior from the Debian package repository rather than building from source
+- The Dockerfile uses a simplified approach by installing Taskwarrior from the Debian package repository (version 2.6.2) rather than building from source
+- **Note on Latest Version**: Taskwarrior 3.4.2 is the latest release, but building it from source in containerized environments requires complex dependencies (Rust toolchain, CMake 3.24+, cxxbridge). For production use with 3.4.2, build the Docker image in an environment with proper SSL certificates
 - **Security Warning**: The Dockerfile includes `npm config set strict-ssl false` as a workaround for sandbox/CI environments. Remove this in production environments with proper SSL certificates
 - The task database is stored in `/root/.task` within the container
+- TaskChampion sync is pre-configured to use `http://taskchampion-sync:8080` - no manual configuration needed
 - Both containers communicate over a dedicated Docker network (`taskwarrior-network`)
