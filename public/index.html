@@ -63,7 +63,7 @@
             <nav class="sidebar-nav">
                 <button
                     class="nav-item"
-                    :class="{ active: selectedView.type === 'search' }"
+                    :class="{ active: !showTaskrc && selectedView.type === 'search' }"
                     type="button"
                     @click="selectSearch"
                 >
@@ -77,7 +77,7 @@
 
                 <button
                     class="nav-item"
-                    :class="{ active: selectedView.type === 'builtin' && selectedView.key === 'next' }"
+                    :class="{ active: !showTaskrc && selectedView.type === 'builtin' && selectedView.key === 'next' }"
                     type="button"
                     @click="selectBuiltin('next')"
                 >
@@ -91,7 +91,7 @@
 
                 <button
                     class="nav-item"
-                    :class="{ active: selectedView.type === 'builtin' && selectedView.key === 'all' }"
+                    :class="{ active: !showTaskrc && selectedView.type === 'builtin' && selectedView.key === 'all' }"
                     type="button"
                     @click="selectBuiltin('all')"
                 >
@@ -117,7 +117,7 @@
                         >
                             <button
                                 class="nav-item filter-item"
-                                :class="{ active: selectedView.type === 'filter' && selectedView.id === filter.id }"
+                                :class="{ active: !showTaskrc && selectedView.type === 'filter' && selectedView.id === filter.id }"
                                 type="button"
                                 @click="selectCustomFilter(filter)"
                             >
@@ -170,23 +170,15 @@
                         class="nav-item"
                         :class="{ active: showTaskrc }"
                         type="button"
-                        @click="toggleTaskrc"
+                        @click="openSettings"
                     >
                         <span class="nav-icon">
                             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm1 7V3.5L19.5 9H15z"/>
+                                <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 1h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 7.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.51.41 1.05.72 1.63.94l.36 2.54c.04.24.25.42.49.42h3.8c.24 0 .45-.18.49-.42l.36-2.54c.58-.22 1.12-.52 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/>
                             </svg>
                         </span>
-                        <span class="nav-label">taskrc</span>
+                        <span class="nav-label">Settings</span>
                     </button>
-                </div>
-
-                <div v-if="showTaskrc" class="taskrc-panel">
-                    <div class="taskrc-actions">
-                        <button class="btn small" type="button" @click="loadTaskrc">Reload</button>
-                        <button class="btn small primary" type="button" @click="saveTaskrc" :disabled="!taskrcDirty">Save</button>
-                    </div>
-                    <textarea class="taskrc-editor" v-model="taskrcText" spellcheck="false"></textarea>
                 </div>
 
                 <div class="bottom-actions">
@@ -211,7 +203,18 @@
 
         <main class="main">
             <section class="main-content">
-                <div v-if="mainMode === 'tasks'" class="tasks-view">
+                <div v-if="showTaskrc" class="taskrc-main">
+                    <div class="taskrc-main-header">
+                        <div class="taskrc-main-title">Settings</div>
+                        <div class="taskrc-actions">
+                            <button class="btn small" type="button" @click="loadTaskrc">Reload</button>
+                            <button class="btn small primary" type="button" @click="saveTaskrc" :disabled="!taskrcDirty">Save</button>
+                        </div>
+                    </div>
+                    <textarea class="taskrc-editor" v-model="taskrcText" spellcheck="false"></textarea>
+                </div>
+
+                <div v-else-if="mainMode === 'tasks'" class="tasks-view">
                     <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
                     <div v-else class="task-list">
                         <div class="task-card" v-for="task in tasks" :key="task.uuid">

@@ -217,6 +217,7 @@ createApp({
             return this.taskrcText !== this.loadedTaskrcText;
         },
         currentTitle() {
+            if (this.showTaskrc) return 'Settings';
             if (this.selectedView.type === 'search') return 'Search';
             if (this.selectedView.type === 'builtin') {
                 return this.selectedView.key === 'next' ? 'Next' : 'All';
@@ -263,9 +264,14 @@ createApp({
             this.drawerOpen = Boolean(open);
         },
 
-        toggleTaskrc() {
-            this.showTaskrc = !this.showTaskrc;
-            if (this.showTaskrc && this.taskrcText === '' && this.loadedTaskrcText === '') {
+        openSettings() {
+            this.showTaskrc = true;
+            this.mainMode = 'tasks';
+            this.mainOutput = '';
+            this.resetCompletion();
+            this.toggleDrawer(false);
+
+            if (this.taskrcText === '' && this.loadedTaskrcText === '') {
                 this.loadTaskrc();
             }
         },
@@ -455,6 +461,7 @@ createApp({
         },
 
         selectBuiltin(key) {
+            this.showTaskrc = false;
             this.selectedView = { type: 'builtin', key };
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
@@ -462,6 +469,7 @@ createApp({
         },
 
         selectSearch() {
+            this.showTaskrc = false;
             this.selectedView = { type: 'search' };
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
@@ -469,6 +477,7 @@ createApp({
         },
 
         selectCustomFilter(filter) {
+            this.showTaskrc = false;
             this.selectedView = { type: 'filter', id: filter.id };
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
@@ -746,7 +755,6 @@ createApp({
                 const text = await response.text();
                 this.taskrcText = text;
                 this.loadedTaskrcText = text;
-                this.showToast('Loaded taskrc', 'success');
             } catch (error) {
                 this.showToast(`Error loading taskrc: ${error.message}`, 'error');
             }
