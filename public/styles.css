@@ -473,7 +473,8 @@ button, input, textarea {
     position: fixed;
     left: 12px;
     right: 12px;
-    bottom: 12px;
+    top: 50%;
+    transform: translateY(-50%);
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -481,6 +482,8 @@ button, input, textarea {
     max-width: 720px;
     margin: 0 auto;
     box-shadow: var(--shadow);
+    max-height: calc(100svh - 24px);
+    overflow: auto;
 }
 
 .modal-header {

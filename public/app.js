@@ -186,14 +186,19 @@ createApp({
 
             modal: {
                 open: false,
-                type: null, // add/exec/search/filter
+                type: null, // add/edit/exec/search/filter
                 value: '',
+                taskId: null,
                 filterId: null,
                 filterName: '',
                 filterValue: '',
             },
 
             searchPendingOnly: true,
+            lastSearch: {
+                term: '',
+                pendingOnly: true,
+            },
 
             toast: {
                 text: '',
@@ -231,6 +236,7 @@ createApp({
         modalTitle() {
             const map = {
                 add: 'Add Task',
+                edit: 'Edit Task',
 
                 exec: 'Execute',
                 search: 'Search',
@@ -521,6 +527,27 @@ createApp({
             }
         },
 
+        async refreshCurrentPanel() {
+            if (this.showTaskrc) return;
+
+            if (this.selectedView.type === 'search') {
+                const term = String(this.lastSearch.term || '').trim();
+                if (!term) {
+                    this.tasks = [];
+                    this.emptyMessage = 'Use Search to load tasks.';
+                    return;
+                }
+
+                const prefix = this.lastSearch.pendingOnly ? 'status:pending ' : '';
+                this.mainMode = 'tasks';
+                this.tasks = await queryService.getTasks(`${prefix}${term}`);
+                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+                return;
+            }
+
+            await this.loadTasksForSelection();
+        },
+
         openAddTask() {
             this.openCommandModal('add');
             this.toggleDrawer(false);
@@ -543,7 +570,7 @@ createApp({
         },
 
         openAddFilter() {
-            this.modal = { open: true, type: 'filter', value: '', filterId: null, filterName: '', filterValue: '' };
+            this.modal = { open: true, type: 'filter', value: '', taskId: null, filterId: null, filterName: '', filterValue: '' };
             this.resetCompletion();
             this.$nextTick(() => {
                 if (this.$refs.modalNameInput) this.$refs.modalNameInput.focus();
@@ -555,6 +582,7 @@ createApp({
                 open: true,
                 type: 'filter',
                 value: '',
+                taskId: null,
                 filterId: filter.id,
                 filterName: filter.name,
                 filterValue: filter.filter,
@@ -615,7 +643,7 @@ createApp({
         },
 
         openCommandModal(type) {
-            this.modal = { open: true, type, value: '', filterId: null, filterName: '', filterValue: '' };
+            this.modal = { open: true, type, value: '', taskId: null, filterId: null, filterName: '', filterValue: '' };
             if (type === 'exec') this.showTaskrc = false;
             this.resetCompletion();
             this.$nextTick(() => {
@@ -627,6 +655,11 @@ createApp({
         closeModal() {
             this.modal.open = false;
             this.modal.type = null;
+            this.modal.value = '';
+            this.modal.taskId = null;
+            this.modal.filterId = null;
+            this.modal.filterName = '';
+            this.modal.filterValue = '';
             this.resetCompletion();
         },
 
@@ -640,13 +673,28 @@ createApp({
                 if (result.success) {
                     this.showToast('Added task', 'success');
                     this.closeModal();
-                    await this.loadTasksForSelection();
+                    await this.refreshCurrentPanel();
                 } else {
                     this.showToast(result.error || 'Failed to add', 'error');
                 }
                 return;
             }
 
+            if (type === 'edit') {
+                const taskId = this.modal.taskId;
+                const modifications = String(this.modal.value || '').trim();
+                if (!taskId || !modifications) return;
+
+                const result = await commandService.modifyTask(taskId, modifications);
+                if (result.success) {
+                    this.showToast('Updated task', 'success');
+                    this.closeModal();
+                    await this.refreshCurrentPanel();
+                } else {
+                    this.showToast(result.error || 'Failed to update task', 'error');
+                }
+                return;
+            }
 
             if (type === 'exec') {
                 const command = String(this.modal.value || '').trim();
@@ -671,6 +719,12 @@ createApp({
             if (type === 'search') {
                 const term = String(this.modal.value || '').trim();
                 if (!term) return;
+
+                this.lastSearch = {
+                    term,
+                    pendingOnly: Boolean(this.searchPendingOnly),
+                };
+
                 const prefix = this.searchPendingOnly ? 'status:pending ' : '';
                 this.mainMode = 'tasks';
                 this.tasks = await queryService.getTasks(`${prefix}${term}`);
@@ -710,32 +764,39 @@ createApp({
         },
 
         async editTask(taskId) {
-            const modifications = prompt(
-                `Edit task ${taskId} using taskwarrior CLI syntax:\n\n` +
-                `Examples:\n` +
-                `- priority:H\n` +
-                `- project:work due:tomorrow\n` +
-                `- +urgent\n` +
-                `- New description text\n\n` +
-                `Enter modifications:`
-            );
+            const task = this.tasks.find((t) => String(t.id) === String(taskId));
+            const currentDescription = task?.description ? String(task.description) : '';
 
-            if (modifications === null || modifications.trim() === '') return;
+            this.modal = {
+                open: true,
+                type: 'edit',
+                value: currentDescription,
+                taskId,
+                filterId: null,
+                filterName: '',
+                filterValue: '',
+            };
 
-            const result = await commandService.modifyTask(taskId, modifications.trim());
-            if (result.success) {
-                this.showToast('Updated task', 'success');
-                await this.loadTasksForSelection();
-            } else {
-                this.showToast(result.error || 'Failed to update task', 'error');
-            }
+            this.resetCompletion();
+            this.$nextTick(() => {
+                const input = this.$refs.modalInput;
+                if (input) {
+                    input.focus();
+                    try {
+                        const len = String(this.modal.value || '').length;
+                        input.setSelectionRange(len, len);
+                    } catch {
+                        // ignore
+                    }
+                }
+            });
         },
 
         async markDone(taskId) {
             const result = await commandService.completeTask(taskId);
             if (result.success) {
                 this.showToast('Marked done', 'success');
-                await this.loadTasksForSelection();
+                await this.refreshCurrentPanel();
             } else {
                 this.showToast(result.error || 'Failed to mark done', 'error');
             }
@@ -746,7 +807,7 @@ createApp({
             const result = await commandService.deleteTask(taskId);
             if (result.success) {
                 this.showToast('Deleted task', 'success');
-                await this.loadTasksForSelection();
+                await this.refreshCurrentPanel();
             } else {
                 this.showToast(result.error || 'Failed to delete task', 'error');
             }

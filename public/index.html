@@ -305,6 +305,21 @@
                     >
                 </div>
 
+                <div v-else-if="modal.type === 'edit'" class="field">
+                    <label>Edit task</label>
+                    <input
+                        ref="modalInput"
+                        type="text"
+                        v-model="modal.value"
+                        class="text-input"
+                        placeholder="priority:H project:work due:tomorrow or new description"
+                        autocomplete="off"
+                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
+                        @input="handleCompletionInput($event, 'modal.value')"
+                        @blur="handleCompletionBlur('modal.value')"
+                    >
+                </div>
+
                 <div v-else-if="modal.type === 'exec'" class="field">
                     <label>Execute</label>
                     <input
