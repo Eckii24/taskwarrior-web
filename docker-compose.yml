@@ -1,7 +1,7 @@
 services:
   taskchampion-sync:
     image: ghcr.io/gothenburgbitfactory/taskchampion-sync-server:latest
-    image: ghcr.io/gothenburgbitfactory/taskchampion-sync-server:0.5.0
+    container_name: taskchampion-sync-server
     volumes:
       - ./data/taskchampion-data:/var/lib/taskchampion-sync-server
     ports:
@@ -15,7 +15,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: taskwarrior-web
     volumes:
       - ./data/taskwarrior-data:/root/.task
     ports:
