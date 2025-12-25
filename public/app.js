@@ -112,16 +112,20 @@ class TaskCommandService {
         return await this.apiClient.execute(`add ${description}`);
     }
 
-    async modifyTask(taskId, modifications) {
-        return await this.apiClient.execute(`${taskId} modify ${modifications}`);
+    async modifyTask(taskUuid, modifications) {
+        return await this.apiClient.execute(`${taskUuid} modify ${modifications}`);
     }
 
-    async completeTask(taskId) {
-        return await this.apiClient.execute(`${taskId} done`);
+    async completeTask(taskUuid) {
+        return await this.apiClient.execute(`${taskUuid} done`);
     }
 
-    async deleteTask(taskId) {
-        return await this.apiClient.execute(`${taskId} delete`);
+    async markPending(taskUuid) {
+        return await this.apiClient.execute(`${taskUuid} mod status:pending`);
+    }
+
+    async deleteTask(taskUuid) {
+        return await this.apiClient.execute(`${taskUuid} delete`);
     }
 
     async executeCustom(command) {
@@ -183,6 +187,8 @@ createApp({
             emptyMessage: 'Loading…',
             mainMode: 'tasks',
             mainOutput: '',
+
+            busyTaskUuids: {},
 
             modal: {
                 open: false,
@@ -763,15 +769,15 @@ createApp({
             }
         },
 
-        async editTask(taskId) {
-            const task = this.tasks.find((t) => String(t.id) === String(taskId));
+        async editTask(taskUuid) {
+            const task = this.tasks.find((t) => String(t.uuid) === String(taskUuid));
             const currentDescription = task?.description ? String(task.description) : '';
 
             this.modal = {
                 open: true,
                 type: 'edit',
                 value: currentDescription,
-                taskId,
+                taskId: taskUuid,
                 filterId: null,
                 filterName: '',
                 filterValue: '',
@@ -792,34 +798,97 @@ createApp({
             });
         },
 
-        async markDone(taskId) {
-            const result = await commandService.completeTask(taskId);
-            if (result.success) {
-                this.showToast('Marked done', 'success');
-                await this.refreshCurrentPanel();
-            } else {
-                this.showToast(result.error || 'Failed to mark done', 'error');
+        async withBusyTask(taskUuid, fn) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            if (this.busyTaskUuids[uuid]) return;
+            this.busyTaskUuids = { ...this.busyTaskUuids, [uuid]: true };
+
+            try {
+                await fn();
+            } finally {
+                const next = { ...this.busyTaskUuids };
+                delete next[uuid];
+                this.busyTaskUuids = next;
             }
         },
 
-        async deleteTask(taskId) {
-            if (!confirm(`Delete task ${taskId}?`)) return;
-            const result = await commandService.deleteTask(taskId);
-            if (result.success) {
-                this.showToast('Deleted task', 'success');
-                await this.refreshCurrentPanel();
-            } else {
-                this.showToast(result.error || 'Failed to delete task', 'error');
-            }
+        async toggleTaskDone(task, event) {
+            const uuid = String(task?.uuid || '').trim();
+            if (!uuid) return;
+
+            const checkbox = event?.target;
+            const desiredChecked = Boolean(checkbox?.checked);
+            const wasCompleted = String(task?.status || '') === 'completed';
+
+            if (desiredChecked === wasCompleted) return;
+
+            const previousChecked = wasCompleted;
+
+            await this.withBusyTask(uuid, async () => {
+                let result;
+                if (desiredChecked) {
+                    result = await commandService.completeTask(uuid);
+                } else {
+                    result = await commandService.markPending(uuid);
+                }
+
+                if (result.success) {
+                    this.showToast(desiredChecked ? 'Marked done' : 'Marked pending', 'success');
+                    await this.refreshCurrentPanel();
+                } else {
+                    if (checkbox) checkbox.checked = previousChecked;
+                    this.showToast(result.error || 'Failed to update task', 'error');
+                }
+            });
+        },
+
+        async deleteTask(taskUuid) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            if (!confirm(`Delete task ${uuid}?`)) return;
+
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.deleteTask(uuid);
+                if (result.success) {
+                    this.showToast('Deleted task', 'success');
+                    await this.refreshCurrentPanel();
+                } else {
+                    this.showToast(result.error || 'Failed to delete task', 'error');
+                }
+            });
         },
 
         formatDate(dateStr) {
-            if (!dateStr) return '';
-            try {
-                return new Date(dateStr).toLocaleDateString();
-            } catch {
-                return '';
+            const raw = String(dateStr || '').trim();
+            if (!raw) return '';
+
+            let normalized = raw;
+
+            const zuluMatch = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+            if (zuluMatch) {
+                const [, year, month, day, hour, minute, second] = zuluMatch;
+                normalized = `${year}-${month}-${day}T${hour}:${minute}:${second}Z`;
             }
+
+            const localMatch = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
+            if (localMatch) {
+                const [, year, month, day, hour, minute, second] = localMatch;
+                normalized = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
+            }
+
+            const dateOnlyMatch = raw.match(/^(\d{4})(\d{2})(\d{2})$/);
+            if (dateOnlyMatch) {
+                const [, year, month, day] = dateOnlyMatch;
+                normalized = `${year}-${month}-${day}`;
+            }
+
+            const date = new Date(normalized);
+            if (Number.isNaN(date.getTime())) return '';
+
+            return date.toLocaleDateString();
         },
 
         async loadTaskrc() {

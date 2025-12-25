@@ -232,9 +232,19 @@
                 </div>
 
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
+                    <div class="tasks-heading">{{ currentTitle }}</div>
                     <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
                     <div v-else class="task-list">
                         <div class="task-card" v-for="task in tasks" :key="task.uuid">
+                            <div class="task-check">
+                                <input
+                                    type="checkbox"
+                                    :checked="task.status === 'completed'"
+                                    :disabled="busyTaskUuids[task.uuid]"
+                                    :aria-label="task.status === 'completed' ? 'Mark pending' : 'Mark done'"
+                                    @change="toggleTaskDone(task, $event)"
+                                >
+                            </div>
                             <div class="task-main">
                                 <div class="task-desc">{{ task.description }}</div>
                                 <div class="task-meta">
@@ -244,9 +254,8 @@
                                 </div>
                             </div>
                             <div class="task-actions">
-                                <button v-if="task.status === 'pending'" class="btn small primary" type="button" @click="markDone(task.id)">Done</button>
-                                <button v-if="task.status === 'pending'" class="btn small" type="button" @click="editTask(task.id)">Edit</button>
-                                <button class="btn small danger" type="button" @click="deleteTask(task.id)">Delete</button>
+                                <button v-if="task.status === 'pending'" class="btn small" type="button" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Edit</button>
+                                <button class="btn small danger" type="button" @click="deleteTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Delete</button>
                             </div>
                         </div>
                     </div>
