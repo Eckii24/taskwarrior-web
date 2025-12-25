@@ -435,6 +435,34 @@ button, input, textarea {
 
 .meta {
     opacity: 0.95;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.meta-icon {
+    width: 15px;
+    height: 15px;
+    opacity: 0.9;
+    color: var(--muted);
+    flex: 0 0 auto;
+}
+
+.meta-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.82rem;
+    color: var(--muted);
 }
 
 .task-actions {
