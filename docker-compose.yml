@@ -1,0 +1,45 @@
+services:
+  # TaskChampion Sync Server
+  taskchampion-sync:
+    image: ghcr.io/gothenburgbitfactory/taskchampion-sync-server:latest
+    container_name: taskchampion-sync-server
+    volumes:
+      - taskchampion-data:/var/lib/taskchampion-sync-server
+    ports:
+      - "8080:8080"
+    environment:
+      - LISTEN=0.0.0.0:8080
+      - DATA_DIR=/var/lib/taskchampion-sync-server
+    restart: unless-stopped
+    networks:
+      - taskwarrior-network
+
+  # Taskwarrior Web Frontend
+  taskwarrior-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskwarrior-web
+    volumes:
+      - taskwarrior-data:/root/.task
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    depends_on:
+      - taskchampion-sync
+    restart: unless-stopped
+    networks:
+      - taskwarrior-network
+
+volumes:
+  # Persistent storage for task database
+  taskwarrior-data:
+    driver: local
+  # Persistent storage for sync server
+  taskchampion-data:
+    driver: local
+
+networks:
+  taskwarrior-network:
+    driver: bridge

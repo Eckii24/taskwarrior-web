@@ -29,11 +29,18 @@ A simple web interface that wraps the taskwarrior CLI, allowing you to manage yo
 
 ## Prerequisites
 
+### Option 1: Docker (Recommended)
+- Docker
+- Docker Compose
+
+See [Docker Setup Guide](DOCKER.md) for Docker-based installation.
+
+### Option 2: Local Installation
 - [Taskwarrior](https://taskwarrior.org/) installed on your system
 - Node.js (v14 or higher)
 - npm
 
-### Installing Taskwarrior
+### Installing Taskwarrior (Local Installation Only)
 
 **Ubuntu/Debian:**
 ```bash
@@ -49,6 +56,27 @@ brew install task
 
 ## Installation
 
+### Using Docker (Recommended)
+
+1. Clone the repository:
+```bash
+git clone https://github.com/Eckii24/taskwarrior-web.git
+cd taskwarrior-web
+```
+
+2. Start with Docker Compose:
+```bash
+docker compose up -d
+```
+
+3. Access the application:
+- Web Interface: http://localhost:3000
+- Sync Server: http://localhost:8080
+
+For more details, see the [Docker Setup Guide](DOCKER.md).
+
+### Local Installation
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/Eckii24/taskwarrior-web.git
@@ -61,6 +89,21 @@ npm install
 ```
 
 ## Usage
+
+### Docker
+
+```bash
+# Start services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+```
+
+### Local Installation
 
 1. Start the server:
 ```bash
