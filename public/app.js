@@ -122,10 +122,17 @@ createApp({
             }, 5000);
         },
 
-        setTab(tab) {
+        async setTab(tab) {
             this.activeTab = tab;
             if (tab === 'config' && this.taskrcText === '' && this.loadedTaskrcText === '') {
-                this.loadTaskrc();
+                this.showMessage('Loading configuration...', 'success');
+                try {
+                    await this.loadTaskrc();
+                    this.showMessage('Configuration loaded.', 'success');
+                } catch (error) {
+                    const message = error && error.message ? error.message : String(error);
+                    this.showMessage(`Error loading configuration: ${message}`, 'error');
+                }
             }
         },
 

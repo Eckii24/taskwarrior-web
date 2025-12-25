@@ -1,7 +1,7 @@
 services:
   taskchampion-sync:
     image: ghcr.io/gothenburgbitfactory/taskchampion-sync-server:latest
-    container_name: taskchampion-sync-server
+    image: ghcr.io/gothenburgbitfactory/taskchampion-sync-server:0.5.0
     volumes:
       - ./data/taskchampion-data:/var/lib/taskchampion-sync-server
     ports:

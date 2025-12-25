@@ -43,10 +43,11 @@ COPY package*.json ./
 # Create public directory for postinstall script
 RUN mkdir -p public
 
-# Install Node.js dependencies (disable SSL verification due to environment)
-RUN npm config set strict-ssl false && \
+# Install Node.js dependencies. By default, keep strict SSL; allow opting out via build arg for special cases only.
+ARG ALLOW_INSECURE_NPM_SSL=false
+RUN if [ "$ALLOW_INSECURE_NPM_SSL" = "true" ]; then npm config set strict-ssl false; fi && \
     (npm ci || npm install) && \
-    npm config set strict-ssl true
+    if [ "$ALLOW_INSECURE_NPM_SSL" = "true" ]; then npm config set strict-ssl true; fi
 
 # Copy application files
 COPY backend ./backend
