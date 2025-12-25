@@ -4,7 +4,7 @@ This directory contains Docker configuration files to run the Taskwarrior Web In
 
 ## What's Included
 
-- **Taskwarrior**: Task management CLI tool (version 2.6.2)
+- **Taskwarrior**: Task management CLI tool (version 3.4.2)
 - **TaskChampion Sync Server**: Official sync server for task synchronization
 - **Taskwarrior Web Frontend**: Web interface for managing tasks
 
@@ -138,14 +138,30 @@ docker compose ps
 
 ## Connecting to TaskChampion Sync Server
 
-The Taskwarrior instance is pre-configured to sync with the TaskChampion server. The sync server URL is automatically set to `http://taskchampion-sync:8080` in the container's `.taskrc` file.
+Taskwarrior requires three settings to sync with a TaskChampion Sync Server:
+
+- `sync.server.url`
+- `sync.server.client_id`
+- `sync.encryption_secret`
+
+This project maps those settings to environment variables in `docker-compose.yml` (the container regenerates `/root/.taskrc` on each start from these values):
+
+- `TASK_SYNC_SERVER_URL` → `sync.server.url`
+- `TASK_SYNC_CLIENT_ID` → `sync.server.client_id`
+- `TASK_SYNC_ENCRYPTION_SECRET` → `sync.encryption_secret`
+
+Example:
+```bash
+TASK_SYNC_SERVER_URL=https://taskwarrior.example.com \
+TASK_SYNC_CLIENT_ID=your-client-id \
+TASK_SYNC_ENCRYPTION_SECRET=your-encryption-secret \
+docker compose up -d
+```
 
 To use sync functionality, you can run:
 ```bash
 docker exec -it taskwarrior-web task sync
 ```
-
-No additional manual configuration is required.
 
 ## Building from Scratch
 
@@ -157,20 +173,19 @@ docker build -t taskwarrior-web .
 
 ## Architecture
 
-- **Dockerfile**: Multi-layer build that installs Taskwarrior from Debian repositories and sets up the Node.js application
+- **Dockerfile**: Multi-stage build that compiles Taskwarrior 3.4.2 and sets up the Node.js application
 - **docker-compose.yml**: Orchestrates both the web frontend and sync server with proper networking and volumes
 
 ## Version Information
 
-- Taskwarrior: 2.6.2 (from Debian repositories)
+- Taskwarrior: 3.4.2 (built from source in the image)
 - TaskChampion Sync Server: Latest (from official Docker image)
 - Node.js: 18 (slim variant)
 
 ## Notes
 
-- The Dockerfile uses a simplified approach by installing Taskwarrior from the Debian package repository (version 2.6.2) rather than building from source
-- **Note on Latest Version**: Taskwarrior 3.4.2 is the latest release, but building it from source in containerized environments requires complex dependencies (Rust toolchain, CMake 3.24+, cxxbridge). For production use with 3.4.2, build the Docker image in an environment with proper SSL certificates
+- The Dockerfile builds Taskwarrior 3.4.2 from source (requires Rust toolchain + CMake 3.24+)
 - **Security Warning**: The Dockerfile includes `npm config set strict-ssl false` as a workaround for sandbox/CI environments. Remove this in production environments with proper SSL certificates
 - The task database is stored in `/root/.task` within the container
-- TaskChampion sync is pre-configured to use `http://taskchampion-sync:8080` - no manual configuration needed
+- TaskChampion sync is configured via env vars (defaults to `http://taskchampion-sync:8080`)
 - Both containers communicate over a dedicated Docker network (`taskwarrior-network`)

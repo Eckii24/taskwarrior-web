@@ -26,6 +26,11 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
+      # Taskwarrior ↔ TaskChampion sync configuration
+      # See: https://gothenburgbitfactory.org/taskchampion-sync-server/usage/docker-compose.html
+      - TASK_SYNC_SERVER_URL=${TASK_SYNC_SERVER_URL:-http://taskchampion-sync:8080}
+      - TASK_SYNC_CLIENT_ID=${TASK_SYNC_CLIENT_ID:-}
+      - TASK_SYNC_ENCRYPTION_SECRET=${TASK_SYNC_ENCRYPTION_SECRET:-}
     depends_on:
       - taskchampion-sync
     restart: unless-stopped
