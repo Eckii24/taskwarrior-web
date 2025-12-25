@@ -1,29 +1,101 @@
 // CQRS - Command Query Responsibility Segregation
 
-// Query Service - Read operations
+class TaskApiClient {
+    constructor(baseUrl = '/api') {
+        this.baseUrl = baseUrl;
+    }
+
+    async execute(args) {
+        try {
+            const response = await fetch(`${this.baseUrl}/task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ args }),
+            });
+            return await response.json();
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    }
+
+    async complete(token, limit = 20) {
+        try {
+            const url = new URL(`${this.baseUrl}/complete`, window.location.origin);
+            url.searchParams.set('token', token);
+            url.searchParams.set('limit', String(limit));
+
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+            });
+
+            return await response.json();
+        } catch (error) {
+            return { success: false, error: error.message, suggestions: [] };
+        }
+    }
+
+    async getFilters() {
+        const response = await fetch(`${this.baseUrl}/filters`);
+        return await response.json();
+    }
+
+    async createFilter(payload) {
+        const response = await fetch(`${this.baseUrl}/filters`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return await response.json();
+    }
+
+    async updateFilter(id, payload) {
+        const response = await fetch(`${this.baseUrl}/filters/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return await response.json();
+    }
+
+    async deleteFilter(id) {
+        const response = await fetch(`${this.baseUrl}/filters/${id}`, { method: 'DELETE' });
+        return await response.json();
+    }
+
+    async reorderFilters(ids) {
+        const response = await fetch(`${this.baseUrl}/filters/reorder`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        return await response.json();
+    }
+}
+
 class TaskQueryService {
     constructor(apiClient) {
         this.apiClient = apiClient;
     }
 
-    async getTasks(filter = 'status:pending') {
+    async getTasks(filterOrReport) {
         const reportMap = {
-            'list': 'status:pending',
-            'pending': 'status:pending',
-            'all': '',
-            'completed': 'status:completed',
-            'next': 'status:pending limit:page',
+            list: 'status:pending',
+            pending: 'status:pending',
+            all: '',
+            completed: 'status:completed',
+            next: 'status:pending limit:page',
         };
 
-        const actualFilter = reportMap[filter] || filter;
+        const normalized = String(filterOrReport || '').trim() || 'next';
+        const actualFilter = reportMap[normalized] !== undefined ? reportMap[normalized] : normalized;
         const args = actualFilter ? `${actualFilter} export` : 'export';
-        
+
         const result = await this.apiClient.execute(args);
-        
         if (result.success && result.output) {
             try {
                 return JSON.parse(result.output);
-            } catch (e) {
+            } catch {
                 return [];
             }
         }
@@ -31,7 +103,6 @@ class TaskQueryService {
     }
 }
 
-// Command Service - Write operations
 class TaskCommandService {
     constructor(apiClient) {
         this.apiClient = apiClient;
@@ -58,55 +129,6 @@ class TaskCommandService {
     }
 }
 
-// API Client - Single endpoint communication
-class TaskApiClient {
-    constructor(baseUrl = '/api') {
-        this.baseUrl = baseUrl;
-    }
-
-    async execute(args) {
-        try {
-            const response = await fetch(`${this.baseUrl}/task`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ args })
-            });
-
-            return await response.json();
-        } catch (error) {
-            return {
-                success: false,
-                error: error.message
-            };
-        }
-    }
-
-    async complete(token, limit = 20) {
-        try {
-            const url = new URL(`${this.baseUrl}/complete`, window.location.origin);
-            url.searchParams.set('token', token);
-            url.searchParams.set('limit', String(limit));
-
-            const response = await fetch(url.toString(), {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                },
-            });
-
-            return await response.json();
-        } catch (error) {
-            return {
-                success: false,
-                error: error.message,
-                suggestions: [],
-            };
-        }
-    }
-}
-
 function getTokenAtCursor(text, cursorIndex) {
     const safeText = String(text || '');
     const idx = Math.max(0, Math.min(cursorIndex ?? safeText.length, safeText.length));
@@ -114,7 +136,6 @@ function getTokenAtCursor(text, cursorIndex) {
     const before = safeText.slice(0, idx);
     const after = safeText.slice(idx);
 
-    // Avoid autocompleting in the middle of a quoted token.
     const quoteCount = (before.match(/"/g) || []).length + (before.match(/'/g) || []).length;
     if (quoteCount % 2 === 1) {
         return { token: '', start: idx, end: idx };
@@ -140,32 +161,47 @@ function replaceRange(text, start, end, replacement) {
     return safeText.slice(0, s) + replacement + safeText.slice(e);
 }
 
-// Initialize services
 const apiClient = new TaskApiClient();
 const queryService = new TaskQueryService(apiClient);
 const commandService = new TaskCommandService(apiClient);
 
-// Vue Application
 const { createApp } = Vue;
 
 createApp({
     data() {
         return {
-            activeTab: 'tasks',
-            addTaskInput: '',
-            reportInput: 'list',
-            customCommandInput: '',
-            tasks: [],
+            drawerOpen: false,
+            showTaskrc: false,
             taskrcText: '',
             loadedTaskrcText: '',
-            message: {
+
+            filters: [],
+            draggedFilterId: null,
+
+            selectedView: { type: 'builtin', key: 'next' },
+            tasks: [],
+            emptyMessage: 'Loading…',
+            mainMode: 'tasks',
+            mainOutput: '',
+
+            modal: {
+                open: false,
+                type: null, // add/show/exec/search/filter
+                value: '',
+                filterId: null,
+                filterName: '',
+                filterValue: '',
+            },
+
+            searchPendingOnly: true,
+
+            toast: {
                 text: '',
                 type: 'success',
-                dismissMode: 'auto'
             },
-            messageTimeoutId: null,
-            emptyMessage: 'Click "Show Tasks" to load tasks...',
-             completion: {
+            toastTimeoutId: null,
+
+            completion: {
                 field: null,
                 token: '',
                 start: 0,
@@ -179,9 +215,70 @@ createApp({
     computed: {
         taskrcDirty() {
             return this.taskrcText !== this.loadedTaskrcText;
-        }
+        },
+        currentTitle() {
+            if (this.selectedView.type === 'search') return 'Search';
+            if (this.selectedView.type === 'builtin') {
+                return this.selectedView.key === 'next' ? 'Next' : 'All';
+            }
+            if (this.selectedView.type === 'filter') {
+                const filter = this.filters.find((f) => f.id === this.selectedView.id);
+                return filter ? filter.name : 'Filter';
+            }
+            return 'Taskwarrior';
+        },
+        modalTitle() {
+            const map = {
+                add: 'Add Task',
+                show: 'Show Tasks',
+                exec: 'Execute',
+                search: 'Search',
+                filter: this.modal.filterId ? 'Edit Filter' : 'Add Filter',
+            };
+            return map[this.modal.type] || 'Command';
+        },
+        activeCompletionField() {
+            if (this.modal.type === 'filter') return 'modal.filterValue';
+            return 'modal.value';
+        },
+    },
+    async mounted() {
+        window.addEventListener('keydown', this.onGlobalKeydown);
+        await this.refreshFilters();
+        await this.loadTasksForSelection();
+    },
+    beforeUnmount() {
+        window.removeEventListener('keydown', this.onGlobalKeydown);
     },
     methods: {
+        onGlobalKeydown(event) {
+            if (event.key === 'Escape') {
+                if (this.modal.open) this.closeModal();
+                if (this.drawerOpen) this.toggleDrawer(false);
+                this.resetCompletion();
+            }
+        },
+
+        toggleDrawer(open) {
+            this.drawerOpen = Boolean(open);
+        },
+
+        toggleTaskrc() {
+            this.showTaskrc = !this.showTaskrc;
+            if (this.showTaskrc && this.taskrcText === '' && this.loadedTaskrcText === '') {
+                this.loadTaskrc();
+            }
+        },
+
+        showToast(text, type = 'success', durationMs = 2500) {
+            if (this.toastTimeoutId) clearTimeout(this.toastTimeoutId);
+            this.toast = { text, type };
+            this.toastTimeoutId = setTimeout(() => {
+                this.toast = { text: '', type: 'success' };
+                this.toastTimeoutId = null;
+            }, durationMs);
+        },
+
         resetCompletion() {
             this.completion = {
                 field: null,
@@ -194,6 +291,25 @@ createApp({
             };
         },
 
+        getFieldValue(field) {
+            const parts = String(field).split('.');
+            let obj = this;
+            for (const part of parts) {
+                if (!obj) return '';
+                obj = obj[part];
+            }
+            return obj;
+        },
+
+        setFieldValue(field, value) {
+            const parts = String(field).split('.');
+            let obj = this;
+            for (let i = 0; i < parts.length - 1; i++) {
+                obj = obj[parts[i]];
+            }
+            obj[parts[parts.length - 1]] = value;
+        },
+
         async updateCompletion(field, tokenInfo) {
             const token = tokenInfo.token || '';
             if (!token.trim()) {
@@ -202,9 +318,7 @@ createApp({
             }
 
             const result = await apiClient.complete(token);
-            const suggestions = result && result.success && Array.isArray(result.suggestions)
-                ? result.suggestions
-                : [];
+            const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
 
             if (suggestions.length === 0) {
                 this.resetCompletion();
@@ -227,11 +341,11 @@ createApp({
         },
 
         applyCompletionSuggestion(inputEl, field, suggestion) {
-            const current = String(this[field] || '');
+            const current = String(this.getFieldValue(field) || '');
             const { start, end } = this.completion;
             const nextValue = replaceRange(current, start, end, suggestion);
 
-            this[field] = nextValue;
+            this.setFieldValue(field, nextValue);
 
             this.$nextTick(() => {
                 const cursor = start + suggestion.length;
@@ -241,14 +355,9 @@ createApp({
 
         async handleCompletionKeydown(event, field, actionName) {
             const inputEl = event.target;
-            if (!inputEl || typeof inputEl.selectionStart !== 'number') {
-                return;
-            }
+            if (!inputEl || typeof inputEl.selectionStart !== 'number') return;
 
-            // Must happen synchronously, otherwise the browser will move focus.
-            if (event.key === 'Tab') {
-                event.preventDefault();
-            }
+            if (event.key === 'Tab') event.preventDefault();
 
             const isActive = this.completion.visible && this.completion.field === field;
 
@@ -258,8 +367,6 @@ createApp({
                 return;
             }
 
-            // If the completion list is not active for this field, Enter should trigger
-            // the field's primary action (add/show/execute).
             if (event.key === 'Enter' && !isActive) {
                 if (typeof actionName === 'string' && typeof this[actionName] === 'function') {
                     event.preventDefault();
@@ -269,32 +376,30 @@ createApp({
             }
 
             const completionKeys = ['Tab', 'ArrowDown', 'ArrowUp', 'Enter'];
-            if (!completionKeys.includes(event.key)) {
-                return;
-            }
+            if (!completionKeys.includes(event.key)) return;
 
-            const text = String(this[field] || '');
+            const text = String(this.getFieldValue(field) || '');
             const cursor = inputEl.selectionStart;
             const tokenInfo = getTokenAtCursor(text, cursor);
 
-            const tokenChanged = this.completion.field !== field || this.completion.token !== tokenInfo.token || this.completion.start !== tokenInfo.start || this.completion.end !== tokenInfo.end;
+            const tokenChanged =
+                this.completion.field !== field ||
+                this.completion.token !== tokenInfo.token ||
+                this.completion.start !== tokenInfo.start ||
+                this.completion.end !== tokenInfo.end;
 
             if (tokenChanged || !isActive) {
                 await this.updateCompletion(field, tokenInfo);
             }
 
-            if (this.completion.suggestions.length === 0) {
-                return;
-            }
+            if (this.completion.suggestions.length === 0) return;
 
-            // If there is exactly one option and user hits Tab, apply it.
             if (this.completion.suggestions.length === 1 && event.key === 'Tab') {
                 this.applyCompletionSuggestion(inputEl, field, this.completion.suggestions[0]);
                 this.resetCompletion();
                 return;
             }
 
-            // Navigation within list.
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault();
                 this.completion.visible = true;
@@ -304,13 +409,11 @@ createApp({
                 return;
             }
 
-            // Tab with multiple suggestions: show list (don't autocomplete).
             if (event.key === 'Tab' && !isActive) {
                 this.completion.visible = true;
                 return;
             }
 
-            // If the list is open, Tab/Enter accept the highlighted suggestion.
             if ((event.key === 'Enter' || event.key === 'Tab') && this.completion.visible) {
                 const suggestion = this.completion.suggestions[this.completion.selectedIndex];
                 if (suggestion) {
@@ -328,9 +431,8 @@ createApp({
                 return;
             }
 
-            // If the completion list is open for this field, keep it in sync.
             if (this.completion.visible && this.completion.field === field) {
-                const text = String(this[field] || '');
+                const text = String(this.getFieldValue(field) || '');
                 const cursor = inputEl.selectionStart;
                 const tokenInfo = getTokenAtCursor(text, cursor);
                 await this.updateCompletion(field, tokenInfo);
@@ -338,89 +440,250 @@ createApp({
         },
 
         handleCompletionBlur(field) {
-            if (this.completion.field === field) {
-                this.resetCompletion();
-            }
+            if (this.completion.field === field) this.resetCompletion();
         },
 
-        showMessage(text, type = 'success', dismissMode) {
-            const resolvedDismissMode = dismissMode ?? (type === 'error' ? 'manual' : 'auto');
-
-            if (this.messageTimeoutId) {
-                clearTimeout(this.messageTimeoutId);
-                this.messageTimeoutId = null;
-            }
-
-            this.message = { text, type, dismissMode: resolvedDismissMode };
-
-            if (resolvedDismissMode === 'auto') {
-                this.messageTimeoutId = setTimeout(() => {
-                    this.dismissMessage();
-                }, 5000);
-            }
-        },
-
-        dismissMessage() {
-            if (this.messageTimeoutId) {
-                clearTimeout(this.messageTimeoutId);
-                this.messageTimeoutId = null;
-            }
-
-            this.message = { text: '', type: 'success', dismissMode: 'auto' };
-        },
-
-        async setTab(tab) {
-            this.activeTab = tab;
-            this.resetCompletion();
-            if (tab === 'config' && this.taskrcText === '' && this.loadedTaskrcText === '') {
-                this.showMessage('Loading configuration...', 'success');
-                try {
-                    await this.loadTaskrc();
-                    this.showMessage('Configuration loaded.', 'success');
-                } catch (error) {
-                    const message = error && error.message ? error.message : String(error);
-                    this.showMessage(`Error loading configuration: ${message}`, 'error');
+        async refreshFilters() {
+            try {
+                const result = await apiClient.getFilters();
+                if (result.success && Array.isArray(result.filters)) {
+                    this.filters = result.filters.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                 }
+            } catch {
+                // ignore
             }
         },
 
-        setReport(report) {
-            this.reportInput = report;
-            this.loadTasks();
+        selectBuiltin(key) {
+            this.selectedView = { type: 'builtin', key };
+            this.mainMode = 'tasks';
+            this.toggleDrawer(false);
+            this.loadTasksForSelection();
         },
 
-        async loadTasks() {
-            this.resetCompletion();
+        selectSearch() {
+            this.selectedView = { type: 'search' };
+            this.mainMode = 'tasks';
+            this.toggleDrawer(false);
+            this.openCommandModal('search');
+        },
+
+        selectCustomFilter(filter) {
+            this.selectedView = { type: 'filter', id: filter.id };
+            this.mainMode = 'tasks';
+            this.toggleDrawer(false);
+            this.loadTasksForSelection();
+        },
+
+        async loadTasksForSelection() {
+            this.emptyMessage = 'Loading…';
+            this.mainMode = 'tasks';
+            this.mainOutput = '';
 
             try {
-                const filter = this.reportInput.trim() || 'list';
-                this.tasks = await queryService.getTasks(filter);
-                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found' : '';
+                if (this.selectedView.type === 'search') {
+                    this.tasks = [];
+                    this.emptyMessage = 'Use Search to load tasks.';
+                    return;
+                }
+
+                if (this.selectedView.type === 'builtin') {
+                    const key = this.selectedView.key;
+                    const query = key === 'next' ? 'next' : 'all';
+                    this.tasks = await queryService.getTasks(query);
+                    this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+                    return;
+                }
+
+                if (this.selectedView.type === 'filter') {
+                    const filter = this.filters.find((f) => f.id === this.selectedView.id);
+                    if (!filter) {
+                        this.tasks = [];
+                        this.emptyMessage = 'Filter not found.';
+                        return;
+                    }
+                    this.tasks = await queryService.getTasks(filter.filter);
+                    this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+                }
             } catch (error) {
-                this.showMessage(`Error loading tasks: ${error.message}`, 'error');
+                this.tasks = [];
+                this.emptyMessage = 'Error loading tasks.';
+                this.showToast(String(error?.message || error), 'error');
             }
         },
 
-        async addTask() {
+        openAddFilter() {
+            this.modal = { open: true, type: 'filter', value: '', filterId: null, filterName: '', filterValue: '' };
             this.resetCompletion();
+            this.$nextTick(() => {
+                if (this.$refs.modalNameInput) this.$refs.modalNameInput.focus();
+            });
+        },
 
-            if (!this.addTaskInput.trim()) {
-                this.showMessage('Please enter a task description', 'error');
+        openEditFilter(filter) {
+            this.modal = {
+                open: true,
+                type: 'filter',
+                value: '',
+                filterId: filter.id,
+                filterName: filter.name,
+                filterValue: filter.filter,
+            };
+            this.resetCompletion();
+            this.$nextTick(() => {
+                if (this.$refs.modalNameInput) this.$refs.modalNameInput.focus();
+            });
+        },
+
+        async deleteFilter(filter) {
+            if (!confirm(`Delete filter "${filter.name}"?`)) return;
+
+            try {
+                const result = await apiClient.deleteFilter(filter.id);
+                if (result.success) {
+                    await this.refreshFilters();
+                    if (this.selectedView.type === 'filter' && this.selectedView.id === filter.id) {
+                        this.selectBuiltin('next');
+                    }
+                } else {
+                    this.showToast(result.error || 'Failed to delete filter', 'error');
+                }
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error');
+            }
+        },
+
+        onFilterDragStart(filter) {
+            this.draggedFilterId = filter.id;
+        },
+
+        async onFilterDrop(targetFilter) {
+            if (!this.draggedFilterId || this.draggedFilterId === targetFilter.id) return;
+
+            const current = this.filters.slice();
+            const fromIndex = current.findIndex((f) => f.id === this.draggedFilterId);
+            const toIndex = current.findIndex((f) => f.id === targetFilter.id);
+            if (fromIndex === -1 || toIndex === -1) return;
+
+            const [moved] = current.splice(fromIndex, 1);
+            current.splice(toIndex, 0, moved);
+
+            this.filters = current;
+            this.draggedFilterId = null;
+
+            try {
+                const ids = current.map((f) => f.id);
+                const result = await apiClient.reorderFilters(ids);
+                if (!result.success) {
+                    this.showToast(result.error || 'Failed to reorder', 'error');
+                    await this.refreshFilters();
+                }
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error');
+                await this.refreshFilters();
+            }
+        },
+
+        openCommandModal(type) {
+            this.modal = { open: true, type, value: '', filterId: null, filterName: '', filterValue: '' };
+            this.resetCompletion();
+            this.$nextTick(() => {
+                const input = this.$refs.modalInput;
+                if (input) input.focus();
+            });
+        },
+
+        closeModal() {
+            this.modal.open = false;
+            this.modal.type = null;
+            this.resetCompletion();
+        },
+
+        async submitModal() {
+            const type = this.modal.type;
+
+            if (type === 'add') {
+                const text = String(this.modal.value || '').trim();
+                if (!text) return;
+                const result = await commandService.addTask(text);
+                if (result.success) {
+                    this.showToast('Added task', 'success');
+                    this.closeModal();
+                    await this.loadTasksForSelection();
+                } else {
+                    this.showToast(result.error || 'Failed to add', 'error');
+                }
                 return;
             }
 
-            try {
-                const result = await commandService.addTask(this.addTaskInput);
-                
+            if (type === 'show') {
+                const query = String(this.modal.value || '').trim();
+                if (!query) return;
+                this.mainMode = 'tasks';
+                this.tasks = await queryService.getTasks(query);
+                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+                this.closeModal();
+                return;
+            }
+
+            if (type === 'exec') {
+                const command = String(this.modal.value || '').trim();
+                if (!command) return;
+
+                const result = await commandService.executeCustom(command);
                 if (result.success) {
-                    this.showMessage('Task added successfully!', 'success');
-                    this.addTaskInput = '';
-                    await this.loadTasks();
+                    const output = (result.output || '').trim();
+                    const err = (result.error || '').trim();
+                    const parts = [];
+                    if (output) parts.push(output);
+                    if (err) parts.push(err);
+                    this.mainOutput = parts.length ? parts.join('\n') : 'OK';
+                    this.mainMode = 'output';
+                    this.closeModal();
                 } else {
-                    this.showMessage(`Error: ${result.error}`, 'error');
+                    this.showToast(result.error || 'Failed to execute', 'error');
                 }
-            } catch (error) {
-                this.showMessage(`Error adding task: ${error.message}`, 'error');
+                return;
+            }
+
+            if (type === 'search') {
+                const term = String(this.modal.value || '').trim();
+                if (!term) return;
+                const prefix = this.searchPendingOnly ? 'status:pending ' : '';
+                this.mainMode = 'tasks';
+                this.tasks = await queryService.getTasks(`${prefix}${term}`);
+                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+                this.closeModal();
+                return;
+            }
+
+            if (type === 'filter') {
+                const name = String(this.modal.filterName || '').trim();
+                const filter = String(this.modal.filterValue || '').trim();
+                if (!name || !filter) return;
+
+                try {
+                    if (this.modal.filterId) {
+                        const result = await apiClient.updateFilter(this.modal.filterId, { name, filter });
+                        if (!result.success) {
+                            this.showToast(result.error || 'Failed to update filter', 'error');
+                            return;
+                        }
+                        await this.refreshFilters();
+                        this.closeModal();
+                        return;
+                    }
+
+                    const result = await apiClient.createFilter({ name, filter });
+                    if (result.success) {
+                        await this.refreshFilters();
+                        this.closeModal();
+                    } else {
+                        this.showToast(result.error || 'Failed to create filter', 'error');
+                    }
+                } catch (error) {
+                    this.showToast(String(error?.message || error), 'error');
+                }
             }
         },
 
@@ -435,105 +698,36 @@ createApp({
                 `Enter modifications:`
             );
 
-            if (modifications === null || modifications.trim() === '') {
-                return;
-            }
+            if (modifications === null || modifications.trim() === '') return;
 
-            try {
-                const result = await commandService.modifyTask(taskId, modifications.trim());
-                
-                if (result.success) {
-                    this.showMessage(`Task ${taskId} modified successfully!`, 'success');
-                    await this.loadTasks();
-                } else {
-                    this.showMessage(`Error: ${result.error}`, 'error');
-                }
-            } catch (error) {
-                this.showMessage(`Error modifying task: ${error.message}`, 'error');
+            const result = await commandService.modifyTask(taskId, modifications.trim());
+            if (result.success) {
+                this.showToast('Updated task', 'success');
+                await this.loadTasksForSelection();
+            } else {
+                this.showToast(result.error || 'Failed to update task', 'error');
             }
         },
 
         async markDone(taskId) {
-            try {
-                const result = await commandService.completeTask(taskId);
-                
-                if (result.success) {
-                    this.showMessage(`Task ${taskId} marked as done!`, 'success');
-                    await this.loadTasks();
-                } else {
-                    this.showMessage(`Error: ${result.error}`, 'error');
-                }
-            } catch (error) {
-                this.showMessage(`Error marking task as done: ${error.message}`, 'error');
+            const result = await commandService.completeTask(taskId);
+            if (result.success) {
+                this.showToast('Marked done', 'success');
+                await this.loadTasksForSelection();
+            } else {
+                this.showToast(result.error || 'Failed to mark done', 'error');
             }
         },
 
         async deleteTask(taskId) {
-            if (!confirm(`Are you sure you want to delete task ${taskId}?`)) {
-                return;
+            if (!confirm(`Delete task ${taskId}?`)) return;
+            const result = await commandService.deleteTask(taskId);
+            if (result.success) {
+                this.showToast('Deleted task', 'success');
+                await this.loadTasksForSelection();
+            } else {
+                this.showToast(result.error || 'Failed to delete task', 'error');
             }
-
-            try {
-                const result = await commandService.deleteTask(taskId);
-                
-                if (result.success) {
-                    this.showMessage(`Task ${taskId} deleted successfully!`, 'success');
-                    await this.loadTasks();
-                } else {
-                    this.showMessage(`Error: ${result.error}`, 'error');
-                }
-            } catch (error) {
-                this.showMessage(`Error deleting task: ${error.message}`, 'error');
-            }
-        },
-
-        async executeCustomCommand() {
-            this.resetCompletion();
-
-            const command = this.customCommandInput.trim();
-            if (!command) {
-                this.showMessage('Please enter a command', 'error');
-                return;
-            }
-
-            try {
-                const result = await commandService.executeCustom(command);
-
-                if (result.success) {
-                    const output = (result.output || '').trim();
-                    const errorOutput = (result.error || '').trim();
-
-                    const parts = [];
-                    if (output) parts.push(output);
-                    if (errorOutput) parts.push(errorOutput);
-
-                    const text = parts.length > 0 ? parts.join('\n') : 'OK';
-                    this.showMessage(text, 'info', 'manual');
-                    this.customCommandInput = '';
-
-                    // Advanced commands should not implicitly refresh the task list.
-                } else {
-                    const output = (result.output || '').trim();
-                    const errorOutput = (result.error || '').trim();
-
-                    const parts = [];
-                    if (errorOutput) parts.push(errorOutput);
-                    if (output) parts.push(output);
-
-                    const text = parts.length > 0 ? parts.join('\n') : 'Unknown error';
-                    this.showMessage(text, 'error');
-                }
-            } catch (error) {
-                this.showMessage(`Error executing command: ${error.message}`, 'error');
-            }
-        },
-
-        getStatusClass(status) {
-            return status === 'completed' ? 'status-completed' : 'status-pending';
-        },
-
-        formatTags(tags) {
-            return tags ? tags.join(', ') : '';
         },
 
         formatDate(dateStr) {
@@ -548,16 +742,13 @@ createApp({
         async loadTaskrc() {
             try {
                 const response = await fetch('/api/taskrc');
-                if (!response.ok) {
-                    throw new Error(await response.text());
-                }
-
+                if (!response.ok) throw new Error(await response.text());
                 const text = await response.text();
                 this.taskrcText = text;
                 this.loadedTaskrcText = text;
-                this.showMessage('Loaded taskrc', 'success');
+                this.showToast('Loaded taskrc', 'success');
             } catch (error) {
-                this.showMessage(`Error loading taskrc: ${error.message}`, 'error');
+                this.showToast(`Error loading taskrc: ${error.message}`, 'error');
             }
         },
 
@@ -565,21 +756,15 @@ createApp({
             try {
                 const response = await fetch('/api/taskrc', {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'text/plain; charset=utf-8',
-                    },
-                    body: this.taskrcText
+                    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+                    body: this.taskrcText,
                 });
-
-                if (!response.ok) {
-                    throw new Error(await response.text());
-                }
-
+                if (!response.ok) throw new Error(await response.text());
                 this.loadedTaskrcText = this.taskrcText;
-                this.showMessage('Saved taskrc', 'success');
+                this.showToast('Saved taskrc', 'success');
             } catch (error) {
-                this.showMessage(`Error saving taskrc: ${error.message}`, 'error');
+                this.showToast(`Error saving taskrc: ${error.message}`, 'error');
             }
-        }
-    }
+        },
+    },
 }).mount('#app');

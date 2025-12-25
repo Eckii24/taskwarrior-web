@@ -5,6 +5,7 @@ const path = require('path');
 const { promisify } = require('util');
 const fs = require('fs/promises');
 const os = require('os');
+const Database = require('better-sqlite3');
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -15,6 +16,8 @@ const DEFAULT_TASKRC_PATH = path.join(DEFAULT_TASKDATA_PATH, 'taskrc');
 
 const TASKDATA_PATH = process.env.TASKDATA || DEFAULT_TASKDATA_PATH;
 const TASKRC_PATH = process.env.TASKRC || DEFAULT_TASKRC_PATH;
+
+const SETTINGS_DB_PATH = process.env.SETTINGS_DB || path.join(TASKDATA_PATH, 'taskwarrior-web.sqlite');
 
 function getDefaultTaskrc() {
     return [
@@ -40,10 +43,42 @@ async function ensureTaskrcExists() {
     }
 }
 
+async function ensureSettingsDbDirExists() {
+    await fs.mkdir(path.dirname(SETTINGS_DB_PATH), { recursive: true });
+}
+
+function openSettingsDb() {
+    const db = new Database(SETTINGS_DB_PATH);
+    db.pragma('journal_mode = WAL');
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS filters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            filter TEXT NOT NULL,
+            "order" INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_filters_order ON filters("order", id);
+    `);
+
+    return db;
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
+
+let settingsDb;
+
+async function ensureSettingsDb() {
+    if (settingsDb) return settingsDb;
+    await ensureSettingsDbDirExists();
+    settingsDb = openSettingsDb();
+    return settingsDb;
+}
 
 // Retrieve the full taskrc as plain text
 app.get('/api/taskrc', async (_req, res) => {
@@ -109,6 +144,142 @@ async function cachedCompletionLines(cacheKey, argsArray, ttlMs = 3000) {
     completionCache.set(cacheKey, { value, expiresAt: now + ttlMs });
     return value;
 }
+
+// Settings: custom filters
+app.get('/api/filters', async (_req, res) => {
+    try {
+        const db = await ensureSettingsDb();
+        const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
+        res.json({ success: true, filters });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/filters', async (req, res) => {
+    try {
+        const db = await ensureSettingsDb();
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+        const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
+
+        if (!name) {
+            return res.status(400).json({ success: false, error: 'name is required' });
+        }
+        if (!filter) {
+            return res.status(400).json({ success: false, error: 'filter is required' });
+        }
+
+        const maxOrderRow = db.prepare('SELECT COALESCE(MAX("order"), -1) AS maxOrder FROM filters').get();
+        const nextOrder = Number(maxOrderRow?.maxOrder ?? -1) + 1;
+
+        const createdAt = new Date().toISOString();
+        const stmt = db.prepare('INSERT INTO filters (name, filter, "order", created_at) VALUES (?, ?, ?, ?)');
+        const info = stmt.run(name, filter, nextOrder, createdAt);
+
+        res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, order: nextOrder } });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.put('/api/filters/reorder', async (req, res) => {
+    try {
+        const db = await ensureSettingsDb();
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+        const parsedIds = ids.map((val) => Number(val)).filter((val) => Number.isFinite(val));
+
+        if (parsedIds.length !== ids.length || parsedIds.length === 0) {
+            return res.status(400).json({ success: false, error: 'ids must be a non-empty array of numbers' });
+        }
+
+        const unique = new Set(parsedIds);
+        if (unique.size !== parsedIds.length) {
+            return res.status(400).json({ success: false, error: 'ids must be unique' });
+        }
+
+        const existingIds = db.prepare('SELECT id FROM filters').all().map((row) => row.id);
+        const existingSet = new Set(existingIds);
+        for (const id of parsedIds) {
+            if (!existingSet.has(id)) {
+                return res.status(404).json({ success: false, error: `filter not found: ${id}` });
+            }
+        }
+
+        const run = db.transaction(() => {
+            const stmt = db.prepare('UPDATE filters SET "order" = ? WHERE id = ?');
+            parsedIds.forEach((id, index) => {
+                stmt.run(index, id);
+            });
+        });
+
+        run();
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.put('/api/filters/:id', async (req, res) => {
+    try {
+        const db = await ensureSettingsDb();
+        const idRaw = String(req.params.id || '');
+        if (!/^\d+$/.test(idRaw)) {
+            return res.status(400).json({ success: false, error: 'invalid id' });
+        }
+        const id = Number(idRaw);
+
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+        const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
+        const orderValue = req.body?.order;
+        const hasOrder = orderValue !== undefined;
+        const parsedOrder = hasOrder ? Number(orderValue) : null;
+
+        if (name !== undefined && typeof req.body?.name === 'string' && name.length === 0) {
+            return res.status(400).json({ success: false, error: 'name must not be empty' });
+        }
+        if (filter !== undefined && typeof req.body?.filter === 'string' && filter.length === 0) {
+            return res.status(400).json({ success: false, error: 'filter must not be empty' });
+        }
+        if (hasOrder && !Number.isFinite(parsedOrder)) {
+            return res.status(400).json({ success: false, error: 'order must be a number' });
+        }
+
+        const existing = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters WHERE id = ?').get(id);
+        if (!existing) {
+            return res.status(404).json({ success: false, error: 'filter not found' });
+        }
+
+        const nextName = name || existing.name;
+        const nextFilter = filter || existing.filter;
+        const nextOrder = hasOrder ? parsedOrder : existing.order;
+
+        db.prepare('UPDATE filters SET name = ?, filter = ?, "order" = ? WHERE id = ?').run(nextName, nextFilter, nextOrder, id);
+
+        res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, order: nextOrder } });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/api/filters/:id', async (req, res) => {
+    try {
+        const db = await ensureSettingsDb();
+        const idRaw = String(req.params.id || '');
+        if (!/^\d+$/.test(idRaw)) {
+            return res.status(400).json({ success: false, error: 'invalid id' });
+        }
+        const id = Number(idRaw);
+
+        const info = db.prepare('DELETE FROM filters WHERE id = ?').run(id);
+        if (info.changes === 0) {
+            return res.status(404).json({ success: false, error: 'filter not found' });
+        }
+
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 // Lightweight completion endpoint.
 // Accepts the current token under cursor (e.g. "proj:", "project:ho", "+ur", "rc.co").

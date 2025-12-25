@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Taskwarrior Web Interface</title>
 
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
@@ -11,247 +10,360 @@
     <link rel="manifest" href="site.webmanifest">
     <link rel="icon" href="favicon.ico">
 
+    <title>Taskwarrior Web</title>
+
     <link rel="stylesheet" href="styles.css">
     <script src="vue.js"></script>
 </head>
 <body>
-    <div id="app">
-        <header>
-            <h1>Taskwarrior Web Interface</h1>
-            <p class="subtitle">A web interface wrapping the taskwarrior CLI</p>
+    <div id="app" class="app-shell">
+        <!-- Mobile top bar -->
+        <header class="topbar">
+            <button
+                class="icon-btn"
+                type="button"
+                aria-label="Open menu"
+                @click="toggleDrawer(true)"
+            >
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/>
+                </svg>
+            </button>
+            <div class="topbar-title">
+                <div class="topbar-title-text">{{ currentTitle }}</div>
+            </div>
+            <div class="topbar-spacer"></div>
         </header>
 
-        <main>
-            <!-- Tabs -->
-            <nav class="tabs" role="tablist">
-                <button
-                    class="tab"
-                    :class="{ active: activeTab === 'tasks' }"
-                    role="tab"
-                    :aria-selected="activeTab === 'tasks'"
-                    @click="setTab('tasks')"
-                >
-                    Tasks
-                </button>
-                <button
-                    class="tab"
-                    :class="{ active: activeTab === 'config' }"
-                    role="tab"
-                    :aria-selected="activeTab === 'config'"
-                    @click="setTab('config')"
-                >
-                    Config
-                </button>
-            </nav>
+        <!-- Drawer backdrop (mobile) -->
+        <div
+            class="drawer-backdrop"
+            :class="{ open: drawerOpen }"
+            @click="toggleDrawer(false)"
+        ></div>
 
-            <!-- Message Display -->
-            <section class="output-section" v-if="message.text">
-                <div :class="['message', message.type, { manual: message.dismissMode === 'manual' }]">
-                    <pre class="message-text">{{ message.text }}</pre>
-                    <button
-                        v-if="message.dismissMode === 'manual'"
-                        class="message-dismiss"
-                        type="button"
-                        aria-label="Dismiss notification"
-                        @click="dismissMessage"
-                    >
-                        ×
-                    </button>
+        <aside class="sidebar" :class="{ open: drawerOpen }" aria-label="Filters">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <img class="brand-icon" src="logo.png" alt="">
+                    <div class="brand-name">Taskwarrior Web</div>
                 </div>
-            </section>
-
-            <!-- Tasks Tab -->
-            <div v-if="activeTab === 'tasks'">
-                <!-- Add Task Section -->
-                <section class="command-section">
-                    <h2>Add Task (CLI Syntax)</h2>
-                    <div class="command-input-group">
-                        <span class="command-prefix">task add</span>
-                         <input
-                              type="text"
-                               v-model="addTaskInput"
-                               @keydown="handleCompletionKeydown($event, 'addTaskInput', 'addTask')"
-                               @input="handleCompletionInput($event, 'addTaskInput')"
-                               @blur="handleCompletionBlur('addTaskInput')"
-                              class="command-input"
-                              placeholder="Buy milk project:groceries +shopping due:tomorrow"
-                              autocomplete="off"
-                          >
-                         <button @click="addTask" class="btn btn-primary">Add Task</button>
-                     </div>
-                     <div
-                         v-if="completion.visible && completion.field === 'addTaskInput'"
-                         class="completion-panel"
-                         role="listbox"
-                         aria-label="Completions"
-                     >
-                         <div class="completion-hint">Tab to list, ↑/↓ to select, Enter to apply, Esc to cancel</div>
-                         <div
-                             v-for="(suggestion, idx) in completion.suggestions"
-                             :key="idx"
-                             class="completion-item"
-                             :class="{ active: idx === completion.selectedIndex }"
-                             role="option"
-                             :aria-selected="idx === completion.selectedIndex"
-                         >
-                             {{ suggestion }}
-                         </div>
-                     </div>
-                </section>
-
-                <!-- View Tasks Section -->
-                <section class="report-section">
-                    <h2>View Tasks (Custom Report)</h2>
-                    <div class="command-input-group">
-                        <span class="command-prefix">task</span>
-                         <input
-                              type="text"
-                               v-model="reportInput"
-                               @keydown="handleCompletionKeydown($event, 'reportInput', 'loadTasks')"
-                               @input="handleCompletionInput($event, 'reportInput')"
-                               @blur="handleCompletionBlur('reportInput')"
-                              class="command-input"
-                              placeholder="list, next, pending, all, etc."
-                              autocomplete="off"
-                          >
-                         <button @click="loadTasks" class="btn btn-primary">Show Tasks</button>
-                     </div>
-                     <div
-                         v-if="completion.visible && completion.field === 'reportInput'"
-                         class="completion-panel"
-                         role="listbox"
-                         aria-label="Completions"
-                     >
-                         <div class="completion-hint">Tab to list, ↑/↓ to select, Enter to apply, Esc to cancel</div>
-                         <div
-                             v-for="(suggestion, idx) in completion.suggestions"
-                             :key="idx"
-                             class="completion-item"
-                             :class="{ active: idx === completion.selectedIndex }"
-                             role="option"
-                             :aria-selected="idx === completion.selectedIndex"
-                         >
-                             {{ suggestion }}
-                         </div>
-                     </div>
-                    <div class="report-suggestions">
-                        <small>Common reports:
-                            <a href="#" @click.prevent="setReport('list')">list</a>,
-                            <a href="#" @click.prevent="setReport('next')">next</a>,
-                            <a href="#" @click.prevent="setReport('pending')">pending</a>,
-                            <a href="#" @click.prevent="setReport('all')">all</a>,
-                            <a href="#" @click.prevent="setReport('completed')">completed</a>
-                        </small>
-                    </div>
-                </section>
-
-                <!-- Execute Custom Command Section -->
-                <section class="command-section">
-                    <h2>Execute Custom Command (Advanced)</h2>
-                    <div class="command-input-group">
-                        <span class="command-prefix">task</span>
-                         <input
-                              type="text"
-                               v-model="customCommandInput"
-                               @keydown="handleCompletionKeydown($event, 'customCommandInput', 'executeCustomCommand')"
-                               @input="handleCompletionInput($event, 'customCommandInput')"
-                               @blur="handleCompletionBlur('customCommandInput')"
-                              class="command-input"
-                              placeholder="1 modify priority:H, 2 annotate 'Important note', etc."
-                              autocomplete="off"
-                          >
-                         <button @click="executeCustomCommand" class="btn btn-secondary">Execute</button>
-                     </div>
-                     <div
-                         v-if="completion.visible && completion.field === 'customCommandInput'"
-                         class="completion-panel"
-                         role="listbox"
-                         aria-label="Completions"
-                     >
-                         <div class="completion-hint">Tab to list, ↑/↓ to select, Enter to apply, Esc to cancel</div>
-                         <div
-                             v-for="(suggestion, idx) in completion.suggestions"
-                             :key="idx"
-                             class="completion-item"
-                             :class="{ active: idx === completion.selectedIndex }"
-                             role="option"
-                             :aria-selected="idx === completion.selectedIndex"
-                         >
-                             {{ suggestion }}
-                         </div>
-                     </div>
-                </section>
-
-                <!-- Tasks Table -->
-                <section class="tasks-section">
-                    <h2>Tasks</h2>
-                    <div class="tasks-container">
-                        <p v-if="tasks.length === 0" class="loading">{{ emptyMessage }}</p>
-                        <table v-else>
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Description</th>
-                                    <th>Status</th>
-                                    <th>Project</th>
-                                    <th>Tags</th>
-                                    <th>Due</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="task in tasks" :key="task.uuid">
-                                    <td class="task-id">{{ task.id || task.uuid }}</td>
-                                    <td class="task-description">{{ task.description }}</td>
-                                    <td>
-                                        <span :class="['task-status', getStatusClass(task.status)]">
-                                            {{ task.status }}
-                                        </span>
-                                    </td>
-                                    <td>{{ task.project || '' }}</td>
-                                    <td>{{ formatTags(task.tags) }}</td>
-                                    <td>{{ formatDate(task.due) }}</td>
-                                    <td class="task-actions">
-                                        <button v-if="task.status === 'pending'" @click="markDone(task.id)" class="btn btn-success">Done</button>
-                                        <button v-if="task.status === 'pending'" @click="editTask(task.id)" class="btn btn-primary">Edit</button>
-                                        <button @click="deleteTask(task.id)" class="btn btn-danger">Delete</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+                <button
+                    class="icon-btn sidebar-close"
+                    type="button"
+                    aria-label="Close menu"
+                    @click="toggleDrawer(false)"
+                >
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                    </svg>
+                </button>
             </div>
 
-            <!-- Config Tab -->
-            <div v-if="activeTab === 'config'">
-                <section class="config-section">
-                    <div class="config-header">
-                        <h2>Taskwarrior Configuration (taskrc)</h2>
-                        <div class="config-actions">
-                            <button @click="loadTaskrc" class="btn btn-secondary">Reload</button>
-                            <button @click="saveTaskrc" class="btn btn-primary" :disabled="!taskrcDirty">Save</button>
+            <nav class="sidebar-nav">
+                <button
+                    class="nav-item"
+                    :class="{ active: selectedView.type === 'search' }"
+                    type="button"
+                    @click="selectSearch"
+                >
+                    <span class="nav-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.5 6.5 0 1 0 14 15.5l.27.28v.79l5 5L20.5 19l-5-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">Search</span>
+                </button>
+
+                <button
+                    class="nav-item"
+                    :class="{ active: selectedView.type === 'builtin' && selectedView.key === 'next' }"
+                    type="button"
+                    @click="selectBuiltin('next')"
+                >
+                    <span class="nav-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">Next</span>
+                </button>
+
+                <button
+                    class="nav-item"
+                    :class="{ active: selectedView.type === 'builtin' && selectedView.key === 'all' }"
+                    type="button"
+                    @click="selectBuiltin('all')"
+                >
+                    <span class="nav-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h10v2H4v-2z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">All</span>
+                </button>
+
+                <div class="nav-section">
+                    <div class="nav-section-title">Filters</div>
+
+                    <div class="filters" @dragover.prevent>
+                        <div
+                            class="filter-row"
+                            v-for="filter in filters"
+                            :key="filter.id"
+                            draggable="true"
+                            @dragstart="onFilterDragStart(filter)"
+                            @drop="onFilterDrop(filter)"
+                        >
+                            <button
+                                class="nav-item filter-item"
+                                :class="{ active: selectedView.type === 'filter' && selectedView.id === filter.id }"
+                                type="button"
+                                @click="selectCustomFilter(filter)"
+                            >
+                                <span class="nav-icon">
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M10 18h4v-2h-4v2zm-7-14v2h18V4H3zm3 7h12V9H6v2z"/>
+                                    </svg>
+                                </span>
+                                <span class="nav-label">{{ filter.name }}</span>
+                            </button>
+                            <div class="filter-actions">
+                                <button
+                                    class="icon-btn small"
+                                    type="button"
+                                    aria-label="Edit filter"
+                                    @click.stop="openEditFilter(filter)"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
+                                    </svg>
+                                </button>
+                                <button
+                                    class="icon-btn small danger"
+                                    type="button"
+                                    aria-label="Delete filter"
+                                    @click.stop="deleteFilter(filter)"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <p class="config-help">
-                        This edits the full Taskwarrior rc file used by the server. Changes apply to the next command.
-                    </p>
+                    <button class="nav-item add-filter" type="button" @click="openAddFilter">
+                        <span class="nav-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                        </span>
+                        <span class="nav-label">Add filter</span>
+                    </button>
+                </div>
+            </nav>
 
-                    <textarea
-                        class="config-editor"
-                        v-model="taskrcText"
-                        spellcheck="false"
-                    ></textarea>
-                </section>
+            <div class="sidebar-footer">
+                <div class="taskrc-entry">
+                    <button
+                        class="nav-item"
+                        :class="{ active: showTaskrc }"
+                        type="button"
+                        @click="toggleTaskrc"
+                    >
+                        <span class="nav-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm1 7V3.5L19.5 9H15z"/>
+                            </svg>
+                        </span>
+                        <span class="nav-label">taskrc</span>
+                    </button>
+                </div>
+
+                <div v-if="showTaskrc" class="taskrc-panel">
+                    <div class="taskrc-actions">
+                        <button class="btn small" type="button" @click="loadTaskrc">Reload</button>
+                        <button class="btn small primary" type="button" @click="saveTaskrc" :disabled="!taskrcDirty">Save</button>
+                    </div>
+                    <textarea class="taskrc-editor" v-model="taskrcText" spellcheck="false"></textarea>
+                </div>
+
+                <div class="bottom-actions">
+                    <button class="fab" type="button" aria-label="Add task" @click="openCommandModal('add')">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                    </button>
+                    <button class="fab" type="button" aria-label="Show tasks" @click="openCommandModal('show')">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
+                        </svg>
+                    </button>
+                    <button class="fab" type="button" aria-label="Execute command" @click="openCommandModal('exec')">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M8 5v14l11-7L8 5z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
+        </aside>
+
+        <main class="main">
+            <section class="main-content">
+                <div v-if="mainMode === 'tasks'" class="tasks-view">
+                    <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
+                    <div v-else class="task-list">
+                        <div class="task-card" v-for="task in tasks" :key="task.uuid">
+                            <div class="task-main">
+                                <div class="task-desc">{{ task.description }}</div>
+                                <div class="task-meta">
+                                    <span class="pill" :class="task.status === 'completed' ? 'done' : 'pending'">{{ task.status }}</span>
+                                    <span v-if="task.project" class="meta">{{ task.project }}</span>
+                                    <span v-if="task.due" class="meta">Due {{ formatDate(task.due) }}</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <button v-if="task.status === 'pending'" class="btn small primary" type="button" @click="markDone(task.id)">Done</button>
+                                <button v-if="task.status === 'pending'" class="btn small" type="button" @click="editTask(task.id)">Edit</button>
+                                <button class="btn small danger" type="button" @click="deleteTask(task.id)">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else class="output-view">
+                    <pre class="command-output">{{ mainOutput }}</pre>
+                </div>
+            </section>
         </main>
 
-        <footer>
-            <p>Using Taskwarrior CLI as backend database</p>
-        </footer>
+        <!-- Command modal (Add/Show/Execute/Search) -->
+        <div class="modal-backdrop" v-if="modal.open" @click="closeModal"></div>
+        <section class="modal" v-if="modal.open" role="dialog" aria-modal="true">
+            <div class="modal-header">
+                <div class="modal-title">{{ modalTitle }}</div>
+                <button class="icon-btn" type="button" aria-label="Close" @click="closeModal">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <div v-if="modal.type === 'search'" class="field">
+                    <label>Search</label>
+                    <input
+                        ref="modalInput"
+                        type="text"
+                        v-model="modal.value"
+                        class="text-input"
+                        placeholder="task search term"
+                        autocomplete="off"
+                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
+                        @input="handleCompletionInput($event, 'modal.value')"
+                        @blur="handleCompletionBlur('modal.value')"
+                    >
+                    <label class="checkbox-row">
+                        <input type="checkbox" v-model="searchPendingOnly">
+                        Only pending
+                    </label>
+                </div>
+
+                <div v-else-if="modal.type === 'add'" class="field">
+                    <label>Add task</label>
+                    <input
+                        ref="modalInput"
+                        type="text"
+                        v-model="modal.value"
+                        class="text-input"
+                        placeholder="Buy milk project:groceries +shopping due:tomorrow"
+                        autocomplete="off"
+                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
+                        @input="handleCompletionInput($event, 'modal.value')"
+                        @blur="handleCompletionBlur('modal.value')"
+                    >
+                </div>
+
+                <div v-else-if="modal.type === 'show'" class="field">
+                    <label>Show (report/filter)</label>
+                    <input
+                        ref="modalInput"
+                        type="text"
+                        v-model="modal.value"
+                        class="text-input"
+                        placeholder="next, all, status:pending, project:Work, ..."
+                        autocomplete="off"
+                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
+                        @input="handleCompletionInput($event, 'modal.value')"
+                        @blur="handleCompletionBlur('modal.value')"
+                    >
+                </div>
+
+                <div v-else-if="modal.type === 'exec'" class="field">
+                    <label>Execute</label>
+                    <input
+                        ref="modalInput"
+                        type="text"
+                        v-model="modal.value"
+                        class="text-input"
+                        placeholder="1 modify priority:H, project:Work done, ..."
+                        autocomplete="off"
+                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
+                        @input="handleCompletionInput($event, 'modal.value')"
+                        @blur="handleCompletionBlur('modal.value')"
+                    >
+                </div>
+
+                <div v-else-if="modal.type === 'filter'" class="field">
+                    <label>Name</label>
+                    <input ref="modalNameInput" type="text" v-model="modal.filterName" class="text-input" placeholder="My filter">
+
+                    <label>Filter</label>
+                    <input
+                        ref="modalInput"
+                        type="text"
+                        v-model="modal.filterValue"
+                        class="text-input"
+                        placeholder="proj:Test due.before:sow"
+                        autocomplete="off"
+                        @keydown="handleCompletionKeydown($event, 'modal.filterValue', 'submitModal')"
+                        @input="handleCompletionInput($event, 'modal.filterValue')"
+                        @blur="handleCompletionBlur('modal.filterValue')"
+                    >
+                </div>
+
+                <div
+                    v-if="completion.visible && completion.field === activeCompletionField"
+                    class="completion-panel"
+                    role="listbox"
+                    aria-label="Completions"
+                >
+                    <div class="completion-hint">Tab to list, Up/Down to select, Enter to apply, Esc to cancel</div>
+                    <div
+                        v-for="(suggestion, idx) in completion.suggestions"
+                        :key="idx"
+                        class="completion-item"
+                        :class="{ active: idx === completion.selectedIndex }"
+                        role="option"
+                        :aria-selected="idx === completion.selectedIndex"
+                    >
+                        {{ suggestion }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn" type="button" @click="closeModal">Cancel</button>
+                <button class="btn primary" type="button" @click="submitModal">OK</button>
+            </div>
+        </section>
+
+        <!-- Inline message (kept minimal) -->
+        <div v-if="toast.text" class="toast" :class="toast.type">{{ toast.text }}</div>
     </div>
 
     <script src="app.js"></script>
 </body>
 </html>
+

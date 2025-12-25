@@ -30,6 +30,9 @@ FROM node:18-bookworm-slim
 # Taskwarrior runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libuuid1 \
+    python3 \
+    make \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=taskwarrior-builder /tmp/taskwarrior-install/ /
