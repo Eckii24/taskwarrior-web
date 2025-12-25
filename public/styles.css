@@ -42,6 +42,34 @@ main {
     padding: 40px;
 }
 
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+.tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 12px 16px;
+    font-weight: 700;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+}
+
+.tab.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+}
+
+.tab:hover {
+    color: #5568d3;
+}
+
 section {
     margin-bottom: 40px;
 }
@@ -179,6 +207,45 @@ h2 {
 
 .tasks-container {
     overflow-x: auto;
+}
+
+.config-section {
+    margin-top: 10px;
+}
+
+.config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.config-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.config-help {
+    color: #666;
+    margin: 10px 0 15px;
+}
+
+.config-editor {
+    width: 100%;
+    min-height: 520px;
+    resize: vertical;
+    padding: 12px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 0.95em;
+    font-family: 'Courier New', monospace;
+    line-height: 1.4;
+}
+
+.config-editor:focus {
+    outline: none;
+    border-color: #667eea;
 }
 
 .loading {
