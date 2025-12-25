@@ -42,25 +42,46 @@
             @click="toggleDrawer(false)"
         ></div>
 
-        <aside class="sidebar" :class="{ open: drawerOpen }" aria-label="Filters">
+            <aside class="sidebar" :class="{ open: drawerOpen }" aria-label="Filters">
             <div class="sidebar-header">
                 <div class="brand">
                     <img class="brand-icon" src="logo.png" alt="">
                     <div class="brand-name">Taskwarrior Web</div>
                 </div>
-                <button
-                    class="icon-btn sidebar-close"
-                    type="button"
-                    aria-label="Close menu"
-                    @click="toggleDrawer(false)"
-                >
-                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
-                    </svg>
-                </button>
+                <div class="sidebar-header-actions">
+                    <button
+                        class="icon-btn"
+                        type="button"
+                        aria-label="Sync"
+                        @click="runSync"
+                    >
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.65 15.03 20 13.56 20 12c0-4.42-3.58-8-8-8zm-6.76 1.46L3.78 6.2A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8l-1.46-1.46z"/>
+                        </svg>
+                    </button>
+                    <button
+                        class="icon-btn sidebar-close"
+                        type="button"
+                        aria-label="Close menu"
+                        @click="toggleDrawer(false)"
+                    >
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <nav class="sidebar-nav">
+                <button class="nav-item add-task" type="button" @click="openAddTask">
+                    <span class="nav-icon">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill="currentColor" d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                    </span>
+                    <span class="nav-label">Add</span>
+                </button>
+
                 <button
                     class="nav-item"
                     :class="{ active: !showTaskrc && selectedView.type === 'search' }"
@@ -74,6 +95,7 @@
                     </span>
                     <span class="nav-label">Search</span>
                 </button>
+
 
                 <button
                     class="nav-item"
@@ -168,34 +190,29 @@
                 <div class="taskrc-entry">
                     <button
                         class="nav-item"
+                        type="button"
+                        @click="openCommandModal('exec')"
+                    >
+                        <span class="nav-icon">
+                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M8 5v14l11-7L8 5z"/>
+                            </svg>
+                        </span>
+                        <span class="nav-label">Execute</span>
+                    </button>
+
+                    <button
+                        class="nav-item"
                         :class="{ active: showTaskrc }"
                         type="button"
                         @click="openSettings"
                     >
                         <span class="nav-icon">
                             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 1h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 7.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.51.41 1.05.72 1.63.94l.36 2.54c.04.24.25.42.49.42h3.8c.24 0 .45-.18.49-.42l.36-2.54c.58-.22 1.12-.52 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/>
+                                <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.1 7.1 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 1h-3.8a.5.5 0 0 0-.49.42l-.36 2.54c-.58.22-1.12.52-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 7.48a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02-.63.06.94L2.83 14.52a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.51.41 1.05.72 1.63.94l.36 2.54c.04.24.25.42.49.42h3.8c.24 0 .45-.18.49-.42l.36-2.54c.58-.22 1.12-.52 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/>
                             </svg>
                         </span>
                         <span class="nav-label">Settings</span>
-                    </button>
-                </div>
-
-                <div class="bottom-actions">
-                    <button class="fab" type="button" aria-label="Add task" @click="openCommandModal('add')">
-                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path fill="currentColor" d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                        </svg>
-                    </button>
-                    <button class="fab" type="button" aria-label="Show tasks" @click="openCommandModal('show')">
-                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-                        </svg>
-                    </button>
-                    <button class="fab" type="button" aria-label="Execute command" @click="openCommandModal('exec')">
-                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path fill="currentColor" d="M8 5v14l11-7L8 5z"/>
-                        </svg>
                     </button>
                 </div>
             </div>
@@ -281,21 +298,6 @@
                         v-model="modal.value"
                         class="text-input"
                         placeholder="Buy milk project:groceries +shopping due:tomorrow"
-                        autocomplete="off"
-                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
-                        @input="handleCompletionInput($event, 'modal.value')"
-                        @blur="handleCompletionBlur('modal.value')"
-                    >
-                </div>
-
-                <div v-else-if="modal.type === 'show'" class="field">
-                    <label>Show (report/filter)</label>
-                    <input
-                        ref="modalInput"
-                        type="text"
-                        v-model="modal.value"
-                        class="text-input"
-                        placeholder="next, all, status:pending, project:Work, ..."
                         autocomplete="off"
                         @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
                         @input="handleCompletionInput($event, 'modal.value')"

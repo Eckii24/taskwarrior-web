@@ -186,7 +186,7 @@ createApp({
 
             modal: {
                 open: false,
-                type: null, // add/show/exec/search/filter
+                type: null, // add/exec/search/filter
                 value: '',
                 filterId: null,
                 filterName: '',
@@ -231,7 +231,7 @@ createApp({
         modalTitle() {
             const map = {
                 add: 'Add Task',
-                show: 'Show Tasks',
+
                 exec: 'Execute',
                 search: 'Search',
                 filter: this.modal.filterId ? 'Edit Filter' : 'Add Filter',
@@ -521,6 +521,27 @@ createApp({
             }
         },
 
+        openAddTask() {
+            this.openCommandModal('add');
+            this.toggleDrawer(false);
+        },
+
+        async runSync() {
+            try {
+                const result = await commandService.executeCustom('sync');
+                if (result.success) {
+                    const output = (result.output || '').trim();
+                    const err = (result.error || '').trim();
+                    const text = [output, err].filter(Boolean).join('\n') || 'OK';
+                    this.showToast(text, 'success', 4500);
+                } else {
+                    this.showToast(result.error || 'Sync failed', 'error', 4500);
+                }
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error', 4500);
+            }
+        },
+
         openAddFilter() {
             this.modal = { open: true, type: 'filter', value: '', filterId: null, filterName: '', filterValue: '' };
             this.resetCompletion();
@@ -595,6 +616,7 @@ createApp({
 
         openCommandModal(type) {
             this.modal = { open: true, type, value: '', filterId: null, filterName: '', filterValue: '' };
+            if (type === 'exec') this.showTaskrc = false;
             this.resetCompletion();
             this.$nextTick(() => {
                 const input = this.$refs.modalInput;
@@ -625,15 +647,6 @@ createApp({
                 return;
             }
 
-            if (type === 'show') {
-                const query = String(this.modal.value || '').trim();
-                if (!query) return;
-                this.mainMode = 'tasks';
-                this.tasks = await queryService.getTasks(query);
-                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
-                this.closeModal();
-                return;
-            }
 
             if (type === 'exec') {
                 const command = String(this.modal.value || '').trim();
