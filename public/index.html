@@ -39,7 +39,18 @@
 
             <!-- Message Display -->
             <section class="output-section" v-if="message.text">
-                <div :class="['message', message.type]">{{ message.text }}</div>
+                <div :class="['message', message.type, { manual: message.dismissMode === 'manual' }]">
+                    <pre class="message-text">{{ message.text }}</pre>
+                    <button
+                        v-if="message.dismissMode === 'manual'"
+                        class="message-dismiss"
+                        type="button"
+                        aria-label="Dismiss notification"
+                        @click="dismissMessage"
+                    >
+                        ×
+                    </button>
+                </div>
             </section>
 
             <!-- Tasks Tab -->

@@ -104,8 +104,10 @@ createApp({
             loadedTaskrcText: '',
             message: {
                 text: '',
-                type: 'success'
+                type: 'success',
+                dismissMode: 'auto'
             },
+            messageTimeoutId: null,
             emptyMessage: 'Click "Show Tasks" to load tasks...'
         };
     },
@@ -115,11 +117,30 @@ createApp({
         }
     },
     methods: {
-        showMessage(text, type = 'success') {
-            this.message = { text, type };
-            setTimeout(() => {
-                this.message = { text: '', type: 'success' };
-            }, 5000);
+        showMessage(text, type = 'success', dismissMode) {
+            const resolvedDismissMode = dismissMode ?? (type === 'error' ? 'manual' : 'auto');
+
+            if (this.messageTimeoutId) {
+                clearTimeout(this.messageTimeoutId);
+                this.messageTimeoutId = null;
+            }
+
+            this.message = { text, type, dismissMode: resolvedDismissMode };
+
+            if (resolvedDismissMode === 'auto') {
+                this.messageTimeoutId = setTimeout(() => {
+                    this.dismissMessage();
+                }, 5000);
+            }
+        },
+
+        dismissMessage() {
+            if (this.messageTimeoutId) {
+                clearTimeout(this.messageTimeoutId);
+                this.messageTimeoutId = null;
+            }
+
+            this.message = { text: '', type: 'success', dismissMode: 'auto' };
         },
 
         async setTab(tab) {
@@ -146,7 +167,6 @@ createApp({
                 const filter = this.reportInput.trim() || 'list';
                 this.tasks = await queryService.getTasks(filter);
                 this.emptyMessage = this.tasks.length === 0 ? 'No tasks found' : '';
-                this.showMessage(`Loaded ${this.tasks.length} task(s)`, 'success');
             } catch (error) {
                 this.showMessage(`Error loading tasks: ${error.message}`, 'error');
             }
@@ -237,22 +257,38 @@ createApp({
         },
 
         async executeCustomCommand() {
-            if (!this.customCommandInput.trim()) {
+            const command = this.customCommandInput.trim();
+            if (!command) {
                 this.showMessage('Please enter a command', 'error');
                 return;
             }
 
             try {
-                const result = await commandService.executeCustom(this.customCommandInput);
-                
+                const result = await commandService.executeCustom(command);
+
                 if (result.success) {
-                    this.showMessage('Command executed successfully!', 'success');
+                    const output = (result.output || '').trim();
+                    const errorOutput = (result.error || '').trim();
+
+                    const parts = [];
+                    if (output) parts.push(output);
+                    if (errorOutput) parts.push(errorOutput);
+
+                    const text = parts.length > 0 ? parts.join('\n') : 'OK';
+                    this.showMessage(text, 'info', 'manual');
                     this.customCommandInput = '';
-                    
-                    // Reload tasks immediately
-                    await this.loadTasks();
+
+                    // Advanced commands should not implicitly refresh the task list.
                 } else {
-                    this.showMessage(`Error: ${result.error}`, 'error');
+                    const output = (result.output || '').trim();
+                    const errorOutput = (result.error || '').trim();
+
+                    const parts = [];
+                    if (errorOutput) parts.push(errorOutput);
+                    if (output) parts.push(output);
+
+                    const text = parts.length > 0 ? parts.join('\n') : 'Unknown error';
+                    this.showMessage(text, 'error');
                 }
             } catch (error) {
                 this.showMessage(`Error executing command: ${error.message}`, 'error');

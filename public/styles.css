@@ -205,6 +205,43 @@ h2 {
     display: block;
 }
 
+.message.info {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+    display: block;
+}
+
+.message.manual {
+    position: relative;
+    padding-right: 44px;
+}
+
+.message-text {
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: inherit;
+}
+
+.message-dismiss {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.08);
+    color: inherit;
+    font-size: 18px;
+    line-height: 28px;
+    cursor: pointer;
+}
+
+.message-dismiss:hover {
+    background: rgba(0, 0, 0, 0.14);
+}
+
 .tasks-container {
     overflow-x: auto;
 }
