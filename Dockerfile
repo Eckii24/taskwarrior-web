@@ -51,10 +51,6 @@ RUN npm config set strict-ssl false && \
 # Copy application files
 COPY backend ./backend
 COPY public ./public
-COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-
-# Ensure entrypoint is executable
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose port
 EXPOSE 3000
@@ -62,5 +58,4 @@ EXPOSE 3000
 # Set environment variable for port
 ENV PORT=3000
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["npm", "start"]

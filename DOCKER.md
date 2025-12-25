@@ -136,6 +136,23 @@ docker volume ls
 docker compose ps
 ```
 
+## Configuration (taskrc)
+
+The web UI edits the full Taskwarrior config file used by the container.
+It is stored inside the Taskwarrior data volume at:
+
+- `/root/.task/taskrc`
+
+To provide your own config, bind-mount a file to that location:
+
+```yaml
+services:
+  taskwarrior-web:
+    volumes:
+      - taskwarrior-data:/root/.task
+      - ./taskrc:/root/.task/taskrc
+```
+
 ## Connecting to TaskChampion Sync Server
 
 Taskwarrior requires three settings to sync with a TaskChampion Sync Server:
@@ -144,21 +161,8 @@ Taskwarrior requires three settings to sync with a TaskChampion Sync Server:
 - `sync.server.client_id`
 - `sync.encryption_secret`
 
-This project maps those settings to environment variables in `docker-compose.yml` (the container regenerates `/root/.taskrc` on each start from these values):
+Set these in the Config tab (or directly in `/root/.task/taskrc`). Then run:
 
-- `TASK_SYNC_SERVER_URL` → `sync.server.url`
-- `TASK_SYNC_CLIENT_ID` → `sync.server.client_id`
-- `TASK_SYNC_ENCRYPTION_SECRET` → `sync.encryption_secret`
-
-Example:
-```bash
-TASK_SYNC_SERVER_URL=https://taskwarrior.example.com \
-TASK_SYNC_CLIENT_ID=your-client-id \
-TASK_SYNC_ENCRYPTION_SECRET=your-encryption-secret \
-docker compose up -d
-```
-
-To use sync functionality, you can run:
 ```bash
 docker exec -it taskwarrior-web task sync
 ```
@@ -187,5 +191,6 @@ docker build -t taskwarrior-web .
 - The Dockerfile builds Taskwarrior 3.4.2 from source (requires Rust toolchain + CMake 3.24+)
 - **Security Warning**: The Dockerfile includes `npm config set strict-ssl false` as a workaround for sandbox/CI environments. Remove this in production environments with proper SSL certificates
 - The task database is stored in `/root/.task` within the container
-- TaskChampion sync is configured via env vars (defaults to `http://taskchampion-sync:8080`)
+- Taskwarrior config is stored at `/root/.task/taskrc` (editable via Config tab)
+- **Security Warning**: There is no authentication. Anyone with access to the web UI can execute commands and overwrite the taskrc.
 - Both containers communicate over a dedicated Docker network (`taskwarrior-network`)
