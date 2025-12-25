@@ -165,6 +165,14 @@ docker build -t taskwarrior-web .
 - **Dockerfile**: Multi-layer build that installs Taskwarrior from Debian repositories and sets up the Node.js application
 - **docker-compose.yml**: Orchestrates both the web frontend and sync server with proper networking and volumes
 
+### Security Note
+
+The Dockerfile includes a workaround for SSL certificate verification during the npm install step. This is necessary in some CI/sandbox environments where SSL certificates may not be properly configured. **For production use**, you should:
+
+1. Use a build environment with proper SSL certificates
+2. Remove the `npm config set strict-ssl false` lines from the Dockerfile
+3. Ensure your Docker build environment has access to valid certificate authorities
+
 ## Version Information
 
 - Taskwarrior: 2.6.2 (from Debian repositories)
@@ -174,6 +182,6 @@ docker build -t taskwarrior-web .
 ## Notes
 
 - The Dockerfile uses a simplified approach by installing Taskwarrior from the Debian package repository rather than building from source
-- SSL certificate verification is disabled during npm install in the build process due to environment constraints
+- **Security Warning**: The Dockerfile includes `npm config set strict-ssl false` as a workaround for sandbox/CI environments. Remove this in production environments with proper SSL certificates
 - The task database is stored in `/root/.task` within the container
 - Both containers communicate over a dedicated Docker network (`taskwarrior-network`)

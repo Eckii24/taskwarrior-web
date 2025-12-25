@@ -15,9 +15,11 @@ COPY package*.json ./
 # Create public directory for postinstall script
 RUN mkdir -p public
 
-# Install Node.js dependencies (disable SSL verification due to environment)
+# Install Node.js dependencies
+# Note: SSL verification is disabled during build due to sandbox/CI environment constraints
+# In production environments with proper SSL certificates, remove the strict-ssl config lines
 RUN npm config set strict-ssl false && \
-    (npm ci || npm install) && \
+    npm ci && \
     npm config set strict-ssl true
 
 # Copy application files
