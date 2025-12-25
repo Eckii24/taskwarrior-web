@@ -82,6 +82,62 @@ class TaskApiClient {
             };
         }
     }
+
+    async complete(token, limit = 20) {
+        try {
+            const url = new URL(`${this.baseUrl}/complete`, window.location.origin);
+            url.searchParams.set('token', token);
+            url.searchParams.set('limit', String(limit));
+
+            const response = await fetch(url.toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+            });
+
+            return await response.json();
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message,
+                suggestions: [],
+            };
+        }
+    }
+}
+
+function getTokenAtCursor(text, cursorIndex) {
+    const safeText = String(text || '');
+    const idx = Math.max(0, Math.min(cursorIndex ?? safeText.length, safeText.length));
+
+    const before = safeText.slice(0, idx);
+    const after = safeText.slice(idx);
+
+    // Avoid autocompleting in the middle of a quoted token.
+    const quoteCount = (before.match(/"/g) || []).length + (before.match(/'/g) || []).length;
+    if (quoteCount % 2 === 1) {
+        return { token: '', start: idx, end: idx };
+    }
+
+    const beforeMatch = before.match(/(?:^|\s)(\S*)$/);
+    const beforeToken = beforeMatch ? beforeMatch[1] : '';
+
+    const afterMatch = after.match(/^(\S*)/);
+    const afterToken = afterMatch ? afterMatch[1] : '';
+
+    const token = `${beforeToken}${afterToken}`;
+    const start = idx - beforeToken.length;
+    const end = idx + afterToken.length;
+
+    return { token, start, end };
+}
+
+function replaceRange(text, start, end, replacement) {
+    const safeText = String(text || '');
+    const s = Math.max(0, Math.min(start, safeText.length));
+    const e = Math.max(s, Math.min(end, safeText.length));
+    return safeText.slice(0, s) + replacement + safeText.slice(e);
 }
 
 // Initialize services
@@ -108,7 +164,16 @@ createApp({
                 dismissMode: 'auto'
             },
             messageTimeoutId: null,
-            emptyMessage: 'Click "Show Tasks" to load tasks...'
+            emptyMessage: 'Click "Show Tasks" to load tasks...',
+             completion: {
+                field: null,
+                token: '',
+                start: 0,
+                end: 0,
+                suggestions: [],
+                selectedIndex: 0,
+                visible: false,
+            },
         };
     },
     computed: {
@@ -117,6 +182,167 @@ createApp({
         }
     },
     methods: {
+        resetCompletion() {
+            this.completion = {
+                field: null,
+                token: '',
+                start: 0,
+                end: 0,
+                suggestions: [],
+                selectedIndex: 0,
+                visible: false,
+            };
+        },
+
+        async updateCompletion(field, tokenInfo) {
+            const token = tokenInfo.token || '';
+            if (!token.trim()) {
+                this.resetCompletion();
+                return [];
+            }
+
+            const result = await apiClient.complete(token);
+            const suggestions = result && result.success && Array.isArray(result.suggestions)
+                ? result.suggestions
+                : [];
+
+            if (suggestions.length === 0) {
+                this.resetCompletion();
+                return [];
+            }
+
+            const keepVisible = this.completion.visible && this.completion.field === field;
+
+            this.completion = {
+                field,
+                token,
+                start: tokenInfo.start,
+                end: tokenInfo.end,
+                suggestions,
+                selectedIndex: 0,
+                visible: keepVisible,
+            };
+
+            return suggestions;
+        },
+
+        applyCompletionSuggestion(inputEl, field, suggestion) {
+            const current = String(this[field] || '');
+            const { start, end } = this.completion;
+            const nextValue = replaceRange(current, start, end, suggestion);
+
+            this[field] = nextValue;
+
+            this.$nextTick(() => {
+                const cursor = start + suggestion.length;
+                inputEl.setSelectionRange(cursor, cursor);
+            });
+        },
+
+        async handleCompletionKeydown(event, field, actionName) {
+            const inputEl = event.target;
+            if (!inputEl || typeof inputEl.selectionStart !== 'number') {
+                return;
+            }
+
+            // Must happen synchronously, otherwise the browser will move focus.
+            if (event.key === 'Tab') {
+                event.preventDefault();
+            }
+
+            const isActive = this.completion.visible && this.completion.field === field;
+
+            if (event.key === 'Escape' && isActive) {
+                event.preventDefault();
+                this.resetCompletion();
+                return;
+            }
+
+            // If the completion list is not active for this field, Enter should trigger
+            // the field's primary action (add/show/execute).
+            if (event.key === 'Enter' && !isActive) {
+                if (typeof actionName === 'string' && typeof this[actionName] === 'function') {
+                    event.preventDefault();
+                    await this[actionName]();
+                }
+                return;
+            }
+
+            const completionKeys = ['Tab', 'ArrowDown', 'ArrowUp', 'Enter'];
+            if (!completionKeys.includes(event.key)) {
+                return;
+            }
+
+            const text = String(this[field] || '');
+            const cursor = inputEl.selectionStart;
+            const tokenInfo = getTokenAtCursor(text, cursor);
+
+            const tokenChanged = this.completion.field !== field || this.completion.token !== tokenInfo.token || this.completion.start !== tokenInfo.start || this.completion.end !== tokenInfo.end;
+
+            if (tokenChanged || !isActive) {
+                await this.updateCompletion(field, tokenInfo);
+            }
+
+            if (this.completion.suggestions.length === 0) {
+                return;
+            }
+
+            // If there is exactly one option and user hits Tab, apply it.
+            if (this.completion.suggestions.length === 1 && event.key === 'Tab') {
+                this.applyCompletionSuggestion(inputEl, field, this.completion.suggestions[0]);
+                this.resetCompletion();
+                return;
+            }
+
+            // Navigation within list.
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                this.completion.visible = true;
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const count = this.completion.suggestions.length;
+                this.completion.selectedIndex = (this.completion.selectedIndex + delta + count) % count;
+                return;
+            }
+
+            // Tab with multiple suggestions: show list (don't autocomplete).
+            if (event.key === 'Tab' && !isActive) {
+                this.completion.visible = true;
+                return;
+            }
+
+            // If the list is open, Tab/Enter accept the highlighted suggestion.
+            if ((event.key === 'Enter' || event.key === 'Tab') && this.completion.visible) {
+                const suggestion = this.completion.suggestions[this.completion.selectedIndex];
+                if (suggestion) {
+                    event.preventDefault();
+                    this.applyCompletionSuggestion(inputEl, field, suggestion);
+                    this.resetCompletion();
+                }
+            }
+        },
+
+        async handleCompletionInput(event, field) {
+            const inputEl = event.target;
+            if (!inputEl || typeof inputEl.selectionStart !== 'number') {
+                this.resetCompletion();
+                return;
+            }
+
+            // If the completion list is open for this field, keep it in sync.
+            if (this.completion.visible && this.completion.field === field) {
+                const text = String(this[field] || '');
+                const cursor = inputEl.selectionStart;
+                const tokenInfo = getTokenAtCursor(text, cursor);
+                await this.updateCompletion(field, tokenInfo);
+            }
+        },
+
+        handleCompletionBlur(field) {
+            if (this.completion.field === field) {
+                this.resetCompletion();
+            }
+        },
+
         showMessage(text, type = 'success', dismissMode) {
             const resolvedDismissMode = dismissMode ?? (type === 'error' ? 'manual' : 'auto');
 
@@ -145,6 +371,7 @@ createApp({
 
         async setTab(tab) {
             this.activeTab = tab;
+            this.resetCompletion();
             if (tab === 'config' && this.taskrcText === '' && this.loadedTaskrcText === '') {
                 this.showMessage('Loading configuration...', 'success');
                 try {
@@ -163,6 +390,8 @@ createApp({
         },
 
         async loadTasks() {
+            this.resetCompletion();
+
             try {
                 const filter = this.reportInput.trim() || 'list';
                 this.tasks = await queryService.getTasks(filter);
@@ -173,6 +402,8 @@ createApp({
         },
 
         async addTask() {
+            this.resetCompletion();
+
             if (!this.addTaskInput.trim()) {
                 this.showMessage('Please enter a task description', 'error');
                 return;
@@ -257,6 +488,8 @@ createApp({
         },
 
         async executeCustomCommand() {
+            this.resetCompletion();
+
             const command = this.customCommandInput.trim();
             if (!command) {
                 this.showMessage('Please enter a command', 'error');
