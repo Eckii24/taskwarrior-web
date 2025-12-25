@@ -78,6 +78,21 @@ class TaskQueryService {
         this.apiClient = apiClient;
     }
 
+    sortByUrgency(tasks) {
+        const list = Array.isArray(tasks) ? tasks.slice() : [];
+
+        const urgencyFor = (task) => {
+            const status = String(task?.status || '').toLowerCase();
+            if (status === 'completed' || status === 'deleted') return 0;
+
+            const num = typeof task?.urgency === 'number' ? task.urgency : Number(task?.urgency);
+            return Number.isFinite(num) ? num : 0;
+        };
+
+        list.sort((a, b) => urgencyFor(b) - urgencyFor(a));
+        return list;
+    }
+
     async getTasks(filterOrReport) {
         const reportMap = {
             list: 'status:pending',
@@ -94,7 +109,8 @@ class TaskQueryService {
         const result = await this.apiClient.execute(args);
         if (result.success && result.output) {
             try {
-                return JSON.parse(result.output);
+                const tasks = JSON.parse(result.output);
+                return this.sortByUrgency(tasks);
             } catch {
                 return [];
             }
@@ -890,6 +906,21 @@ createApp({
 
             return date.toLocaleDateString();
         },
+
+        formatUrgency(value) {
+            const num = typeof value === 'number' ? value : Number(value);
+            if (!Number.isFinite(num)) return '';
+            return num.toFixed(2);
+        },
+
+        getTaskUrgency(task) {
+            const status = String(task?.status || '').toLowerCase();
+            if (status === 'completed' || status === 'deleted') return 0;
+
+            const num = typeof task?.urgency === 'number' ? task.urgency : Number(task?.urgency);
+            return Number.isFinite(num) ? num : 0;
+        },
+
 
         async loadTaskrc() {
             try {

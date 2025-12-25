@@ -467,9 +467,32 @@ button, input, textarea {
 
 .task-actions {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-end;
+    margin-left: auto;
+}
+
+.task-action-buttons {
+    display: flex;
     gap: 8px;
     align-items: flex-start;
-    margin-left: auto;
+}
+
+.urgency {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.urgency-value {
+    font-variant-numeric: tabular-nums;
 }
 
 .btn {

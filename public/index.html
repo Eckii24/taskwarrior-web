@@ -273,8 +273,20 @@
                                 </div>
                             </div>
                             <div class="task-actions">
-                                <button v-if="task.status === 'pending'" class="btn small" type="button" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Edit</button>
-                                <button class="btn small danger" type="button" @click="deleteTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Delete</button>
+                                <div class="task-action-buttons">
+                                    <button v-if="task.status === 'pending'" class="btn small" type="button" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Edit</button>
+                                    <button class="btn small danger" type="button" @click="deleteTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Delete</button>
+                                </div>
+
+                                <div
+                                    v-if="task.status === 'completed' || task.status === 'deleted' || (task.urgency !== undefined && task.urgency !== null)"
+                                    class="urgency"
+                                >
+                                    <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M12 2 4.5 9.5 12 22l7.5-12.5L12 2zm0 4.2 4.18 6.98H7.82L12 6.2z"/>
+                                    </svg>
+                                    <span class="urgency-value">{{ formatUrgency(getTaskUrgency(task)) }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
