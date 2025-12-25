@@ -95,10 +95,13 @@ const { createApp } = Vue;
 createApp({
     data() {
         return {
+            activeTab: 'tasks',
             addTaskInput: '',
             reportInput: 'list',
             customCommandInput: '',
             tasks: [],
+            taskrcText: '',
+            loadedTaskrcText: '',
             message: {
                 text: '',
                 type: 'success'
@@ -106,12 +109,31 @@ createApp({
             emptyMessage: 'Click "Show Tasks" to load tasks...'
         };
     },
+    computed: {
+        taskrcDirty() {
+            return this.taskrcText !== this.loadedTaskrcText;
+        }
+    },
     methods: {
         showMessage(text, type = 'success') {
             this.message = { text, type };
             setTimeout(() => {
                 this.message = { text: '', type: 'success' };
             }, 5000);
+        },
+
+        async setTab(tab) {
+            this.activeTab = tab;
+            if (tab === 'config' && this.taskrcText === '' && this.loadedTaskrcText === '') {
+                this.showMessage('Loading configuration...', 'success');
+                try {
+                    await this.loadTaskrc();
+                    this.showMessage('Configuration loaded.', 'success');
+                } catch (error) {
+                    const message = error && error.message ? error.message : String(error);
+                    this.showMessage(`Error loading configuration: ${message}`, 'error');
+                }
+            }
         },
 
         setReport(report) {
@@ -251,6 +273,43 @@ createApp({
                 return new Date(dateStr).toLocaleDateString();
             } catch {
                 return '';
+            }
+        },
+
+        async loadTaskrc() {
+            try {
+                const response = await fetch('/api/taskrc');
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                const text = await response.text();
+                this.taskrcText = text;
+                this.loadedTaskrcText = text;
+                this.showMessage('Loaded taskrc', 'success');
+            } catch (error) {
+                this.showMessage(`Error loading taskrc: ${error.message}`, 'error');
+            }
+        },
+
+        async saveTaskrc() {
+            try {
+                const response = await fetch('/api/taskrc', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                    },
+                    body: this.taskrcText
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                this.loadedTaskrcText = this.taskrcText;
+                this.showMessage('Saved taskrc', 'success');
+            } catch (error) {
+                this.showMessage(`Error saving taskrc: ${error.message}`, 'error');
             }
         }
     }

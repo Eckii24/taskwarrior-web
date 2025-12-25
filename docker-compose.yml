@@ -1,0 +1,28 @@
+services:
+  taskchampion-sync:
+    image: ghcr.io/gothenburgbitfactory/taskchampion-sync-server:latest
+    container_name: taskchampion-sync-server
+    volumes:
+      - ./data/taskchampion-data:/var/lib/taskchampion-sync-server
+    ports:
+    - "8080:8080"
+    environment:
+      - LISTEN=0.0.0.0:8080
+      - DATA_DIR=/var/lib/taskchampion-sync-server
+    restart: unless-stopped
+
+  taskwarrior-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./data/taskwarrior-data:/root/.task
+    ports:
+    - "3000:3000"
+    environment:
+      - PORT=3000
+      - TASKDATA=/root/.task
+      - TASKRC=/root/.task/taskrc
+    depends_on:
+      - taskchampion-sync
+    restart: unless-stopped
