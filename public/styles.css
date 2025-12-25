@@ -479,6 +479,17 @@ button, input, textarea {
     align-items: flex-start;
 }
 
+.task-action-buttons .icon-btn.small {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+}
+
+.task-action-buttons .icon-btn.small .svg-icon {
+    width: 18px;
+    height: 18px;
+}
+
 .urgency {
     display: inline-flex;
     align-items: center;

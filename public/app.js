@@ -144,6 +144,10 @@ class TaskCommandService {
         return await this.apiClient.execute(`${taskUuid} delete`);
     }
 
+    async showTask(taskUuid) {
+        return await this.apiClient.execute(`${taskUuid}`);
+    }
+
     async executeCustom(command) {
         return await this.apiClient.execute(command);
     }
@@ -208,8 +212,9 @@ createApp({
 
             modal: {
                 open: false,
-                type: null, // add/edit/exec/search/filter
+                type: null, // add/edit/show/exec/search/filter
                 value: '',
+                output: '',
                 taskId: null,
                 filterId: null,
                 filterName: '',
@@ -259,6 +264,7 @@ createApp({
             const map = {
                 add: 'Add Task',
                 edit: 'Edit Task',
+                show: 'Task',
 
                 exec: 'Execute',
                 search: 'Search',
@@ -665,7 +671,7 @@ createApp({
         },
 
         openCommandModal(type) {
-            this.modal = { open: true, type, value: '', taskId: null, filterId: null, filterName: '', filterValue: '' };
+            this.modal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '' };
             if (type === 'exec') this.showTaskrc = false;
             this.resetCompletion();
             this.$nextTick(() => {
@@ -678,6 +684,7 @@ createApp({
             this.modal.open = false;
             this.modal.type = null;
             this.modal.value = '';
+            this.modal.output = '';
             this.modal.taskId = null;
             this.modal.filterId = null;
             this.modal.filterName = '';
@@ -793,6 +800,7 @@ createApp({
                 open: true,
                 type: 'edit',
                 value: currentDescription,
+                output: '',
                 taskId: taskUuid,
                 filterId: null,
                 filterName: '',
@@ -856,6 +864,33 @@ createApp({
                 } else {
                     if (checkbox) checkbox.checked = previousChecked;
                     this.showToast(result.error || 'Failed to update task', 'error');
+                }
+            });
+        },
+
+        async showTask(taskUuid) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.showTask(uuid);
+                if (result.success) {
+                    const output = (result.output || '').trim();
+                    const err = (result.error || '').trim();
+                    const text = [output, err].filter(Boolean).join('\n') || 'OK';
+
+                    this.modal = {
+                        open: true,
+                        type: 'show',
+                        value: '',
+                        output: text,
+                        taskId: uuid,
+                        filterId: null,
+                        filterName: '',
+                        filterValue: '',
+                    };
+                } else {
+                    this.showToast(result.error || 'Failed to load task', 'error');
                 }
             });
         },
