@@ -24,6 +24,64 @@ const TASK_EXEC_TIMEOUT_MS = (() => {
     return 60000;
 })();
 
+function tokenizeShellArgs(text) {
+    const src = String(text || '');
+    const tokens = [];
+
+    let current = '';
+    let quote = null;
+    let escaping = false;
+
+    for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+
+        if (escaping) {
+            current += ch;
+            escaping = false;
+            continue;
+        }
+
+        if (ch === '\\') {
+            escaping = true;
+            continue;
+        }
+
+        if (quote) {
+            if (ch === quote) {
+                quote = null;
+            } else {
+                current += ch;
+            }
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+
+        if (/\s/.test(ch)) {
+            if (current.length > 0) {
+                tokens.push(current);
+                current = '';
+            }
+            continue;
+        }
+
+        current += ch;
+    }
+
+    if (escaping) {
+        current += '\\';
+    }
+
+    if (current.length > 0) {
+        tokens.push(current);
+    }
+
+    return tokens;
+}
+
 function getDefaultTaskrc(taskdataPath) {
     return [
         '# Taskwarrior configuration',
@@ -469,97 +527,34 @@ function createApp({
 
 // Single endpoint to execute taskwarrior commands
     app.post('/api/task', async (req, res) => {
-    try {
-        const { args } = req.body;
+        try {
+            const { args } = req.body;
 
-        if (!args || (!Array.isArray(args) && typeof args !== 'string')) {
-            return res.status(400).json({
+            if (!args || (!Array.isArray(args) && typeof args !== 'string')) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'args parameter is required (array or string)',
+                });
+            }
+
+            const argsArray = Array.isArray(args) ? args : tokenizeShellArgs(args);
+
+            // Execute taskwarrior command using execFile for security
+            const { stdout, stderr } = await execTask(argsArray);
+
+            res.json({
+                success: true,
+                output: stdout,
+                error: stderr,
+            });
+        } catch (error) {
+            res.json({
                 success: false,
-                error: 'args parameter is required (array or string)'
+                output: error.stdout || '',
+                error: error.stderr || error.message,
             });
         }
-
-         const tokenizeArgs = (text) => {
-             const src = String(text || '');
-             const tokens = [];
-             let current = '';
-             let quote = null;
-             let escaping = false;
-
-             for (let i = 0; i < src.length; i++) {
-                 const ch = src[i];
-
-                 if (escaping) {
-                     current += ch;
-                     escaping = false;
-                     continue;
-                 }
-
-                 if (ch === '\\') {
-                     escaping = true;
-                     continue;
-                 }
-
-                 if (quote) {
-                     if (ch === quote) {
-                         quote = null;
-                     } else {
-                         current += ch;
-                     }
-                     continue;
-                 }
-
-                 if (ch === '"' || ch === "'") {
-                     quote = ch;
-                     continue;
-                 }
-
-                 if (/\s/.test(ch)) {
-                     if (current.length > 0) {
-                         tokens.push(current);
-                         current = '';
-                     }
-                     continue;
-                 }
-
-                 current += ch;
-             }
-
-             if (escaping) {
-                 current += '\\';
-             }
-
-             if (current.length > 0) {
-                 tokens.push(current);
-             }
-
-             return tokens;
-         };
-
-         // Convert args to array if it's a string
-         let argsArray;
-         if (Array.isArray(args)) {
-             argsArray = args;
-         } else {
-             argsArray = tokenizeArgs(args);
-         }
-
-        // Execute taskwarrior command using execFile for security
-        const { stdout, stderr } = await execTask(argsArray);
-
-        res.json({
-            success: true,
-            output: stdout,
-            error: stderr
-        });
-    } catch (error) {
-        res.json({
-            success: false,
-            output: error.stdout || '',
-            error: error.stderr || error.message
-        });
-    }
-});
+    });
 
     return app;
 }

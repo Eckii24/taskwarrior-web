@@ -702,115 +702,54 @@ function createTaskwarriorApp({
             obj[parts[parts.length - 1]] = value;
         },
 
-        async updateCompletion(field, tokenInfo) {
-            const token = tokenInfo.token || '';
-            
-            // Handle field-specific completions
+        async fetchCompletionSuggestions(requestToken) {
+            const result = await apiClient.complete(requestToken);
+            if (result && result.success && Array.isArray(result.suggestions)) {
+                return result.suggestions;
+            }
+            return [];
+        },
+
+        stripPrefixFromSuggestions(suggestions, prefixPattern) {
+            const list = Array.isArray(suggestions) ? suggestions : [];
+            if (!prefixPattern) return list;
+
+            if (prefixPattern instanceof RegExp) {
+                return list.map((value) => String(value).replace(prefixPattern, ''));
+            }
+
+            const prefix = String(prefixPattern);
+            return list.map((value) => {
+                const text = String(value);
+                return text.startsWith(prefix) ? text.slice(prefix.length) : text;
+            });
+        },
+
+        getCompletionSpec(field) {
+            const priorities = ['H', 'M', 'L'];
+
             if (field === 'modal.project') {
-                const result = await apiClient.complete(`project:${token}`);
-                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
-                const projectSuggestions = suggestions.map(s => s.replace(/^project:/, ''));
-                
-                if (projectSuggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-                
-                const keepVisible = this.completion.visible && this.completion.field === field;
-                this.completion = {
-                    field,
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions: projectSuggestions,
-                    selectedIndex: 0,
-                    visible: keepVisible,
-                };
-                return projectSuggestions;
+                return { type: 'api', requestPrefix: 'project:', stripPrefix: /^project:/ };
             }
-            
             if (field === 'modal.tags') {
-                const result = await apiClient.complete(`+${token}`);
-                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
-                const tagSuggestions = suggestions.map(s => s.replace(/^\+/, ''));
-                
-                if (tagSuggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-                
-                const keepVisible = this.completion.visible && this.completion.field === field;
-                this.completion = {
-                    field,
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions: tagSuggestions,
-                    selectedIndex: 0,
-                    visible: keepVisible,
-                };
-                return tagSuggestions;
+                return { type: 'api', requestPrefix: '+', stripPrefix: /^\+/ };
             }
-            
-            if (field === 'modal.priority') {
-                const priorities = ['H', 'M', 'L'];
-                const suggestions = priorities.filter(p => p.toLowerCase().startsWith(token.toLowerCase()));
-                
-                if (suggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-                
-                const keepVisible = this.completion.visible && this.completion.field === field;
-                this.completion = {
-                    field,
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions,
-                    selectedIndex: 0,
-                    visible: keepVisible,
-                };
-                return suggestions;
-            }
-            
             if (field === 'modal.due') {
-                const result = await apiClient.complete(`due:${token}`);
-                const suggestionsRaw = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
-                const suggestions = suggestionsRaw.map((value) => value.replace(/^due:/, ''));
-
-                if (suggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-
-                const keepVisible = this.completion.visible && this.completion.field === field;
-                this.completion = {
-                    field,
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions,
-                    selectedIndex: 0,
-                    visible: keepVisible,
+                return { type: 'api', requestPrefix: 'due:', stripPrefix: /^due:/ };
+            }
+            if (field === 'modal.priority') {
+                return {
+                    type: 'local',
+                    getSuggestions(token) {
+                        return priorities.filter((value) => value.toLowerCase().startsWith(String(token).toLowerCase()));
+                    },
                 };
-                return suggestions;
-            }
-            
-            // Default completion logic for other fields
-            if (!token.trim()) {
-                this.resetCompletion();
-                return [];
             }
 
-            const result = await apiClient.complete(token);
-            const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+            return null;
+        },
 
-            if (suggestions.length === 0) {
-                this.resetCompletion();
-                return [];
-            }
-
+        setCompletionState(field, tokenInfo, token, suggestions, { forceVisible = false } = {}) {
             const keepVisible = this.completion.visible && this.completion.field === field;
 
             this.completion = {
@@ -820,9 +759,37 @@ function createTaskwarriorApp({
                 end: tokenInfo.end,
                 suggestions,
                 selectedIndex: 0,
-                visible: keepVisible,
+                visible: forceVisible ? true : keepVisible,
             };
+        },
 
+        async updateCompletion(field, tokenInfo) {
+            const token = tokenInfo.token || '';
+            const spec = this.getCompletionSpec(field);
+
+            let suggestions = [];
+
+            if (spec && spec.type === 'local') {
+                suggestions = spec.getSuggestions(token);
+            } else if (spec && spec.type === 'api') {
+                const raw = await this.fetchCompletionSuggestions(`${spec.requestPrefix}${token}`);
+                suggestions = this.stripPrefixFromSuggestions(raw, spec.stripPrefix);
+            } else {
+                const normalized = String(token).trim();
+                if (!normalized) {
+                    this.resetCompletion();
+                    return [];
+                }
+
+                suggestions = await this.fetchCompletionSuggestions(normalized);
+            }
+
+            if (suggestions.length === 0) {
+                this.resetCompletion();
+                return [];
+            }
+
+            this.setCompletionState(field, tokenInfo, token, suggestions);
             return suggestions;
         },
 
@@ -1342,97 +1309,41 @@ function createTaskwarriorApp({
         },
 
         async updateAttributeCompletion(attributeName, tokenInfo) {
+            const fieldByAttr = {
+                project: 'modal.project',
+                tags: 'modal.tags',
+                priority: 'modal.priority',
+                due: 'modal.due',
+            };
+
+            const mappedField = fieldByAttr[String(attributeName || '')];
+            if (!mappedField) {
+                this.resetCompletion();
+                return [];
+            }
+
             const token = tokenInfo.token || '';
-            
-            if (attributeName === 'project') {
-                const result = await apiClient.complete(`project:${token}`);
-                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
-                const projectSuggestions = suggestions.map(s => s.replace(/^project:/, ''));
-                
-                if (projectSuggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-                
-                this.completion = {
-                    field: 'modal.attributeInputValue',
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions: projectSuggestions,
-                    selectedIndex: 0,
-                    visible: true,
-                };
-                return projectSuggestions;
-            }
-            
-            if (attributeName === 'tags') {
-                const result = await apiClient.complete(`+${token}`);
-                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
-                const tagSuggestions = suggestions.map(s => s.replace(/^\+/, ''));
-                
-                if (tagSuggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-                
-                this.completion = {
-                    field: 'modal.attributeInputValue',
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions: tagSuggestions,
-                    selectedIndex: 0,
-                    visible: true,
-                };
-                return tagSuggestions;
-            }
-            
-            if (attributeName === 'priority') {
-                const priorities = ['H', 'M', 'L'];
-                const suggestions = priorities.filter(p => p.toLowerCase().startsWith(token.toLowerCase()));
-                
-                if (suggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-                
-                this.completion = {
-                    field: 'modal.attributeInputValue',
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions,
-                    selectedIndex: 0,
-                    visible: true,
-                };
-                return suggestions;
-            }
-            
-            if (attributeName === 'due') {
-                const result = await apiClient.complete(`due:${token}`);
-                const suggestionsRaw = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
-                const suggestions = suggestionsRaw.map((value) => value.replace(/^due:/, ''));
-
-                if (suggestions.length === 0) {
-                    this.resetCompletion();
-                    return [];
-                }
-
-                this.completion = {
-                    field: 'modal.attributeInputValue',
-                    token,
-                    start: tokenInfo.start,
-                    end: tokenInfo.end,
-                    suggestions,
-                    selectedIndex: 0,
-                    visible: true,
-                };
-                return suggestions;
+            const spec = this.getCompletionSpec(mappedField);
+            if (!spec) {
+                this.resetCompletion();
+                return [];
             }
 
-            this.resetCompletion();
-            return [];
+            let suggestions = [];
+            if (spec.type === 'local') {
+                suggestions = spec.getSuggestions(token);
+            } else {
+                const raw = await this.fetchCompletionSuggestions(`${spec.requestPrefix}${token}`);
+                suggestions = this.stripPrefixFromSuggestions(raw, spec.stripPrefix);
+            }
+
+            if (suggestions.length === 0) {
+                this.resetCompletion();
+                return [];
+            }
+
+            this.setCompletionState('modal.attributeInputValue', tokenInfo, token, suggestions, { forceVisible: true });
+            return suggestions;
         },
 
          async refreshTaskAnnotations(taskUuid) {
