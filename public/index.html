@@ -1002,15 +1002,20 @@
                         >
                             {{ emoji }}
                         </button>
+                    </div>
+                    <div class="emoji-input-row">
                         <input
                             type="text"
-                            class="emoji-input"
+                            class="text-input emoji-icon-input"
                             v-model="modal.filterIcon"
                             placeholder="Type/paste an emoji"
                             inputmode="text"
                             autocomplete="off"
                             aria-label="Custom emoji icon"
                         >
+                        <div class="emoji-hint">
+                            Tip: Windows <code>Win</code>+<code>.</code> (or <code>Win</code>+<code>;</code>), macOS <code>Ctrl</code>+<code>Cmd</code>+<code>Space</code>, Linux often <code>Ctrl</code>+<code>Shift</code>+<code>U</code> then hex.
+                        </div>
                     </div>
 
                     <label>Filter</label>
