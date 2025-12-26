@@ -307,11 +307,103 @@
                                             class="reschedule-pop"
                                             @click.stop
                                         >
-                                            <div class="reschedule-presets">
-                                                <button class="btn tiny" type="button" @click="applyReschedulePreset(task.uuid, 'today')">Today</button>
-                                                <button class="btn tiny" type="button" @click="applyReschedulePreset(task.uuid, 'tomorrow')">Tomorrow</button>
-                                                <button class="btn tiny" type="button" @click="applyReschedulePreset(task.uuid, 'sonw')">Next week</button>
-                                                <button class="btn tiny danger" type="button" @click="clearTaskDue(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Clear</button>
+                                            <div class="reschedule-title">Date</div>
+
+                                            <div class="reschedule-toolbar">
+                                                <button
+                                                    class="schedule-btn"
+                                                    type="button"
+                                                    title="Today"
+                                                    aria-label="Today"
+                                                    @click="applyReschedulePreset(task.uuid, 'today')"
+                                                    :disabled="busyTaskUuids[task.uuid]"
+                                                >
+                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <circle cx="12" cy="12" r="4"></circle>
+                                                        <path d="M12 2v2"></path>
+                                                        <path d="M12 20v2"></path>
+                                                        <path d="M4.93 4.93l1.41 1.41"></path>
+                                                        <path d="M17.66 17.66l1.41 1.41"></path>
+                                                        <path d="M2 12h2"></path>
+                                                        <path d="M20 12h2"></path>
+                                                        <path d="M4.93 19.07l1.41-1.41"></path>
+                                                        <path d="M17.66 6.34l1.41-1.41"></path>
+                                                    </svg>
+                                                </button>
+
+                                                <button
+                                                    class="schedule-btn"
+                                                    type="button"
+                                                    title="Tomorrow"
+                                                    aria-label="Tomorrow"
+                                                    @click="applyReschedulePreset(task.uuid, 'tomorrow')"
+                                                    :disabled="busyTaskUuids[task.uuid]"
+                                                >
+                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M3 18h18"></path>
+                                                        <path d="M7 18a5 5 0 0 1 10 0"></path>
+                                                        <path d="M12 8v-2"></path>
+                                                        <path d="M7.5 9.5l-1.5-1.5"></path>
+                                                        <path d="M16.5 9.5l1.5-1.5"></path>
+                                                        <path d="M9 6h6"></path>
+                                                    </svg>
+                                                </button>
+
+                                                <button
+                                                    class="schedule-btn"
+                                                    type="button"
+                                                    title="Next week"
+                                                    aria-label="Next week"
+                                                    @click="applyReschedulePreset(task.uuid, 'sonw')"
+                                                    :disabled="busyTaskUuids[task.uuid]"
+                                                >
+                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M7 3v2"></path>
+                                                        <path d="M17 3v2"></path>
+                                                        <path d="M4 7h16"></path>
+                                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                                                        <path d="M14 11h4"></path>
+                                                        <path d="M14 11v4"></path>
+                                                    </svg>
+                                                </button>
+
+                                                <label
+                                                    class="schedule-btn schedule-date-btn"
+                                                    title="Calendar"
+                                                >
+                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M7 3v2"></path>
+                                                        <path d="M17 3v2"></path>
+                                                        <path d="M4 7h16"></path>
+                                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                                                        <path d="M8 11h.01"></path>
+                                                        <path d="M12 11h.01"></path>
+                                                        <path d="M16 11h.01"></path>
+                                                        <path d="M8 15h.01"></path>
+                                                        <path d="M12 15h.01"></path>
+                                                        <path d="M16 15h.01"></path>
+                                                    </svg>
+                                                    <input
+                                                        type="date"
+                                                        class="reschedule-calendar-input"
+                                                        aria-label="Calendar"
+                                                        @change="onRescheduleCalendarChange(task.uuid, $event)"
+                                                    >
+                                                </label>
+
+                                                <button
+                                                    class="schedule-btn danger"
+                                                    type="button"
+                                                    title="Clear"
+                                                    aria-label="Clear"
+                                                    @click="clearTaskDue(task.uuid)"
+                                                    :disabled="busyTaskUuids[task.uuid]"
+                                                >
+                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M18 6L6 18"></path>
+                                                        <path d="M6 6l12 12"></path>
+                                                    </svg>
+                                                </button>
                                             </div>
 
                                             <div class="reschedule-custom">
@@ -323,13 +415,18 @@
                                                     autocomplete="off"
                                                     @keydown.enter.prevent="applyRescheduleCustom(task.uuid)"
                                                 >
+
                                                 <button
-                                                    class="btn tiny primary"
+                                                    class="schedule-btn primary"
                                                     type="button"
+                                                    title="Set"
+                                                    aria-label="Set"
                                                     @click="applyRescheduleCustom(task.uuid)"
                                                     :disabled="!reschedule.custom || busyTaskUuids[task.uuid]"
                                                 >
-                                                    Set
+                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path d="M20 6L9 17l-5-5"></path>
+                                                    </svg>
                                                 </button>
                                             </div>
                                         </div>

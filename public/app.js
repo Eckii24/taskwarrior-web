@@ -683,6 +683,23 @@ function createTaskwarriorApp({
             await this.rescheduleTask(taskUuid, value);
         },
 
+        async onRescheduleCalendarChange(taskUuid, event) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            const value = String(event?.target?.value || '').trim();
+            if (!value) return;
+
+            // Clear the date input so choosing the same date again still triggers change.
+            try {
+                event.target.value = '';
+            } catch {
+                // ignore
+            }
+
+            await this.rescheduleTask(uuid, value);
+        },
+
         getFieldValue(field) {
             const parts = String(field).split('.');
             let obj = this;

@@ -531,17 +531,92 @@ a:hover {
      box-shadow: 0 10px 28px rgba(17, 17, 27, 0.55);
  }
 
- .reschedule-presets {
-     display: flex;
-     gap: 8px;
-     flex-wrap: wrap;
+ .reschedule-title {
+     color: var(--muted);
+     font-weight: 800;
      margin-bottom: 10px;
+ }
+
+ .reschedule-toolbar {
+     display: grid;
+     grid-template-columns: repeat(5, 1fr);
+     gap: 10px;
+     margin-bottom: 10px;
+ }
+
+ .schedule-btn {
+     border: 1px solid var(--line);
+     background: transparent;
+     color: var(--muted);
+     height: 44px;
+     border-radius: 12px;
+     cursor: pointer;
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+ }
+
+ .schedule-btn:hover {
+     background: var(--hover);
+     color: var(--text);
+ }
+
+ .schedule-btn:disabled {
+     opacity: 0.5;
+     cursor: default;
+ }
+
+ .schedule-btn.danger {
+     border-color: rgba(243, 139, 168, 0.45);
+     color: var(--danger);
+ }
+
+ .schedule-btn.primary {
+     border-color: rgba(203, 166, 247, 0.55);
+     background: rgba(203, 166, 247, 0.2);
+     color: var(--text);
+ }
+
+ .schedule-btn.primary:hover {
+     background: rgba(203, 166, 247, 0.28);
+ }
+
+ .schedule-btn .svg-icon {
+     width: 22px;
+     height: 22px;
+ }
+
+ .schedule-icon {
+     fill: none;
+     stroke: currentColor;
+     stroke-width: 2;
+     stroke-linecap: round;
+     stroke-linejoin: round;
+ }
+
+ .schedule-date-btn {
+     position: relative;
+     user-select: none;
+ }
+
+ .reschedule-calendar-input {
+     position: absolute;
+     inset: 0;
+     width: 100%;
+     height: 100%;
+     opacity: 0;
+     cursor: pointer;
+ }
+
+ .reschedule-calendar-input:focus-visible {
+     outline: 2px solid rgba(180, 190, 254, 0.7);
+     outline-offset: 2px;
  }
 
  .reschedule-custom {
      display: grid;
      grid-template-columns: 1fr auto;
-     gap: 8px;
+     gap: 10px;
      align-items: center;
  }
 
