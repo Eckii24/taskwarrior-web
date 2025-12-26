@@ -893,11 +893,92 @@ a:hover {
     transform: rotate(180deg);
 }
 
-.collapsible-content {
-    padding: 12px;
-    border-top: 1px solid var(--line);
-    background: rgba(17, 17, 27, 0.35);
-}
+ .collapsible-content {
+     padding: 12px;
+     border-top: 1px solid var(--line);
+     background: rgba(17, 17, 27, 0.35);
+ }
+
+ .annotations {
+     display: flex;
+     flex-direction: column;
+     gap: 12px;
+ }
+
+ .annotations-new {
+     display: grid;
+     grid-template-columns: 1fr auto;
+     gap: 10px;
+     align-items: center;
+ }
+
+ .annotations-empty {
+     color: var(--muted);
+     padding: 8px 0;
+ }
+
+ .annotations-list {
+     display: flex;
+     flex-direction: column;
+     gap: 10px;
+ }
+
+ .annotation-item {
+     border: 1px solid var(--line);
+     border-radius: 12px;
+     padding: 10px;
+     background: rgba(17, 17, 27, 0.25);
+     display: flex;
+     flex-direction: column;
+     gap: 8px;
+ }
+
+ .annotation-meta {
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: 10px;
+ }
+
+ .annotation-date {
+     color: var(--muted);
+     font-size: 0.85rem;
+     font-weight: 700;
+     font-variant-numeric: tabular-nums;
+ }
+
+ .meta-annotations {
+     display: inline-flex;
+ }
+
+ .annotation-actions {
+     display: inline-flex;
+     gap: 8px;
+     align-items: center;
+ }
+
+ .annotation-text {
+     white-space: pre-wrap;
+ }
+
+ .annotation-edit {
+     display: flex;
+     flex-direction: column;
+     gap: 8px;
+ }
+
+ .annotation-edit-actions {
+     display: flex;
+     gap: 8px;
+     justify-content: flex-end;
+ }
+
+ @media (max-width: 768px) {
+     .annotations-new {
+         grid-template-columns: 1fr;
+     }
+ }
+
 
 @media (max-width: 768px) {
     .modal-form-row {

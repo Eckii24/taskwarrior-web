@@ -444,14 +444,70 @@ app.post('/api/task', async (req, res) => {
             });
         }
 
-        // Convert args to array if it's a string
-        let argsArray;
-        if (Array.isArray(args)) {
-            argsArray = args;
-        } else {
-            // Simple whitespace split - taskwarrior handles complex parsing
-            argsArray = args.split(/\s+/).filter(arg => arg.length > 0);
-        }
+         const tokenizeArgs = (text) => {
+             const src = String(text || '');
+             const tokens = [];
+             let current = '';
+             let quote = null;
+             let escaping = false;
+
+             for (let i = 0; i < src.length; i++) {
+                 const ch = src[i];
+
+                 if (escaping) {
+                     current += ch;
+                     escaping = false;
+                     continue;
+                 }
+
+                 if (ch === '\\') {
+                     escaping = true;
+                     continue;
+                 }
+
+                 if (quote) {
+                     if (ch === quote) {
+                         quote = null;
+                     } else {
+                         current += ch;
+                     }
+                     continue;
+                 }
+
+                 if (ch === '"' || ch === "'") {
+                     quote = ch;
+                     continue;
+                 }
+
+                 if (/\s/.test(ch)) {
+                     if (current.length > 0) {
+                         tokens.push(current);
+                         current = '';
+                     }
+                     continue;
+                 }
+
+                 current += ch;
+             }
+
+             if (escaping) {
+                 current += '\\';
+             }
+
+             if (current.length > 0) {
+                 tokens.push(current);
+             }
+
+             return tokens;
+         };
+
+         // Convert args to array if it's a string
+         let argsArray;
+         if (Array.isArray(args)) {
+             argsArray = args;
+         } else {
+             argsArray = tokenizeArgs(args);
+         }
 
         // Execute taskwarrior command using execFile for security
         const { stdout, stderr } = await execTask(argsArray);

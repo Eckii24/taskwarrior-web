@@ -144,6 +144,18 @@ class TaskCommandService {
         return await this.apiClient.execute(`${taskUuid} delete`);
     }
 
+    async annotateTask(taskUuid, annotationText) {
+        return await this.apiClient.execute(`${taskUuid} annotate ${annotationText}`);
+    }
+
+    async denotateTask(taskUuid, pattern) {
+        return await this.apiClient.execute(`${taskUuid} denotate ${pattern}`);
+    }
+
+    async exportTask(taskUuid) {
+        return await this.apiClient.execute(`${taskUuid} export`);
+    }
+
     async showTask(taskUuid) {
         return await this.apiClient.execute(`${taskUuid}`);
     }
@@ -183,6 +195,15 @@ function replaceRange(text, start, end, replacement) {
     const s = Math.max(0, Math.min(start, safeText.length));
     const e = Math.max(s, Math.min(end, safeText.length));
     return safeText.slice(0, s) + replacement + safeText.slice(e);
+}
+
+function sanitizeTaskCommandArg(value) {
+    const text = String(value ?? '').replace(/[\r\n\t]/g, ' ').trim();
+    if (!text) return "''";
+
+    // Prefer single quotes; escape embedded single quotes in a shell-like way.
+    // Taskwarrior parses quotes; our backend splits on whitespace, so wrapping is required.
+    return `'${text.replace(/'/g, "\\'")}'`;
 }
 
 const apiClient = new TaskApiClient();
@@ -225,17 +246,23 @@ createApp({
                 tags: '',
                 priority: '',
                 due: '',
-                showTaskDetails: false,
-                taskDetailsOutput: '',
-                // Original values for edit comparison
-                originalDescription: '',
-                originalProject: '',
-                originalTags: '',
-                originalPriority: '',
-                originalDue: '',
-                // Attribute dropdown state
-                activeAttributeDropdown: null,
-                attributeInputValue: '',
+                 showTaskDetails: false,
+                 taskDetailsOutput: '',
+                 // Annotations (Taskwarrior 'annotations' field)
+                 showAnnotations: false,
+                 annotationDraft: '',
+                 annotations: [],
+                 annotationEditKey: null,
+                 annotationEditDraft: '',
+                 // Original values for edit comparison
+                 originalDescription: '',
+                 originalProject: '',
+                 originalTags: '',
+                 originalPriority: '',
+                 originalDue: '',
+                 // Attribute dropdown state
+                 activeAttributeDropdown: null,
+                 attributeInputValue: '',
             },
 
             searchPendingOnly: true,
@@ -277,18 +304,31 @@ createApp({
             }
             return 'Taskwarrior';
         },
-        modalTitle() {
-            const map = {
-                add: 'Add Task',
-                edit: 'Edit Task',
-                show: 'Task',
-
-                exec: 'Execute',
-                search: 'Search',
-                filter: this.modal.filterId ? 'Edit Filter' : 'Add Filter',
-            };
-            return map[this.modal.type] || 'Command';
-        },
+         modalTitle() {
+             const map = {
+                 add: 'Add Task',
+                 edit: 'Edit Task',
+                 show: 'Task',
+ 
+                 exec: 'Execute',
+                 search: 'Search',
+                 filter: this.modal.filterId ? 'Edit Filter' : 'Add Filter',
+             };
+             return map[this.modal.type] || 'Command';
+         },
+         modalSortedAnnotations() {
+             const annotations = Array.isArray(this.modal?.annotations) ? this.modal.annotations : [];
+             const list = annotations.slice();
+             list.sort((a, b) => {
+                 const aEntry = String(a?.entry || '');
+                 const bEntry = String(b?.entry || '');
+                 if (aEntry && bEntry) return bEntry.localeCompare(aEntry);
+                 if (aEntry) return -1;
+                 if (bEntry) return 1;
+                 return 0;
+             });
+             return list;
+         },
     },
     async mounted() {
         window.addEventListener('keydown', this.onGlobalKeydown);
@@ -823,16 +863,21 @@ createApp({
             this.modal.tags = '';
             this.modal.priority = '';
             this.modal.due = '';
-            this.modal.showTaskDetails = false;
-            this.modal.taskDetailsOutput = '';
-            this.modal.originalDescription = '';
-            this.modal.originalProject = '';
-            this.modal.originalTags = '';
-            this.modal.originalPriority = '';
-            this.modal.originalDue = '';
-            this.modal.activeAttributeDropdown = null;
-            this.modal.attributeInputValue = '';
-            this.resetCompletion();
+             this.modal.showTaskDetails = false;
+             this.modal.taskDetailsOutput = '';
+             this.modal.showAnnotations = false;
+             this.modal.annotationDraft = '';
+             this.modal.annotations = [];
+             this.modal.annotationEditKey = null;
+             this.modal.annotationEditDraft = '';
+             this.modal.originalDescription = '';
+             this.modal.originalProject = '';
+             this.modal.originalTags = '';
+             this.modal.originalPriority = '';
+             this.modal.originalDue = '';
+             this.modal.activeAttributeDropdown = null;
+             this.modal.attributeInputValue = '';
+             this.resetCompletion();
         },
 
         toggleAttributeDropdown(attributeName) {
@@ -1062,8 +1107,126 @@ createApp({
             return [];
         },
 
-        async submitModal() {
-            const type = this.modal.type;
+         async refreshTaskAnnotations(taskUuid) {
+             const uuid = String(taskUuid || '').trim();
+             if (!uuid) return;
+
+             try {
+                 const exportResult = await commandService.exportTask(uuid);
+                 if (!exportResult.success) return;
+
+                 const payload = (exportResult.output || '').trim();
+                 const parsed = JSON.parse(payload);
+                 const task = Array.isArray(parsed) ? parsed[0] : parsed;
+                 const annotations = Array.isArray(task?.annotations) ? task.annotations.slice() : [];
+
+                 if (this.modal.type === 'edit' && String(this.modal.taskId) === uuid) {
+                     this.modal.annotations = annotations;
+                 }
+
+                 const idx = this.tasks.findIndex((t) => String(t.uuid) === uuid);
+                 if (idx !== -1) {
+                     const copy = this.tasks.slice();
+                     copy[idx] = { ...copy[idx], annotations };
+                     this.tasks = copy;
+                 }
+             } catch {
+                 // ignore
+             }
+         },
+
+         async addAnnotation() {
+             const uuid = String(this.modal?.taskId || '').trim();
+             if (!uuid) return;
+
+             const text = String(this.modal.annotationDraft || '').trim();
+             if (!text) return;
+
+             await this.withBusyTask(uuid, async () => {
+                 const arg = sanitizeTaskCommandArg(text);
+                 const result = await commandService.annotateTask(uuid, arg);
+                 if (result.success) {
+                     this.modal.annotationDraft = '';
+                     await this.refreshTaskAnnotations(uuid);
+                     this.showToast('Added annotation', 'success');
+                 } else {
+                     this.showToast(result.error || 'Failed to add annotation', 'error');
+                 }
+             });
+         },
+
+         startEditAnnotation(annotation) {
+             const entry = String(annotation?.entry || '').trim();
+             const description = String(annotation?.description || '');
+             const key = `${entry}|${description}`;
+             this.modal.annotationEditKey = key;
+             this.modal.annotationEditDraft = description;
+         },
+
+         cancelEditAnnotation() {
+             this.modal.annotationEditKey = null;
+             this.modal.annotationEditDraft = '';
+         },
+
+         async saveEditAnnotation(annotation) {
+             const uuid = String(this.modal?.taskId || '').trim();
+             if (!uuid) return;
+
+             const entry = String(annotation?.entry || '').trim();
+             const original = String(annotation?.description || '');
+             const draft = String(this.modal.annotationEditDraft || '').trim();
+
+             if (!draft) return;
+             if (draft === original) {
+                 this.cancelEditAnnotation();
+                 return;
+             }
+
+             await this.withBusyTask(uuid, async () => {
+                 const deleteArg = sanitizeTaskCommandArg(original);
+                 const delResult = await commandService.denotateTask(uuid, deleteArg);
+                 if (!delResult.success) {
+                     this.showToast(delResult.error || 'Failed to update annotation', 'error');
+                     return;
+                 }
+
+                 const addArg = sanitizeTaskCommandArg(draft);
+                 const addResult = await commandService.annotateTask(uuid, addArg);
+                 if (addResult.success) {
+                     this.cancelEditAnnotation();
+                     await this.refreshTaskAnnotations(uuid);
+                     this.showToast('Updated annotation', 'success');
+                 } else {
+                     this.showToast(addResult.error || 'Failed to update annotation', 'error');
+                     await this.refreshTaskAnnotations(uuid);
+                 }
+             });
+         },
+
+         async deleteAnnotation(annotation) {
+             const uuid = String(this.modal?.taskId || '').trim();
+             if (!uuid) return;
+
+             const description = String(annotation?.description || '').trim();
+             if (!description) return;
+
+             if (!confirm('Delete this annotation?')) return;
+
+             await this.withBusyTask(uuid, async () => {
+                 const arg = sanitizeTaskCommandArg(description);
+                 const result = await commandService.denotateTask(uuid, arg);
+                 if (result.success) {
+                     await this.refreshTaskAnnotations(uuid);
+                     this.showToast('Deleted annotation', 'success');
+                 } else {
+                     this.showToast(result.error || 'Failed to delete annotation', 'error');
+                 }
+             });
+         },
+
+         async submitModal() {
+             const type = this.modal.type;
+
 
             if (type === 'add') {
                 const description = String(this.modal.description || '').trim();
@@ -1263,29 +1426,36 @@ createApp({
                 taskDetailsOutput = 'Failed to load task details';
             }
 
-            this.modal = {
-                open: true,
-                type: 'edit',
-                value: currentDescription,
-                output: '',
-                taskId: taskUuid,
-                filterId: null,
-                filterName: '',
-                filterValue: '',
-                description: currentDescription,
-                project: currentProject,
-                tags: currentTags,
-                priority: currentPriority,
-                due: currentDue,
-                showTaskDetails: false,
-                taskDetailsOutput: taskDetailsOutput,
-                // Store original values for comparison
-                originalDescription: currentDescription,
-                originalProject: currentProject,
-                originalTags: currentTags,
-                originalPriority: currentPriority,
-                originalDue: currentDue,
-            };
+             const annotations = Array.isArray(task?.annotations) ? task.annotations.slice() : [];
+             
+             this.modal = {
+                 open: true,
+                 type: 'edit',
+                 value: currentDescription,
+                 output: '',
+                 taskId: taskUuid,
+                 filterId: null,
+                 filterName: '',
+                 filterValue: '',
+                 description: currentDescription,
+                 project: currentProject,
+                 tags: currentTags,
+                 priority: currentPriority,
+                 due: currentDue,
+                 showAnnotations: false,
+                 annotationDraft: '',
+                 annotations,
+                 annotationEditKey: null,
+                 annotationEditDraft: '',
+                 showTaskDetails: false,
+                 taskDetailsOutput: taskDetailsOutput,
+                 // Store original values for comparison
+                 originalDescription: currentDescription,
+                 originalProject: currentProject,
+                 originalTags: currentTags,
+                 originalPriority: currentPriority,
+                 originalDue: currentDue,
+             };
 
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1392,7 +1562,7 @@ createApp({
             });
         },
 
-        formatDate(dateStr) {
+        normalizeTaskDate(dateStr) {
             const raw = String(dateStr || '').trim();
             if (!raw) return '';
 
@@ -1416,10 +1586,33 @@ createApp({
                 normalized = `${year}-${month}-${day}`;
             }
 
+            return normalized;
+        },
+
+        formatDate(dateStr) {
+            const normalized = this.normalizeTaskDate(dateStr);
+            if (!normalized) return '';
+
             const date = new Date(normalized);
             if (Number.isNaN(date.getTime())) return '';
 
             return date.toLocaleDateString();
+        },
+
+        formatDateTime(dateStr) {
+            const normalized = this.normalizeTaskDate(dateStr);
+            if (!normalized) return '';
+
+            const date = new Date(normalized);
+            if (Number.isNaN(date.getTime())) return '';
+
+            return date.toLocaleString(undefined, {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
         },
 
         formatUrgency(value) {

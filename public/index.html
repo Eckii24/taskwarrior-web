@@ -269,6 +269,12 @@
                                         </svg>
                                         <span class="meta-text">{{ formatDate(task.due) }}</span>
                                     </span>
+
+                                    <span v-if="Array.isArray(task.annotations) && task.annotations.length" class="meta meta-annotations" title="Has annotations">
+                                        <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path fill="currentColor" d="M21 6c0-1.1-.9-2-2-2H5a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h10l6-6V6zm-8 13H5V6h14v9h-5v4zm4-7H7v-2h10v2zm0-4H7V6h10v2z"/>
+                                        </svg>
+                                    </span>
                                 </div>
                             </div>
                             <div class="task-actions">
@@ -606,6 +612,95 @@
                                 @mousedown.prevent="selectAttributeSuggestion(suggestion)"
                             >
                                 {{ suggestion }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="collapsible-section">
+                        <button
+                            type="button"
+                            class="collapsible-header"
+                            @click="modal.showAnnotations = !modal.showAnnotations"
+                        >
+                            <svg class="collapsible-icon" :class="{ expanded: modal.showAnnotations }" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                            </svg>
+                            <span>
+                                Annotations
+                                <span v-if="modalSortedAnnotations.length"> [{{ modalSortedAnnotations.length }}]</span>
+                            </span>
+                        </button>
+                        <div v-if="modal.showAnnotations" class="collapsible-content">
+                            <div class="annotations">
+                                <div class="annotations-new">
+                                    <input
+                                        type="text"
+                                        v-model="modal.annotationDraft"
+                                        class="text-input"
+                                        placeholder="Add annotation"
+                                        autocomplete="off"
+                                        @keydown.enter.prevent="addAnnotation"
+                                    >
+                                    <button
+                                        class="btn small primary"
+                                        type="button"
+                                        @click="addAnnotation"
+                                        :disabled="!modal.annotationDraft || busyTaskUuids[modal.taskId]"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+
+                                <div v-if="modalSortedAnnotations.length === 0" class="annotations-empty">
+                                    No annotations yet.
+                                </div>
+                                <div v-else class="annotations-list">
+                                    <div class="annotation-item" v-for="annotation in modalSortedAnnotations" :key="(annotation.entry || '') + '|' + (annotation.description || '')">
+                                        <div class="annotation-meta">
+                                            <span class="annotation-date">{{ formatDateTime(annotation.entry) }}</span>
+                                            <div class="annotation-actions">
+                                                <button
+                                                    class="icon-btn small"
+                                                    type="button"
+                                                    aria-label="Edit annotation"
+                                                    @click="startEditAnnotation(annotation)"
+                                                    :disabled="busyTaskUuids[modal.taskId]"
+                                                >
+                                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    class="icon-btn small danger"
+                                                    type="button"
+                                                    aria-label="Delete annotation"
+                                                    @click="deleteAnnotation(annotation)"
+                                                    :disabled="busyTaskUuids[modal.taskId]"
+                                                >
+                                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                        <path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div v-if="modal.annotationEditKey === (String(annotation.entry || '').trim() + '|' + String(annotation.description || ''))" class="annotation-edit">
+                                            <input
+                                                type="text"
+                                                v-model="modal.annotationEditDraft"
+                                                class="text-input"
+                                                autocomplete="off"
+                                                @keydown.enter.prevent="saveEditAnnotation(annotation)"
+                                                @keydown.esc.prevent="cancelEditAnnotation"
+                                            >
+                                            <div class="annotation-edit-actions">
+                                                <button class="btn small" type="button" @click="cancelEditAnnotation">Cancel</button>
+                                                <button class="btn small primary" type="button" @click="saveEditAnnotation(annotation)" :disabled="!modal.annotationEditDraft || busyTaskUuids[modal.taskId]">Save</button>
+                                            </div>
+                                        </div>
+                                        <div v-else class="annotation-text">{{ annotation.description }}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
