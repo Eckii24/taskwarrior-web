@@ -221,7 +221,6 @@ createApp({
                 filterValue: '',
                 // New structured fields for add/edit
                 description: '',
-                notes: '',
                 project: '',
                 tags: '',
                 priority: '',
@@ -798,7 +797,6 @@ createApp({
             this.modal.filterName = '';
             this.modal.filterValue = '';
             this.modal.description = '';
-            this.modal.notes = '';
             this.modal.project = '';
             this.modal.tags = '';
             this.modal.priority = '';
@@ -861,9 +859,10 @@ createApp({
                 const parts = [];
                 
                 // Only update description if it changed
-                const descChanged = this.modal.description && this.modal.description !== this.modal.originalDescription;
-                if (descChanged) {
-                    parts.push(this.modal.description);
+                if (this.modal.description !== this.modal.originalDescription) {
+                    if (this.modal.description) {
+                        parts.push(this.modal.description);
+                    }
                 }
                 
                 if (this.modal.project !== this.modal.originalProject) {
@@ -1023,7 +1022,6 @@ createApp({
                 filterName: '',
                 filterValue: '',
                 description: currentDescription,
-                notes: '',
                 project: currentProject,
                 tags: currentTags,
                 priority: currentPriority,
