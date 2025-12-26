@@ -1,13 +1,44 @@
 // CQRS - Command Query Responsibility Segregation
 
+(function (root, factory) {
+    const isCommonJs = typeof module !== 'undefined' && module.exports && typeof require === 'function';
+    if (isCommonJs) {
+        // Vue compiler build is required because we mount from DOM templates.
+        // eslint-disable-next-line global-require
+        module.exports = factory(require('vue/dist/vue.cjs.js'), { autoMount: false });
+    } else {
+        root.TaskwarriorWeb = factory(root.Vue, { autoMount: true });
+    }
+}(typeof globalThis !== 'undefined' ? globalThis : this, function (Vue, options) {
+
 class TaskApiClient {
-    constructor(baseUrl = '/api') {
+    constructor(baseUrl = '/api', fetchImpl) {
         this.baseUrl = baseUrl;
+
+        const defaultFetch = (() => {
+            if (typeof fetch !== 'function') return null;
+
+            try {
+                return fetch.bind(typeof globalThis !== 'undefined' ? globalThis : null);
+            } catch {
+                return fetch;
+            }
+        })();
+
+        this.fetchImpl = fetchImpl || defaultFetch;
+    }
+
+    requireFetch() {
+        if (typeof this.fetchImpl !== 'function') {
+            throw new Error('fetch is not available (cannot call backend)');
+        }
     }
 
     async execute(args) {
         try {
-            const response = await fetch(`${this.baseUrl}/task`, {
+            this.requireFetch();
+
+            const response = await this.fetchImpl(`${this.baseUrl}/task`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ args }),
@@ -20,11 +51,17 @@ class TaskApiClient {
 
     async complete(token, limit = 20) {
         try {
-            const url = new URL(`${this.baseUrl}/complete`, window.location.origin);
+            this.requireFetch();
+
+            const origin = (typeof window !== 'undefined' && window.location && window.location.origin)
+                ? window.location.origin
+                : 'http://localhost';
+
+            const url = new URL(`${this.baseUrl}/complete`, origin);
             url.searchParams.set('token', token);
             url.searchParams.set('limit', String(limit));
 
-            const response = await fetch(url.toString(), {
+            const response = await this.fetchImpl(url.toString(), {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
             });
@@ -36,12 +73,14 @@ class TaskApiClient {
     }
 
     async getFilters() {
-        const response = await fetch(`${this.baseUrl}/filters`);
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/filters`);
         return await response.json();
     }
 
     async createFilter(payload) {
-        const response = await fetch(`${this.baseUrl}/filters`, {
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/filters`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -50,7 +89,8 @@ class TaskApiClient {
     }
 
     async updateFilter(id, payload) {
-        const response = await fetch(`${this.baseUrl}/filters/${id}`, {
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/filters/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -59,12 +99,14 @@ class TaskApiClient {
     }
 
     async deleteFilter(id) {
-        const response = await fetch(`${this.baseUrl}/filters/${id}`, { method: 'DELETE' });
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/filters/${id}`, { method: 'DELETE' });
         return await response.json();
     }
 
     async reorderFilters(ids) {
-        const response = await fetch(`${this.baseUrl}/filters/reorder`, {
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/filters/reorder`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids }),
@@ -107,15 +149,19 @@ class TaskQueryService {
         const args = actualFilter ? `${actualFilter} export` : 'export';
 
         const result = await this.apiClient.execute(args);
-        if (result.success && result.output) {
-            try {
-                const tasks = JSON.parse(result.output);
-                return this.sortByUrgency(tasks);
-            } catch {
-                return [];
-            }
+        if (!result?.success) {
+            throw new Error(result?.error || 'Failed to load tasks');
         }
-        return [];
+
+        const rawOutput = String(result?.output || '');
+        if (!rawOutput.trim()) return [];
+
+        try {
+            const tasks = JSON.parse(rawOutput);
+            return this.sortByUrgency(tasks);
+        } catch (error) {
+            throw new Error(`Failed to parse task export JSON: ${error.message}`);
+        }
     }
 }
 
@@ -206,13 +252,18 @@ function sanitizeTaskCommandArg(value) {
     return `'${text.replace(/'/g, "\\'")}'`;
 }
 
-const apiClient = new TaskApiClient();
-const queryService = new TaskQueryService(apiClient);
-const commandService = new TaskCommandService(apiClient);
+function createTaskwarriorApp({
+    baseUrl = '/api',
+    fetchImpl,
+} = {}) {
+    const apiClient = new TaskApiClient(baseUrl, fetchImpl);
+    const fetchFn = apiClient.fetchImpl;
+    const queryService = new TaskQueryService(apiClient);
+    const commandService = new TaskCommandService(apiClient);
 
-const { createApp } = Vue;
+    const { createApp } = Vue;
 
-createApp({
+    const app = createApp({
     data() {
         return {
             drawerOpen: false,
@@ -1920,7 +1971,7 @@ createApp({
 
         async loadTaskrc() {
             try {
-                const response = await fetch('/api/taskrc');
+                const response = await fetchFn('/api/taskrc');
                 if (!response.ok) throw new Error(await response.text());
                 const text = await response.text();
                 this.taskrcText = text;
@@ -1932,7 +1983,7 @@ createApp({
 
         async saveTaskrc() {
             try {
-                const response = await fetch('/api/taskrc', {
+                const response = await fetchFn('/api/taskrc', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
                     body: this.taskrcText,
@@ -1945,4 +1996,46 @@ createApp({
             }
         },
     },
-}).mount('#app');
+});
+
+    return {
+        app,
+        apiClient,
+        queryService,
+        commandService,
+    };
+}
+
+function mountTaskwarriorApp({
+    element = '#app',
+    baseUrl = '/api',
+    fetchImpl,
+} = {}) {
+    const { app, apiClient, queryService, commandService } = createTaskwarriorApp({ baseUrl, fetchImpl });
+    const vm = app.mount(element);
+
+    return {
+        app,
+        vm,
+        apiClient,
+        queryService,
+        commandService,
+    };
+}
+
+const autoMountEnabled = options && options.autoMount;
+if (autoMountEnabled && typeof window !== 'undefined' && window.document) {
+    mountTaskwarriorApp({ element: '#app' });
+}
+
+return {
+    TaskApiClient,
+    TaskQueryService,
+    TaskCommandService,
+    createTaskwarriorApp,
+    mountTaskwarriorApp,
+    getTokenAtCursor,
+    replaceRange,
+    sanitizeTaskCommandArg,
+};
+}));

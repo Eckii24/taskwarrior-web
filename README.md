@@ -117,6 +117,8 @@ http://localhost:3000
 
 ## Interface Guide
 
+For a full end-to-end UI feature checklist, see `MANUAL_TESTING.md`.
+
 ### Adding Tasks
 
 Use the "Add Task" section with full taskwarrior CLI syntax:
@@ -255,6 +257,14 @@ class TaskApiClient {
 The application uses your existing taskwarrior configuration (`~/.taskrc`). Any custom reports, filters, or settings defined in your taskwarrior configuration will be available in the web interface.
 
 ## Development
+
+### UI tests
+
+Run component-style UI tests (jsdom + mocked backend):
+
+```bash
+npm test
+```
 
 To modify the application:
 

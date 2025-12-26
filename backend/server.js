@@ -8,22 +8,27 @@ const os = require('os');
 const Database = require('better-sqlite3');
 
 const execFileAsync = promisify(execFile);
-const app = express();
 const PORT = process.env.PORT || 3000;
 
 const DEFAULT_TASKDATA_PATH = path.join(process.env.HOME || os.homedir(), '.task');
 const DEFAULT_TASKRC_PATH = path.join(DEFAULT_TASKDATA_PATH, 'taskrc');
 
-const TASKDATA_PATH = process.env.TASKDATA || DEFAULT_TASKDATA_PATH;
-const TASKRC_PATH = process.env.TASKRC || DEFAULT_TASKRC_PATH;
+const TASKDATA_PATH_DEFAULT = process.env.TASKDATA || DEFAULT_TASKDATA_PATH;
+const TASKRC_PATH_DEFAULT = process.env.TASKRC || DEFAULT_TASKRC_PATH;
 
-const SETTINGS_DB_PATH = process.env.SETTINGS_DB || path.join(TASKDATA_PATH, 'taskwarrior-web.sqlite');
+const SETTINGS_DB_PATH_DEFAULT = process.env.SETTINGS_DB || path.join(TASKDATA_PATH_DEFAULT, 'taskwarrior-web.sqlite');
 
-function getDefaultTaskrc() {
+const TASK_EXEC_TIMEOUT_MS = (() => {
+    const raw = Number(process.env.TASK_TIMEOUT_MS);
+    if (Number.isFinite(raw) && raw > 0) return raw;
+    return 60000;
+})();
+
+function getDefaultTaskrc(taskdataPath) {
     return [
         '# Taskwarrior configuration',
         '# This file is managed by taskwarrior-web.',
-        `data.location=${TASKDATA_PATH}`,
+        `data.location=${taskdataPath}`,
         '',
         '# TaskChampion sync settings (set these to enable sync)',
         '# sync.server.url=http://taskchampion-sync:8080',
@@ -33,22 +38,22 @@ function getDefaultTaskrc() {
     ].join('\n');
 }
 
-async function ensureTaskrcExists() {
-    await fs.mkdir(path.dirname(TASKRC_PATH), { recursive: true });
+async function ensureTaskrcExists(taskrcPath, taskdataPath) {
+    await fs.mkdir(path.dirname(taskrcPath), { recursive: true });
 
     try {
-        await fs.access(TASKRC_PATH);
+        await fs.access(taskrcPath);
     } catch {
-        await fs.writeFile(TASKRC_PATH, getDefaultTaskrc(), { encoding: 'utf8' });
+        await fs.writeFile(taskrcPath, getDefaultTaskrc(taskdataPath), { encoding: 'utf8' });
     }
 }
 
-async function ensureSettingsDbDirExists() {
-    await fs.mkdir(path.dirname(SETTINGS_DB_PATH), { recursive: true });
+async function ensureSettingsDbDirExists(settingsDbPath) {
+    await fs.mkdir(path.dirname(settingsDbPath), { recursive: true });
 }
 
-function openSettingsDb() {
-    const db = new Database(SETTINGS_DB_PATH);
+function openSettingsDb(settingsDbPath) {
+    const db = new Database(settingsDbPath);
     db.pragma('journal_mode = WAL');
 
     db.exec(`
@@ -66,112 +71,116 @@ function openSettingsDb() {
     return db;
 }
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+function createApp({
+    taskdataPath = TASKDATA_PATH_DEFAULT,
+    taskrcPath = TASKRC_PATH_DEFAULT,
+    settingsDbPath = SETTINGS_DB_PATH_DEFAULT,
+    execTaskOverride,
+} = {}) {
+    const app = express();
 
-let settingsDb;
+    // Middleware
+    app.use(cors());
+    app.use(express.json());
+    app.use(express.static(path.join(__dirname, '../public')));
 
-async function ensureSettingsDb() {
-    if (settingsDb) return settingsDb;
-    await ensureSettingsDbDirExists();
-    settingsDb = openSettingsDb();
-    return settingsDb;
-}
+    let settingsDb;
 
-// Retrieve the full taskrc as plain text
-app.get('/api/taskrc', async (_req, res) => {
-    try {
-        await ensureTaskrcExists();
-        const content = await fs.readFile(TASKRC_PATH, { encoding: 'utf8' });
-        res.type('text/plain').send(content);
-    } catch (error) {
-        res.status(500).type('text/plain').send(error.message);
-    }
-});
-
-// Overwrite the full taskrc (plain text)
-app.put('/api/taskrc', express.text({ type: '*/*', limit: '256kb' }), async (req, res) => {
-    try {
-        const content = typeof req.body === 'string' ? req.body : '';
-
-        await fs.mkdir(path.dirname(TASKRC_PATH), { recursive: true });
-
-        const tmpPath = `${TASKRC_PATH}.tmp`;
-        await fs.writeFile(tmpPath, content, { encoding: 'utf8' });
-        await fs.rename(tmpPath, TASKRC_PATH);
-
-        res.type('text/plain').send('OK');
-    } catch (error) {
-        res.status(500).type('text/plain').send(error.message);
-    }
-});
-
-function splitLines(text) {
-    return String(text || '')
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-}
-
-const completionCache = new Map();
-
-const TASK_EXEC_TIMEOUT_MS = (() => {
-    const raw = Number(process.env.TASK_TIMEOUT_MS);
-    if (Number.isFinite(raw) && raw > 0) return raw;
-    return 60000;
-})();
-
-async function execTask(argsArray) {
-    await ensureTaskrcExists();
-
-    const safeArgs = Array.isArray(argsArray) ? argsArray.slice() : [];
-
-    // The web UI already asks for confirmation; prevent Taskwarrior from
-    // blocking on interactive prompts (e.g. `task <uuid> delete`).
-    if (!safeArgs.some((arg) => String(arg).startsWith('rc.confirmation='))) {
-        safeArgs.unshift('rc.confirmation=off');
+    async function ensureSettingsDb() {
+        if (settingsDb) return settingsDb;
+        await ensureSettingsDbDirExists(settingsDbPath);
+        settingsDb = openSettingsDb(settingsDbPath);
+        return settingsDb;
     }
 
-    const { stdout, stderr } = await execFileAsync('task', safeArgs, {
-        timeout: TASK_EXEC_TIMEOUT_MS,
-        env: {
-            ...process.env,
-            TASKRC: TASKRC_PATH,
-            TASKDATA: TASKDATA_PATH,
-        },
+    async function execTask(argsArray) {
+        await ensureTaskrcExists(taskrcPath, taskdataPath);
+
+        const safeArgs = Array.isArray(argsArray) ? argsArray.slice() : [];
+
+        if (!safeArgs.some((arg) => String(arg).startsWith('rc.confirmation='))) {
+            safeArgs.unshift('rc.confirmation=off');
+        }
+
+        if (typeof execTaskOverride === 'function') {
+            return await execTaskOverride(safeArgs);
+        }
+
+        const { stdout, stderr } = await execFileAsync('task', safeArgs, {
+            timeout: TASK_EXEC_TIMEOUT_MS,
+            env: {
+                ...process.env,
+                TASKRC: taskrcPath,
+                TASKDATA: taskdataPath,
+            },
+        });
+
+        return { stdout, stderr };
+    }
+
+    // Retrieve the full taskrc as plain text
+    app.get('/api/taskrc', async (_req, res) => {
+        try {
+            await ensureTaskrcExists(taskrcPath, taskdataPath);
+            const content = await fs.readFile(taskrcPath, { encoding: 'utf8' });
+            res.type('text/plain').send(content);
+        } catch (error) {
+            res.status(500).type('text/plain').send(error.message);
+        }
     });
 
-    return { stdout, stderr };
-}
+    // Overwrite the full taskrc (plain text)
+    app.put('/api/taskrc', express.text({ type: '*/*', limit: '256kb' }), async (req, res) => {
+        try {
+            const content = typeof req.body === 'string' ? req.body : '';
 
-async function cachedCompletionLines(cacheKey, argsArray, ttlMs = 3000) {
-    const now = Date.now();
-    const existing = completionCache.get(cacheKey);
-    if (existing && existing.expiresAt > now) {
-        return existing.value;
+            await fs.mkdir(path.dirname(taskrcPath), { recursive: true });
+
+            const tmpPath = `${taskrcPath}.tmp`;
+            await fs.writeFile(tmpPath, content, { encoding: 'utf8' });
+            await fs.rename(tmpPath, taskrcPath);
+
+            res.type('text/plain').send('OK');
+        } catch (error) {
+            res.status(500).type('text/plain').send(error.message);
+        }
+    });
+
+    function splitLines(text) {
+        return String(text || '')
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
     }
 
-    const { stdout } = await execTask(argsArray);
-    const value = splitLines(stdout);
+    const completionCache = new Map();
 
-    completionCache.set(cacheKey, { value, expiresAt: now + ttlMs });
-    return value;
-}
+    async function cachedCompletionLines(cacheKey, argsArray, ttlMs = 3000) {
+        const now = Date.now();
+        const existing = completionCache.get(cacheKey);
+        if (existing && existing.expiresAt > now) {
+            return existing.value;
+        }
 
-// Settings: custom filters
-app.get('/api/filters', async (_req, res) => {
-    try {
-        const db = await ensureSettingsDb();
-        const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
-        res.json({ success: true, filters });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        const { stdout } = await execTask(argsArray);
+        const value = splitLines(stdout);
+
+        completionCache.set(cacheKey, { value, expiresAt: now + ttlMs });
+        return value;
     }
-});
 
-app.post('/api/filters', async (req, res) => {
+    // Settings: custom filters
+    app.get('/api/filters', async (_req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
+            res.json({ success: true, filters });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/filters', async (req, res) => {
     try {
         const db = await ensureSettingsDb();
         const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
@@ -197,7 +206,7 @@ app.post('/api/filters', async (req, res) => {
     }
 });
 
-app.put('/api/filters/reorder', async (req, res) => {
+    app.put('/api/filters/reorder', async (req, res) => {
     try {
         const db = await ensureSettingsDb();
         const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
@@ -234,7 +243,7 @@ app.put('/api/filters/reorder', async (req, res) => {
     }
 });
 
-app.put('/api/filters/:id', async (req, res) => {
+    app.put('/api/filters/:id', async (req, res) => {
     try {
         const db = await ensureSettingsDb();
         const idRaw = String(req.params.id || '');
@@ -276,7 +285,7 @@ app.put('/api/filters/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/filters/:id', async (req, res) => {
+    app.delete('/api/filters/:id', async (req, res) => {
     try {
         const db = await ensureSettingsDb();
         const idRaw = String(req.params.id || '');
@@ -298,7 +307,7 @@ app.delete('/api/filters/:id', async (req, res) => {
 
 // Lightweight completion endpoint.
 // Accepts the current token under cursor (e.g. "proj:", "project:ho", "+ur", "rc.co").
-app.get('/api/complete', async (req, res) => {
+    app.get('/api/complete', async (req, res) => {
     try {
         const token = typeof req.query.token === 'string' ? req.query.token : '';
         const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
@@ -459,7 +468,7 @@ app.get('/api/complete', async (req, res) => {
 });
 
 // Single endpoint to execute taskwarrior commands
-app.post('/api/task', async (req, res) => {
+    app.post('/api/task', async (req, res) => {
     try {
         const { args } = req.body;
 
@@ -552,10 +561,19 @@ app.post('/api/task', async (req, res) => {
     }
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`Taskwarrior Web Server running on port ${PORT}`);
-    console.log(`Frontend: http://localhost:${PORT}`);
-    console.log(`API: http://localhost:${PORT}/api`);
-    console.log(`TASKRC: ${TASKRC_PATH}`);
-});
+    return app;
+}
+
+if (require.main === module) {
+    const app = createApp();
+    app.listen(PORT, () => {
+        console.log(`Taskwarrior Web Server running on port ${PORT}`);
+        console.log(`Frontend: http://localhost:${PORT}`);
+        console.log(`API: http://localhost:${PORT}/api`);
+        console.log(`TASKRC: ${TASKRC_PATH_DEFAULT}`);
+    });
+}
+
+module.exports = {
+    createApp,
+};
