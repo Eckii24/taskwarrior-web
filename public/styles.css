@@ -273,8 +273,11 @@ a:hover {
 }
 
 .nav-item.active {
-    background: rgba(203, 166, 247, 0.2);
-    border: 1px solid rgba(203, 166, 247, 0.35);
+    background: transparent;
+    border: none;
+    color: var(--ctp-lavender);
+    font-weight: 800;
+    font-style: italic;
 }
 
 .nav-icon {
@@ -284,7 +287,7 @@ a:hover {
 }
 
 .nav-item.active .nav-icon {
-    color: var(--accent);
+    color: var(--ctp-lavender);
 }
 
 .nav-item.add-task {
