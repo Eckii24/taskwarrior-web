@@ -228,6 +228,12 @@ createApp({
                 due: '',
                 showTaskDetails: false,
                 taskDetailsOutput: '',
+                // Original values for edit comparison
+                originalDescription: '',
+                originalProject: '',
+                originalTags: '',
+                originalPriority: '',
+                originalDue: '',
             },
 
             searchPendingOnly: true,
@@ -799,6 +805,11 @@ createApp({
             this.modal.due = '';
             this.modal.showTaskDetails = false;
             this.modal.taskDetailsOutput = '';
+            this.modal.originalDescription = '';
+            this.modal.originalProject = '';
+            this.modal.originalTags = '';
+            this.modal.originalPriority = '';
+            this.modal.originalDue = '';
             this.resetCompletion();
         },
 
@@ -849,23 +860,37 @@ createApp({
                 // Build modification command from structured fields
                 const parts = [];
                 
-                if (this.modal.description) {
+                // Only update description if it changed
+                const descChanged = this.modal.description && this.modal.description !== this.modal.originalDescription;
+                if (descChanged) {
                     parts.push(this.modal.description);
                 }
                 
-                if (this.modal.project !== undefined && this.modal.project !== this.modal.originalProject) {
-                    parts.push(`project:${this.modal.project || ''}`);
+                if (this.modal.project !== this.modal.originalProject) {
+                    if (this.modal.project) {
+                        parts.push(`project:${this.modal.project}`);
+                    } else {
+                        parts.push('project:');
+                    }
                 }
                 
-                if (this.modal.priority !== undefined && this.modal.priority !== this.modal.originalPriority) {
-                    parts.push(`priority:${this.modal.priority || ''}`);
+                if (this.modal.priority !== this.modal.originalPriority) {
+                    if (this.modal.priority) {
+                        parts.push(`priority:${this.modal.priority}`);
+                    } else {
+                        parts.push('priority:');
+                    }
                 }
                 
-                if (this.modal.due !== undefined && this.modal.due !== this.modal.originalDue) {
-                    parts.push(`due:${this.modal.due || ''}`);
+                if (this.modal.due !== this.modal.originalDue) {
+                    if (this.modal.due) {
+                        parts.push(`due:${this.modal.due}`);
+                    } else {
+                        parts.push('due:');
+                    }
                 }
                 
-                if (this.modal.tags !== undefined && this.modal.tags !== this.modal.originalTags) {
+                if (this.modal.tags !== this.modal.originalTags) {
                     // Remove old tags and add new ones
                     const oldTags = (this.modal.originalTags || '').split(',').map(t => t.trim()).filter(t => t);
                     const newTags = (this.modal.tags || '').split(',').map(t => t.trim()).filter(t => t);
@@ -1006,6 +1031,7 @@ createApp({
                 showTaskDetails: false,
                 taskDetailsOutput: taskDetailsOutput,
                 // Store original values for comparison
+                originalDescription: currentDescription,
                 originalProject: currentProject,
                 originalTags: currentTags,
                 originalPriority: currentPriority,
