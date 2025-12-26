@@ -1099,14 +1099,29 @@ function createTaskwarriorApp({
         },
 
         async deleteFilter(filter) {
-            if (!confirm(`Delete filter "${filter.name}"?`)) return;
+            if (!filter) return;
+            return await this.deleteFilterById(filter.id);
+        },
+
+        async deleteFilterById(filterId) {
+            const id = Number(filterId);
+            if (!Number.isFinite(id)) return;
+
+            const filter = this.filters.find((f) => f.id === id);
+            const filterName = filter?.name ? String(filter.name) : String(filterId);
+
+            if (!confirm(`Delete filter "${filterName}"?`)) return;
 
             try {
-                const result = await apiClient.deleteFilter(filter.id);
+                const result = await apiClient.deleteFilter(id);
                 if (result.success) {
                     await this.refreshFilters();
-                    if (this.selectedView.type === 'filter' && this.selectedView.id === filter.id) {
+                    if (this.selectedView.type === 'filter' && this.selectedView.id === id) {
                         this.selectBuiltin('next');
+                    }
+
+                    if (this.modal?.open && this.modal.type === 'filter' && this.modal.filterId === id) {
+                        this.closeModal();
                     }
                 } else {
                     this.showToast(result.error || 'Failed to delete filter', 'error');
@@ -1821,6 +1836,10 @@ function createTaskwarriorApp({
             await this.withBusyTask(uuid, async () => {
                 const result = await commandService.deleteTask(uuid);
                 if (result.success) {
+                    if (this.modal?.open && this.modal.type === 'edit' && String(this.modal.taskId) === uuid) {
+                        this.closeModal();
+                    }
+
                     this.showToast('Deleted task', 'success');
                     await this.refreshCurrentPanel();
                 } else {

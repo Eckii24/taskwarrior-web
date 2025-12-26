@@ -792,6 +792,10 @@ a:hover {
     border-top: 1px solid var(--line);
 }
 
+.modal-footer .btn.danger {
+    margin-right: auto;
+}
+
 .completion-panel {
     margin-top: 10px;
     border: 1px solid var(--line);
