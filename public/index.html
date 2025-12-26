@@ -274,11 +274,6 @@
                             </div>
                             <div class="task-actions">
                                 <div class="task-action-buttons">
-                                    <button class="icon-btn small" type="button" aria-label="Show task" @click="showTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
-                                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path fill="currentColor" d="M12 5c-7.63 0-10 7-10 7s2.37 7 10 7 10-7 10-7-2.37-7-10-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
-                                        </svg>
-                                    </button>
                                     <button v-if="task.status === 'pending'" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
                                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                                             <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
@@ -337,40 +332,300 @@
                         @input="handleCompletionInput($event, 'modal.value')"
                         @blur="handleCompletionBlur('modal.value')"
                     >
+                    <div
+                        v-if="completion.visible && completion.field === 'modal.value' && completion.suggestions.length > 0"
+                        class="completion-panel"
+                        role="listbox"
+                        aria-label="Completions"
+                    >
+                        <div
+                            v-for="(suggestion, idx) in completion.suggestions"
+                            :key="idx"
+                            class="completion-item"
+                            :class="{ active: idx === completion.selectedIndex }"
+                            role="option"
+                            :aria-selected="idx === completion.selectedIndex"
+                            @mousedown.prevent="applyModalCompletion('modal.value', suggestion)"
+                        >
+                            {{ suggestion }}
+                        </div>
+                    </div>
                     <label class="checkbox-row">
                         <input type="checkbox" v-model="searchPendingOnly">
                         Only pending
                     </label>
                 </div>
 
-                <div v-else-if="modal.type === 'add'" class="field">
-                    <label>Add task</label>
-                    <input
-                        ref="modalInput"
-                        type="text"
-                        v-model="modal.value"
-                        class="text-input"
-                        placeholder="Buy milk project:groceries +shopping due:tomorrow"
-                        autocomplete="off"
-                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
-                        @input="handleCompletionInput($event, 'modal.value')"
-                        @blur="handleCompletionBlur('modal.value')"
-                    >
+                <div v-else-if="modal.type === 'add'" class="modal-form">
+                    <div class="field">
+                        <input
+                            ref="modalInput"
+                            type="text"
+                            v-model="modal.description"
+                            class="text-input task-name-input"
+                            placeholder="Task name"
+                            autocomplete="off"
+                            @keydown="handleCompletionKeydown($event, 'modal.description', 'submitModal')"
+                            @input="handleCompletionInput($event, 'modal.description')"
+                            @blur="handleCompletionBlur('modal.description')"
+                        >
+                        <div
+                            v-if="completion.visible && completion.field === 'modal.description' && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="applyModalCompletion('modal.description', suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="task-attributes">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.due }"
+                            @click="toggleAttributeDropdown('due')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                            </svg>
+                            <span>{{ modal.due || 'Due date' }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.priority }"
+                            @click="toggleAttributeDropdown('priority')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                            </svg>
+                            <span>{{ modal.priority || 'Priority' }}</span>
+                            <svg v-if="modal.priority" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('priority')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.project }"
+                            @click="toggleAttributeDropdown('project')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                            </svg>
+                            <span>{{ modal.project || 'Project' }}</span>
+                            <svg v-if="modal.project" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('project')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.tags }"
+                            @click="toggleAttributeDropdown('tags')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
+                            </svg>
+                            <span>{{ modal.tags || 'Tags' }}</span>
+                            <svg v-if="modal.tags" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('tags')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div v-if="modal.activeAttributeDropdown" class="attribute-dropdown">
+                        <input
+                            ref="attributeInput"
+                            type="text"
+                            v-model="modal.attributeInputValue"
+                            class="text-input"
+                            :placeholder="getAttributePlaceholder(modal.activeAttributeDropdown)"
+                            autocomplete="off"
+                            @keydown="handleAttributeKeydown($event)"
+                            @input="handleAttributeInput($event)"
+                            @blur="handleAttributeBlur"
+                        >
+                        <div
+                            v-if="completion.visible && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="selectAttributeSuggestion(suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div v-else-if="modal.type === 'edit'" class="field">
-                    <label>Edit task</label>
-                    <input
-                        ref="modalInput"
-                        type="text"
-                        v-model="modal.value"
-                        class="text-input"
-                        placeholder="priority:H project:work due:tomorrow or new description"
-                        autocomplete="off"
-                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
-                        @input="handleCompletionInput($event, 'modal.value')"
-                        @blur="handleCompletionBlur('modal.value')"
-                    >
+                <div v-else-if="modal.type === 'edit'" class="modal-form">
+                    <div class="field">
+                        <input
+                            ref="modalInput"
+                            type="text"
+                            v-model="modal.description"
+                            class="text-input task-name-input"
+                            placeholder="Task name"
+                            autocomplete="off"
+                            @keydown="handleCompletionKeydown($event, 'modal.description', 'submitModal')"
+                            @input="handleCompletionInput($event, 'modal.description')"
+                            @blur="handleCompletionBlur('modal.description')"
+                        >
+                        <div
+                            v-if="completion.visible && completion.field === 'modal.description' && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="applyModalCompletion('modal.description', suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="task-attributes">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.due }"
+                            @click="toggleAttributeDropdown('due')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                            </svg>
+                            <span>{{ modal.due || 'Due date' }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.priority }"
+                            @click="toggleAttributeDropdown('priority')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                            </svg>
+                            <span>{{ modal.priority || 'Priority' }}</span>
+                            <svg v-if="modal.priority" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('priority')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.project }"
+                            @click="toggleAttributeDropdown('project')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                            </svg>
+                            <span>{{ modal.project || 'Project' }}</span>
+                            <svg v-if="modal.project" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('project')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.tags }"
+                            @click="toggleAttributeDropdown('tags')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
+                            </svg>
+                            <span>{{ modal.tags || 'Tags' }}</span>
+                            <svg v-if="modal.tags" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('tags')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div v-if="modal.activeAttributeDropdown" class="attribute-dropdown">
+                        <input
+                            ref="attributeInput"
+                            type="text"
+                            v-model="modal.attributeInputValue"
+                            class="text-input"
+                            :placeholder="getAttributePlaceholder(modal.activeAttributeDropdown)"
+                            autocomplete="off"
+                            @keydown="handleAttributeKeydown($event)"
+                            @input="handleAttributeInput($event)"
+                            @blur="handleAttributeBlur"
+                        >
+                        <div
+                            v-if="completion.visible && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="selectAttributeSuggestion(suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="collapsible-section">
+                        <button
+                            type="button"
+                            class="collapsible-header"
+                            @click="modal.showTaskDetails = !modal.showTaskDetails"
+                        >
+                            <svg class="collapsible-icon" :class="{ expanded: modal.showTaskDetails }" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                            </svg>
+                            <span>All Task Information</span>
+                        </button>
+                        <div v-if="modal.showTaskDetails" class="collapsible-content">
+                            <pre class="command-output">{{ modal.taskDetailsOutput }}</pre>
+                        </div>
+                    </div>
                 </div>
 
                 <div v-else-if="modal.type === 'show'" class="field">
@@ -391,6 +646,24 @@
                         @input="handleCompletionInput($event, 'modal.value')"
                         @blur="handleCompletionBlur('modal.value')"
                     >
+                    <div
+                        v-if="completion.visible && completion.field === 'modal.value' && completion.suggestions.length > 0"
+                        class="completion-panel"
+                        role="listbox"
+                        aria-label="Completions"
+                    >
+                        <div
+                            v-for="(suggestion, idx) in completion.suggestions"
+                            :key="idx"
+                            class="completion-item"
+                            :class="{ active: idx === completion.selectedIndex }"
+                            role="option"
+                            :aria-selected="idx === completion.selectedIndex"
+                            @mousedown.prevent="applyModalCompletion('modal.value', suggestion)"
+                        >
+                            {{ suggestion }}
+                        </div>
+                    </div>
                 </div>
 
                 <div v-else-if="modal.type === 'filter'" class="field">
@@ -409,24 +682,23 @@
                         @input="handleCompletionInput($event, 'modal.filterValue')"
                         @blur="handleCompletionBlur('modal.filterValue')"
                     >
-                </div>
-
-                <div
-                    v-if="completion.visible && completion.field === activeCompletionField"
-                    class="completion-panel"
-                    role="listbox"
-                    aria-label="Completions"
-                >
-                    <div class="completion-hint">Tab to list, Up/Down to select, Enter to apply, Esc to cancel</div>
                     <div
-                        v-for="(suggestion, idx) in completion.suggestions"
-                        :key="idx"
-                        class="completion-item"
-                        :class="{ active: idx === completion.selectedIndex }"
-                        role="option"
-                        :aria-selected="idx === completion.selectedIndex"
+                        v-if="completion.visible && completion.field === 'modal.filterValue' && completion.suggestions.length > 0"
+                        class="completion-panel"
+                        role="listbox"
+                        aria-label="Completions"
                     >
-                        {{ suggestion }}
+                        <div
+                            v-for="(suggestion, idx) in completion.suggestions"
+                            :key="idx"
+                            class="completion-item"
+                            :class="{ active: idx === completion.selectedIndex }"
+                            role="option"
+                            :aria-selected="idx === completion.selectedIndex"
+                            @mousedown.prevent="applyModalCompletion('modal.filterValue', suggestion)"
+                        >
+                            {{ suggestion }}
+                        </div>
                     </div>
                 </div>
             </div>

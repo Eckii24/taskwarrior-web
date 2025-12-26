@@ -117,10 +117,25 @@ function splitLines(text) {
 
 const completionCache = new Map();
 
+const TASK_EXEC_TIMEOUT_MS = (() => {
+    const raw = Number(process.env.TASK_TIMEOUT_MS);
+    if (Number.isFinite(raw) && raw > 0) return raw;
+    return 60000;
+})();
+
 async function execTask(argsArray) {
     await ensureTaskrcExists();
 
-    const { stdout, stderr } = await execFileAsync('task', argsArray, {
+    const safeArgs = Array.isArray(argsArray) ? argsArray.slice() : [];
+
+    // The web UI already asks for confirmation; prevent Taskwarrior from
+    // blocking on interactive prompts (e.g. `task <uuid> delete`).
+    if (!safeArgs.some((arg) => String(arg).startsWith('rc.confirmation='))) {
+        safeArgs.unshift('rc.confirmation=off');
+    }
+
+    const { stdout, stderr } = await execFileAsync('task', safeArgs, {
+        timeout: TASK_EXEC_TIMEOUT_MS,
         env: {
             ...process.env,
             TASKRC: TASKRC_PATH,
