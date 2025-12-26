@@ -53,8 +53,9 @@ describe('Backend API (supertest)', () => {
             execTaskOverride: async () => ({ stdout: '', stderr: '' }),
         });
 
-        const createA = await request(app).post('/api/filters').send({ name: 'A', filter: 'status:pending' });
+        const createA = await request(app).post('/api/filters').send({ name: 'A', filter: 'status:pending', icon: '🏠' });
         expect(createA.status).toBe(200);
+        expect(createA.body.filter.icon).toBe('🏠');
         const idA = createA.body.filter.id;
 
         const createB = await request(app).post('/api/filters').send({ name: 'B', filter: 'status:pending project:Home' });
@@ -64,6 +65,7 @@ describe('Backend API (supertest)', () => {
         const list1 = await request(app).get('/api/filters');
         expect(list1.body.success).toBe(true);
         expect(list1.body.filters.map((f) => f.id)).toEqual([idA, idB]);
+        expect(list1.body.filters[0].icon).toBe('🏠');
 
         const reorder = await request(app).put('/api/filters/reorder').send({ ids: [idB, idA] });
         expect(reorder.status).toBe(200);
@@ -72,9 +74,10 @@ describe('Backend API (supertest)', () => {
         const list2 = await request(app).get('/api/filters');
         expect(list2.body.filters.map((f) => f.id)).toEqual([idB, idA]);
 
-        const update = await request(app).put(`/api/filters/${idB}`).send({ name: 'B2' });
+        const update = await request(app).put(`/api/filters/${idB}`).send({ name: 'B2', icon: '💼' });
         expect(update.status).toBe(200);
         expect(update.body.filter.name).toBe('B2');
+        expect(update.body.filter.icon).toBe('💼');
 
         const del = await request(app).delete(`/api/filters/${idA}`);
         expect(del.status).toBe(200);

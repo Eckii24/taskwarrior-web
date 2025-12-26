@@ -282,6 +282,7 @@ function createMockBackend() {
                 id: state.nextFilterId++,
                 name: body.name,
                 filter: body.filter,
+                icon: body.icon ?? null,
                 order: state.filters.length,
             };
             state.filters.push(filter);
@@ -325,6 +326,7 @@ function createMockBackend() {
                 ...state.filters[idx],
                 name: body.name ?? state.filters[idx].name,
                 filter: body.filter ?? state.filters[idx].filter,
+                icon: body.icon !== undefined ? body.icon : state.filters[idx].icon,
             };
             return jsonResponse({ success: true, filter: state.filters[idx] });
         }

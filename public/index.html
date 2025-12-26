@@ -161,7 +161,8 @@
                                 @click="selectCustomFilter(filter)"
                             >
                                 <span class="nav-icon">
-                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <span v-if="filter.icon" class="emoji-icon" aria-hidden="true">{{ filter.icon }}</span>
+                                    <svg v-else class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                                         <path fill="currentColor" d="M10 18h4v-2h-4v2zm-7-14v2h18V4H3zm3 7h12V9H6v2z"/>
                                     </svg>
                                 </span>
@@ -979,6 +980,38 @@
                 <div v-else-if="modal.type === 'filter'" class="field">
                     <label>Name</label>
                     <input ref="modalNameInput" type="text" v-model="modal.filterName" class="text-input" placeholder="My filter">
+
+                    <label>Icon</label>
+                    <div class="emoji-picker">
+                        <button
+                            type="button"
+                            class="emoji-choice"
+                            :class="{ active: !modal.filterIcon }"
+                            @click="modal.filterIcon = ''"
+                        >
+                            None
+                        </button>
+                        <button
+                            v-for="emoji in emojiPicker.filterIcons"
+                            :key="emoji"
+                            type="button"
+                            class="emoji-choice"
+                            :class="{ active: modal.filterIcon === emoji }"
+                            @click="modal.filterIcon = emoji"
+                            :aria-label="`Use icon ${emoji}`"
+                        >
+                            {{ emoji }}
+                        </button>
+                        <input
+                            type="text"
+                            class="emoji-input"
+                            v-model="modal.filterIcon"
+                            placeholder="Type/paste an emoji"
+                            inputmode="text"
+                            autocomplete="off"
+                            aria-label="Custom emoji icon"
+                        >
+                    </div>
 
                     <label>Filter</label>
                     <input

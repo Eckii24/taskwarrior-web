@@ -300,8 +300,13 @@ function createTaskwarriorApp({
                 all: { name: 'All', filter: '', visible: true },
             },
 
-            filters: [],
-            draggedFilterId: null,
+             filters: [],
+             draggedFilterId: null,
+
+             emojiPicker: {
+                 filterIcons: ['⭐️', '🏠', '💼', '📌', '🧠', '🛒', '📅', '✅', '🔥', '🧹', '💡', '🧾', '📚', '🔁', '🎯', '🧰', '🔒', '🌱', '💤', '🧪'],
+             },
+
 
             selectedView: { type: 'builtin', key: 'next' },
             tasks: [],
@@ -382,6 +387,11 @@ function createTaskwarriorApp({
         };
     },
     computed: {
+        modalFilterIconLabel() {
+            if (this.modal?.type !== 'filter') return '';
+            const raw = String(this.modal?.filterIcon || '').trim();
+            return raw || 'None';
+        },
         taskrcDirty() {
             return this.taskrcText !== this.loadedTaskrcText;
         },
@@ -1160,8 +1170,10 @@ function createTaskwarriorApp({
                 filterId: null,
                 filterName: '',
                 filterValue: '',
+                filterIcon: '',
                 originalFilterName: '',
                 originalFilterValue: '',
+                originalFilterIcon: '',
             };
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1172,6 +1184,7 @@ function createTaskwarriorApp({
         openEditFilter(filter) {
             const name = filter?.name ? String(filter.name) : '';
             const value = filter?.filter ? String(filter.filter) : '';
+            const icon = filter?.icon ? String(filter.icon) : '';
 
             this.modal = {
                 open: true,
@@ -1181,8 +1194,10 @@ function createTaskwarriorApp({
                 filterId: filter.id,
                 filterName: name,
                 filterValue: value,
+                filterIcon: icon,
                 originalFilterName: name,
                 originalFilterValue: value,
+                originalFilterIcon: icon,
             };
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1255,7 +1270,7 @@ function createTaskwarriorApp({
         },
 
         openCommandModal(type) {
-            this.modal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '' };
+            this.modal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '', filterIcon: '' };
             if (type === 'exec') this.showTaskrc = false;
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1274,6 +1289,7 @@ function createTaskwarriorApp({
             this.modal.filterId = null;
             this.modal.filterName = '';
             this.modal.filterValue = '';
+            this.modal.filterIcon = '';
             this.modal.description = '';
             this.modal.project = '';
             this.modal.tags = '';
@@ -1291,9 +1307,10 @@ function createTaskwarriorApp({
              this.modal.originalTags = '';
              this.modal.originalPriority = '';
              this.modal.originalDue = '';
-             this.modal.originalFilterName = '';
-             this.modal.originalFilterValue = '';
-              this.modal.activeAttributeDropdown = null;
+              this.modal.originalFilterName = '';
+              this.modal.originalFilterValue = '';
+              this.modal.originalFilterIcon = '';
+               this.modal.activeAttributeDropdown = null;
               this.modal.attributeInputValue = '';
               this.resetCompletion();
         },
@@ -1741,14 +1758,18 @@ function createTaskwarriorApp({
             if (type === 'filter') {
                 const name = String(this.modal.filterName || '').trim();
                 const filter = String(this.modal.filterValue || '').trim();
+                const icon = String(this.modal.filterIcon || '').trim();
                 if (!name || !filter) return;
+
+                const payload = { name, filter };
+                payload.icon = icon || null;
 
                 try {
                     if (this.modal.filterId) {
                         const updatedId = this.modal.filterId;
                         const wasActive = this.selectedView.type === 'filter' && this.selectedView.id === updatedId;
 
-                        const result = await apiClient.updateFilter(updatedId, { name, filter });
+                        const result = await apiClient.updateFilter(updatedId, payload);
                         if (!result.success) {
                             this.showToast(result.error || 'Failed to update filter', 'error');
                             return;
@@ -1766,7 +1787,7 @@ function createTaskwarriorApp({
                         return;
                     }
 
-                    const result = await apiClient.createFilter({ name, filter });
+                    const result = await apiClient.createFilter(payload);
                     if (result.success) {
                         await this.refreshFilters();
                         this.closeModal();
@@ -1808,9 +1829,10 @@ function createTaskwarriorApp({
                  value: currentDescription,
                  output: '',
                  taskId: taskUuid,
-                 filterId: null,
-                 filterName: '',
-                 filterValue: '',
+                filterId: null,
+                filterName: '',
+                filterValue: '',
+                filterIcon: '',
                  description: currentDescription,
                  project: currentProject,
                  tags: currentTags,

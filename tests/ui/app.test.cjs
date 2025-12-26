@@ -252,16 +252,20 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.openAddFilter();
         vm.modal.filterName = 'Home';
         vm.modal.filterValue = 'project:Home status:pending';
+        vm.modal.filterIcon = '🏠';
         await vm.submitModal();
         await flushPromises(vm, 3);
 
         vm.openAddFilter();
         vm.modal.filterName = 'Work';
         vm.modal.filterValue = 'project:Work status:pending';
+        vm.modal.filterIcon = '💼';
         await vm.submitModal();
         await flushPromises(vm, 3);
 
         expect(vm.filters.map((f) => f.name)).toEqual(['Home', 'Work']);
+        expect(vm.filters.map((f) => f.icon)).toEqual(['🏠', '💼']);
+        expect(document.body.textContent).toContain('🏠');
 
         const homeFilterId = vm.filters[0].id;
         const workFilterId = vm.filters[1].id;
@@ -290,9 +294,11 @@ describe('Taskwarrior Web UI (component-style)', () => {
         // Edit a non-active filter
         vm.openEditFilter(vm.filters[0]);
         vm.modal.filterName = 'Work2';
+        vm.modal.filterIcon = '🧠';
         await vm.submitModal();
         await flushPromises(vm, 2);
         expect(vm.filters[0].name).toBe('Work2');
+        expect(vm.filters[0].icon).toBe('🧠');
 
         // Edit active filter triggers reload
         vm.selectCustomFilter(vm.filters[0]);

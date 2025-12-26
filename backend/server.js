@@ -110,6 +110,14 @@ async function ensureSettingsDbDirExists(settingsDbPath) {
     await fs.mkdir(path.dirname(settingsDbPath), { recursive: true });
 }
 
+function ensureSqliteColumnExists(db, table, column, columnDefSql) {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    const exists = columns.some((col) => String(col?.name || '') === column);
+    if (exists) return;
+
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDefSql}`);
+}
+
 function openSettingsDb(settingsDbPath) {
     const db = new Database(settingsDbPath);
     db.pragma('journal_mode = WAL');
@@ -119,6 +127,7 @@ function openSettingsDb(settingsDbPath) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             filter TEXT NOT NULL,
+            icon TEXT,
             "order" INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL
         );
@@ -134,6 +143,9 @@ function openSettingsDb(settingsDbPath) {
             updated_at TEXT NOT NULL
         );
     `);
+
+    // Lightweight migrations for existing installs.
+    ensureSqliteColumnExists(db, 'filters', 'icon', 'icon TEXT');
 
     const now = new Date().toISOString();
     const seedBuiltin = db.prepare(`
@@ -403,7 +415,7 @@ function createApp({
     app.get('/api/filters', async (_req, res) => {
         try {
             const db = await ensureSettingsDb();
-            const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
+            const filters = db.prepare('SELECT id, name, filter, icon, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
             res.json({ success: true, filters });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
@@ -464,11 +476,23 @@ function createApp({
         }
     });
 
-    app.post('/api/filters', async (req, res) => {
+        app.post('/api/filters', async (req, res) => {
         try {
             const db = await ensureSettingsDb();
             const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
             const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
+
+            let icon = null;
+            if (req.body?.icon !== undefined && req.body?.icon !== null) {
+                if (typeof req.body.icon !== 'string') {
+                    return res.status(400).json({ success: false, error: 'icon must be a string' });
+                }
+                icon = req.body.icon.trim();
+                if (!icon) icon = null;
+                if (icon && icon.length > 16) {
+                    return res.status(400).json({ success: false, error: 'icon is too long' });
+                }
+            }
 
             if (!name) {
                 return res.status(400).json({ success: false, error: 'name is required' });
@@ -481,10 +505,10 @@ function createApp({
             const nextOrder = Number(maxOrderRow?.maxOrder ?? -1) + 1;
 
             const createdAt = new Date().toISOString();
-            const stmt = db.prepare('INSERT INTO filters (name, filter, "order", created_at) VALUES (?, ?, ?, ?)');
-            const info = stmt.run(name, filter, nextOrder, createdAt);
+            const stmt = db.prepare('INSERT INTO filters (name, filter, icon, "order", created_at) VALUES (?, ?, ?, ?, ?)');
+            const info = stmt.run(name, filter, icon, nextOrder, createdAt);
 
-            res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, order: nextOrder } });
+            res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, icon, order: nextOrder } });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -551,18 +575,34 @@ function createApp({
                 return res.status(400).json({ success: false, error: 'order must be a number' });
             }
 
-            const existing = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters WHERE id = ?').get(id);
+            const existing = db.prepare('SELECT id, name, filter, icon, "order" AS "order" FROM filters WHERE id = ?').get(id);
             if (!existing) {
                 return res.status(404).json({ success: false, error: 'filter not found' });
+            }
+
+            const hasIcon = req.body?.icon !== undefined;
+            let icon = existing.icon;
+            if (hasIcon) {
+                if (req.body.icon === null) {
+                    icon = null;
+                } else if (typeof req.body.icon !== 'string') {
+                    return res.status(400).json({ success: false, error: 'icon must be a string' });
+                } else {
+                    const trimmed = req.body.icon.trim();
+                    icon = trimmed ? trimmed : null;
+                    if (icon && icon.length > 16) {
+                        return res.status(400).json({ success: false, error: 'icon is too long' });
+                    }
+                }
             }
 
             const nextName = name || existing.name;
             const nextFilter = filter || existing.filter;
             const nextOrder = hasOrder ? parsedOrder : existing.order;
 
-            db.prepare('UPDATE filters SET name = ?, filter = ?, "order" = ? WHERE id = ?').run(nextName, nextFilter, nextOrder, id);
+            db.prepare('UPDATE filters SET name = ?, filter = ?, icon = ?, "order" = ? WHERE id = ?').run(nextName, nextFilter, icon, nextOrder, id);
 
-            res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, order: nextOrder } });
+            res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, icon, order: nextOrder } });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
