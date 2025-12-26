@@ -274,11 +274,6 @@
                             </div>
                             <div class="task-actions">
                                 <div class="task-action-buttons">
-                                    <button class="icon-btn small" type="button" aria-label="Show task" @click="showTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
-                                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path fill="currentColor" d="M12 5c-7.63 0-10 7-10 7s2.37 7 10 7 10-7 10-7-2.37-7-10-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
-                                        </svg>
-                                    </button>
                                     <button v-if="task.status === 'pending'" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
                                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                                             <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
@@ -611,25 +606,6 @@
                         @input="handleCompletionInput($event, 'modal.filterValue')"
                         @blur="handleCompletionBlur('modal.filterValue')"
                     >
-                </div>
-
-                <div
-                    v-if="completion.visible"
-                    class="completion-panel"
-                    role="listbox"
-                    aria-label="Completions"
-                >
-                    <div class="completion-hint">Tab to list, Up/Down to select, Enter to apply, Esc to cancel</div>
-                    <div
-                        v-for="(suggestion, idx) in completion.suggestions"
-                        :key="idx"
-                        class="completion-item"
-                        :class="{ active: idx === completion.selectedIndex }"
-                        role="option"
-                        :aria-selected="idx === completion.selectedIndex"
-                    >
-                        {{ suggestion }}
-                    </div>
                 </div>
             </div>
 
