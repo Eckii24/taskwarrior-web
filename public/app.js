@@ -151,7 +151,160 @@ class TaskQueryService {
         return list;
     }
 
-    async getTasks(filterOrReport) {
+    sortTasks(tasks, sortBy) {
+        const list = Array.isArray(tasks) ? tasks.slice() : [];
+        if (!sortBy) return this.sortByUrgency(list);
+
+        const getDateValue = (task, field) => {
+            const value = task?.[field];
+            if (!value) return 0;
+            const date = new Date(value);
+            return date.getTime();
+        };
+
+        const getStringValue = (task, field) => {
+            return String(task?.[field] || '').toLowerCase();
+        };
+
+        const getNumberValue = (task, field) => {
+            const num = Number(task?.[field]);
+            return Number.isFinite(num) ? num : 0;
+        };
+
+        const priorityOrder = { 'H': 3, 'M': 2, 'L': 1, '': 0 };
+        const getPriorityValue = (task) => {
+            const priority = String(task?.priority || '').toUpperCase();
+            return priorityOrder[priority] ?? 0;
+        };
+
+        list.sort((a, b) => {
+            let aVal, bVal;
+
+            switch (sortBy) {
+                case 'due':
+                    aVal = getDateValue(a, 'due');
+                    bVal = getDateValue(b, 'due');
+                    if (aVal === 0 && bVal === 0) return 0;
+                    if (aVal === 0) return 1;
+                    if (bVal === 0) return -1;
+                    return aVal - bVal;
+
+                case 'scheduled':
+                    aVal = getDateValue(a, 'scheduled');
+                    bVal = getDateValue(b, 'scheduled');
+                    if (aVal === 0 && bVal === 0) return 0;
+                    if (aVal === 0) return 1;
+                    if (bVal === 0) return -1;
+                    return aVal - bVal;
+
+                case 'entry':
+                    aVal = getDateValue(a, 'entry');
+                    bVal = getDateValue(b, 'entry');
+                    return bVal - aVal; // Most recent first
+
+                case 'modified':
+                    aVal = getDateValue(a, 'modified');
+                    bVal = getDateValue(b, 'modified');
+                    return bVal - aVal; // Most recent first
+
+                case 'description':
+                    aVal = getStringValue(a, 'description');
+                    bVal = getStringValue(b, 'description');
+                    return aVal.localeCompare(bVal);
+
+                case 'project':
+                    aVal = getStringValue(a, 'project');
+                    bVal = getStringValue(b, 'project');
+                    if (!aVal && !bVal) return 0;
+                    if (!aVal) return 1;
+                    if (!bVal) return -1;
+                    return aVal.localeCompare(bVal);
+
+                case 'priority':
+                    aVal = getPriorityValue(a);
+                    bVal = getPriorityValue(b);
+                    return bVal - aVal; // High priority first
+
+                case 'urgency':
+                default:
+                    const urgencyFor = (task) => {
+                        const status = String(task?.status || '').toLowerCase();
+                        if (status === 'completed' || status === 'deleted') return 0;
+                        const num = typeof task?.urgency === 'number' ? task.urgency : Number(task?.urgency);
+                        return Number.isFinite(num) ? num : 0;
+                    };
+                    return urgencyFor(b) - urgencyFor(a);
+            }
+        });
+
+        return list;
+    }
+
+    groupTasks(tasks, groupBy) {
+        if (!groupBy || groupBy === 'none') {
+            return [{ key: null, name: null, tasks }];
+        }
+
+        const groups = new Map();
+
+        for (const task of tasks) {
+            let groupKeys = [];
+
+            switch (groupBy) {
+                case 'project':
+                    groupKeys = [task?.project || '(No Project)'];
+                    break;
+
+                case 'priority':
+                    groupKeys = [task?.priority || '(No Priority)'];
+                    break;
+
+                case 'status':
+                    groupKeys = [task?.status || 'unknown'];
+                    break;
+
+                case 'tags':
+                    if (Array.isArray(task?.tags) && task.tags.length > 0) {
+                        groupKeys = task.tags;
+                    } else {
+                        groupKeys = ['(No Tags)'];
+                    }
+                    break;
+
+                default:
+                    // For UDAs or other fields, use the field value directly
+                    groupKeys = [task?.[groupBy] || `(No ${groupBy})`];
+                    break;
+            }
+
+            for (const groupKey of groupKeys) {
+                if (!groups.has(groupKey)) {
+                    groups.set(groupKey, []);
+                }
+                groups.get(groupKey).push(task);
+            }
+        }
+
+        const result = [];
+        for (const [key, groupTasks] of groups.entries()) {
+            result.push({
+                key,
+                name: String(key),
+                tasks: groupTasks,
+            });
+        }
+
+        // Sort groups alphabetically by name
+        result.sort((a, b) => {
+            const aName = String(a.name || '');
+            const bName = String(b.name || '');
+            return aName.localeCompare(bName);
+        });
+
+        return result;
+    }
+
+    async getTasks(filterOrReport, sortBy = null, groupBy = null) {
         const reportMap = {
             list: 'status:pending',
             pending: 'status:pending',
@@ -176,7 +329,8 @@ class TaskQueryService {
 
         try {
             const tasks = JSON.parse(rawOutput);
-            return this.sortByUrgency(tasks);
+            const sorted = this.sortTasks(tasks, sortBy);
+            return { tasks: sorted, groups: this.groupTasks(sorted, groupBy) };
         } catch (error) {
             throw new Error(`Failed to parse task export JSON: ${error.message}`);
         }
@@ -290,14 +444,14 @@ function createTaskwarriorApp({
             loadedTaskrcText: '',
 
             builtinFilters: {
-                today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true },
-                next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true },
-                all: { key: 'all', name: 'All', filter: '', visible: true },
+                today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, sort_by: null, group_by: null },
+                next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, sort_by: null, group_by: null },
+                all: { key: 'all', name: 'All', filter: '', visible: true, sort_by: null, group_by: null },
             },
             settingsBuiltinDraft: {
-                today: { name: 'Today', filter: 'due:today status:pending', visible: true },
-                next: { name: 'Next', filter: 'status:pending limit:page', visible: true },
-                all: { name: 'All', filter: '', visible: true },
+                today: { name: 'Today', filter: 'due:today status:pending', visible: true, sort_by: null, group_by: null },
+                next: { name: 'Next', filter: 'status:pending limit:page', visible: true, sort_by: null, group_by: null },
+                all: { name: 'All', filter: '', visible: true, sort_by: null, group_by: null },
             },
 
              filters: [],
@@ -307,9 +461,13 @@ function createTaskwarriorApp({
                  filterIcons: ['⭐️', '🏠', '💼', '📌', '🧠', '🛒', '📅', '✅', '🔥', '🧹', '💡', '🧾', '📚', '🔁', '🎯', '🧰', '🔒', '🌱', '💤', '🧪'],
              },
 
+             currentSortBy: null,
+             currentGroupBy: null,
+
 
             selectedView: { type: 'builtin', key: 'next' },
             tasks: [],
+            taskGroups: [],
             emptyMessage: 'Loading…',
             mainMode: 'tasks',
             mainOutput: '',
@@ -434,6 +592,9 @@ function createTaskwarriorApp({
                  return 0;
              });
              return list;
+         },
+         hasSortGroupSettings() {
+             return Boolean(this.currentSortBy || this.currentGroupBy);
          },
     },
         async mounted() {
@@ -1002,12 +1163,16 @@ function createTaskwarriorApp({
                             name: String(entry?.name || key),
                             filter: String(entry?.filter ?? ''),
                             visible: Boolean(entry?.visible),
+                            sort_by: entry?.sort_by || null,
+                            group_by: entry?.group_by || null,
                         };
 
                         draft[key] = {
                             name: next[key].name,
                             filter: next[key].filter,
                             visible: next[key].visible,
+                            sort_by: next[key].sort_by,
+                            group_by: next[key].group_by,
                         };
                     }
 
@@ -1089,6 +1254,7 @@ function createTaskwarriorApp({
             try {
                 if (this.selectedView.type === 'search') {
                     this.tasks = [];
+                    this.taskGroups = [];
                     this.emptyMessage = 'Use Search to load tasks.';
                     return;
                 }
@@ -1097,7 +1263,11 @@ function createTaskwarriorApp({
                     const key = String(this.selectedView.key || '').trim();
                     const builtin = this.builtinFilters[key];
                     const query = builtin ? builtin.filter : (key === 'next' ? 'next' : key === 'today' ? 'due:today status:pending' : 'all');
-                    this.tasks = await queryService.getTasks(query);
+                    this.currentSortBy = builtin?.sort_by || null;
+                    this.currentGroupBy = builtin?.group_by || null;
+                    const result = await queryService.getTasks(query, this.currentSortBy, this.currentGroupBy);
+                    this.tasks = result.tasks;
+                    this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                     return;
                 }
@@ -1106,14 +1276,20 @@ function createTaskwarriorApp({
                     const filter = this.filters.find((f) => f.id === this.selectedView.id);
                     if (!filter) {
                         this.tasks = [];
+                        this.taskGroups = [];
                         this.emptyMessage = 'Filter not found.';
                         return;
                     }
-                    this.tasks = await queryService.getTasks(filter.filter);
+                    this.currentSortBy = filter?.sort_by || null;
+                    this.currentGroupBy = filter?.group_by || null;
+                    const result = await queryService.getTasks(filter.filter, this.currentSortBy, this.currentGroupBy);
+                    this.tasks = result.tasks;
+                    this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                 }
             } catch (error) {
                 this.tasks = [];
+                this.taskGroups = [];
                 this.emptyMessage = 'Error loading tasks.';
                 this.showToast(String(error?.message || error), 'error');
             }
@@ -1126,18 +1302,68 @@ function createTaskwarriorApp({
                 const term = String(this.lastSearch.term || '').trim();
                 if (!term) {
                     this.tasks = [];
+                    this.taskGroups = [];
                     this.emptyMessage = 'Use Search to load tasks.';
                     return;
                 }
 
                 const prefix = this.lastSearch.pendingOnly ? 'status:pending ' : '';
                 this.mainMode = 'tasks';
-                this.tasks = await queryService.getTasks(`${prefix}${term}`);
+                const result = await queryService.getTasks(`${prefix}${term}`, this.currentSortBy, this.currentGroupBy);
+                this.tasks = result.tasks;
+                this.taskGroups = result.groups;
                 this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                 return;
             }
 
             await this.loadTasksForSelection();
+        },
+
+        async updateSortBy(sortBy) {
+            this.currentSortBy = sortBy || null;
+            await this.saveSortGroupSettings();
+            await this.refreshCurrentPanel();
+        },
+
+        async updateGroupBy(groupBy) {
+            this.currentGroupBy = groupBy || null;
+            await this.saveSortGroupSettings();
+            await this.refreshCurrentPanel();
+        },
+
+        async resetSortGroupSettings() {
+            this.currentSortBy = null;
+            this.currentGroupBy = null;
+            await this.saveSortGroupSettings();
+            await this.refreshCurrentPanel();
+        },
+
+        async saveSortGroupSettings() {
+            try {
+                if (this.selectedView.type === 'builtin') {
+                    const key = String(this.selectedView.key || '').trim();
+                    const result = await apiClient.updateBuiltinFilter(key, {
+                        sort_by: this.currentSortBy || '',
+                        group_by: this.currentGroupBy || '',
+                    });
+                    if (result.success) {
+                        await this.refreshBuiltinFilters();
+                    }
+                } else if (this.selectedView.type === 'filter') {
+                    const filter = this.filters.find((f) => f.id === this.selectedView.id);
+                    if (filter) {
+                        const result = await apiClient.updateFilter(filter.id, {
+                            sort_by: this.currentSortBy || '',
+                            group_by: this.currentGroupBy || '',
+                        });
+                        if (result.success) {
+                            await this.refreshFilters();
+                        }
+                    }
+                }
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error');
+            }
         },
 
         openAddTask() {
@@ -1749,7 +1975,9 @@ function createTaskwarriorApp({
 
                 const prefix = this.searchPendingOnly ? 'status:pending ' : '';
                 this.mainMode = 'tasks';
-                this.tasks = await queryService.getTasks(`${prefix}${term}`);
+                const result = await queryService.getTasks(`${prefix}${term}`, this.currentSortBy, this.currentGroupBy);
+                this.tasks = result.tasks;
+                this.taskGroups = result.groups;
                 this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                 this.closeModal();
                 return;
