@@ -399,11 +399,25 @@ a:hover {
     border: 1px solid var(--line);
     border-radius: 12px;
     background: rgba(17, 17, 27, 0.18);
+    box-shadow: 0 6px 24px rgba(17, 17, 27, 0.45);
 }
 
 .settings-section-title {
     font-weight: 800;
     margin-bottom: 10px;
+}
+
+.settings-section-title.settings-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.settings-section-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
 }
 
 .settings-row {

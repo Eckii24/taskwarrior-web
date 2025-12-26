@@ -227,14 +227,8 @@
 
         <main class="main">
             <section class="main-content">
-                    <div v-if="showTaskrc" class="taskrc-main">
-                    <div class="taskrc-main-header">
-                        <div class="taskrc-main-title">Settings</div>
-                        <div class="taskrc-actions">
-                            <button class="btn small" type="button" @click="loadTaskrc">Reload</button>
-                            <button class="btn small primary" type="button" @click="saveTaskrc" :disabled="!taskrcDirty">Save</button>
-                        </div>
-                    </div>
+                <div v-if="showTaskrc" class="settings-view">
+                    <div class="tasks-heading">{{ currentTitle }}</div>
 
                     <div class="settings-section">
                         <div class="settings-section-title">Built-in filters</div>
@@ -299,7 +293,17 @@
                         </div>
                     </div>
 
-                    <textarea class="taskrc-editor" v-model="taskrcText" spellcheck="false"></textarea>
+                    <div class="settings-section">
+                        <div class="settings-section-title settings-section-header">
+                            <span>Taskrc</span>
+                            <div class="settings-section-actions">
+                                <button class="btn small" type="button" @click="loadTaskrc">Reload</button>
+                                <button class="btn small primary" type="button" @click="saveTaskrc" :disabled="!taskrcDirty">Save</button>
+                            </div>
+                        </div>
+
+                        <textarea class="taskrc-editor" v-model="taskrcText" spellcheck="false"></textarea>
+                    </div>
                 </div>
 
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
