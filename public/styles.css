@@ -761,6 +761,91 @@ a:hover {
     gap: 16px;
 }
 
+.task-name-input {
+    font-size: 1.1rem;
+    font-weight: 500;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    padding: 12px 0;
+    background: transparent;
+}
+
+.task-name-input:focus {
+    border-bottom-color: var(--accent);
+}
+
+.task-attributes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.attribute-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.attribute-btn:hover {
+    background: var(--hover);
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.attribute-btn.has-value {
+    background: var(--panel-2);
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.attribute-icon {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.clear-icon {
+    width: 14px;
+    height: 14px;
+    fill: var(--muted);
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.clear-icon:hover {
+    opacity: 1;
+    fill: var(--danger);
+}
+
+.attribute-dropdown {
+    margin-top: 8px;
+    padding: 12px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+}
+
+.attribute-dropdown .text-input {
+    margin-bottom: 0;
+}
+
+.attribute-dropdown .completion-panel {
+    margin-top: 8px;
+}
+
 .modal-form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -832,5 +917,14 @@ a:hover {
 @media (max-width: 768px) {
     .modal-form-row {
         grid-template-columns: 1fr;
+    }
+
+    .task-attributes {
+        gap: 6px;
+    }
+
+    .attribute-btn {
+        font-size: 0.85rem;
+        padding: 6px 10px;
     }
 }

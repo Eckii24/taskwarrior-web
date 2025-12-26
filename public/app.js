@@ -233,6 +233,9 @@ createApp({
                 originalTags: '',
                 originalPriority: '',
                 originalDue: '',
+                // Attribute dropdown state
+                activeAttributeDropdown: null,
+                attributeInputValue: '',
             },
 
             searchPendingOnly: true,
@@ -804,7 +807,236 @@ createApp({
             this.modal.originalTags = '';
             this.modal.originalPriority = '';
             this.modal.originalDue = '';
+            this.modal.activeAttributeDropdown = null;
+            this.modal.attributeInputValue = '';
             this.resetCompletion();
+        },
+
+        toggleAttributeDropdown(attributeName) {
+            if (this.modal.activeAttributeDropdown === attributeName) {
+                this.modal.activeAttributeDropdown = null;
+                this.modal.attributeInputValue = '';
+                this.resetCompletion();
+            } else {
+                this.modal.activeAttributeDropdown = attributeName;
+                this.modal.attributeInputValue = this.modal[attributeName] || '';
+                this.resetCompletion();
+                this.$nextTick(() => {
+                    const input = this.$refs.attributeInput;
+                    if (input) {
+                        input.focus();
+                        // Trigger initial completion
+                        const event = { target: input };
+                        this.handleAttributeInput(event);
+                    }
+                });
+            }
+        },
+
+        clearAttribute(attributeName) {
+            this.modal[attributeName] = '';
+            if (this.modal.activeAttributeDropdown === attributeName) {
+                this.modal.activeAttributeDropdown = null;
+                this.modal.attributeInputValue = '';
+                this.resetCompletion();
+            }
+        },
+
+        getAttributePlaceholder(attributeName) {
+            const placeholders = {
+                due: 'e.g., tomorrow, eom, 2024-12-31',
+                priority: 'H, M, L',
+                project: 'Select or type project name',
+                tags: 'Add tags (comma separated)'
+            };
+            return placeholders[attributeName] || '';
+        },
+
+        async handleAttributeKeydown(event) {
+            const inputEl = event.target;
+            if (!inputEl) return;
+
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                this.modal.activeAttributeDropdown = null;
+                this.modal.attributeInputValue = '';
+                this.resetCompletion();
+                return;
+            }
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (this.completion.visible && this.completion.suggestions.length > 0) {
+                    const suggestion = this.completion.suggestions[this.completion.selectedIndex];
+                    if (suggestion) {
+                        this.selectAttributeSuggestion(suggestion);
+                    }
+                } else {
+                    // Apply the current value
+                    this.modal[this.modal.activeAttributeDropdown] = this.modal.attributeInputValue;
+                    this.modal.activeAttributeDropdown = null;
+                    this.modal.attributeInputValue = '';
+                    this.resetCompletion();
+                }
+                return;
+            }
+
+            const completionKeys = ['Tab', 'ArrowDown', 'ArrowUp'];
+            if (!completionKeys.includes(event.key)) return;
+
+            const text = String(this.modal.attributeInputValue || '');
+            const cursor = inputEl.selectionStart;
+            const tokenInfo = getTokenAtCursor(text, cursor);
+
+            await this.updateAttributeCompletion(this.modal.activeAttributeDropdown, tokenInfo);
+
+            if (this.completion.suggestions.length === 0) return;
+
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                this.completion.visible = true;
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const count = this.completion.suggestions.length;
+                this.completion.selectedIndex = (this.completion.selectedIndex + delta + count) % count;
+                return;
+            }
+
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                if (this.completion.suggestions.length === 1) {
+                    this.selectAttributeSuggestion(this.completion.suggestions[0]);
+                } else {
+                    this.completion.visible = true;
+                }
+            }
+        },
+
+        async handleAttributeInput(event) {
+            const inputEl = event.target;
+            if (!inputEl || typeof inputEl.selectionStart !== 'number') {
+                this.resetCompletion();
+                return;
+            }
+
+            const text = String(this.modal.attributeInputValue || '');
+            const cursor = inputEl.selectionStart;
+            const tokenInfo = getTokenAtCursor(text, cursor);
+
+            await this.updateAttributeCompletion(this.modal.activeAttributeDropdown, tokenInfo);
+        },
+
+        handleAttributeBlur() {
+            // Small delay to allow clicking on suggestions
+            setTimeout(() => {
+                if (this.modal.activeAttributeDropdown && this.modal.attributeInputValue !== undefined) {
+                    this.modal[this.modal.activeAttributeDropdown] = this.modal.attributeInputValue;
+                    this.modal.activeAttributeDropdown = null;
+                    this.modal.attributeInputValue = '';
+                    this.resetCompletion();
+                }
+            }, 200);
+        },
+
+        selectAttributeSuggestion(suggestion) {
+            if (!this.modal.activeAttributeDropdown) return;
+            
+            this.modal[this.modal.activeAttributeDropdown] = suggestion;
+            this.modal.activeAttributeDropdown = null;
+            this.modal.attributeInputValue = '';
+            this.resetCompletion();
+        },
+
+        async updateAttributeCompletion(attributeName, tokenInfo) {
+            const token = tokenInfo.token || '';
+            
+            if (attributeName === 'project') {
+                const result = await apiClient.complete(`project:${token}`);
+                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+                const projectSuggestions = suggestions.map(s => s.replace(/^project:/, ''));
+                
+                if (projectSuggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                this.completion = {
+                    field: 'modal.attributeInputValue',
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions: projectSuggestions,
+                    selectedIndex: 0,
+                    visible: true,
+                };
+                return projectSuggestions;
+            }
+            
+            if (attributeName === 'tags') {
+                const result = await apiClient.complete(`+${token}`);
+                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+                const tagSuggestions = suggestions.map(s => s.replace(/^\+/, ''));
+                
+                if (tagSuggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                this.completion = {
+                    field: 'modal.attributeInputValue',
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions: tagSuggestions,
+                    selectedIndex: 0,
+                    visible: true,
+                };
+                return tagSuggestions;
+            }
+            
+            if (attributeName === 'priority') {
+                const priorities = ['H', 'M', 'L'];
+                const suggestions = priorities.filter(p => p.toLowerCase().startsWith(token.toLowerCase()));
+                
+                if (suggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                this.completion = {
+                    field: 'modal.attributeInputValue',
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions,
+                    selectedIndex: 0,
+                    visible: true,
+                };
+                return suggestions;
+            }
+            
+            if (attributeName === 'due') {
+                const dueSuggestions = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                const suggestions = dueSuggestions.filter(d => d.startsWith(token.toLowerCase()));
+                
+                if (suggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                this.completion = {
+                    field: 'modal.attributeInputValue',
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions,
+                    selectedIndex: 0,
+                    visible: true,
+                };
+                return suggestions;
+            }
+
+            this.resetCompletion();
+            return [];
         },
 
         async submitModal() {

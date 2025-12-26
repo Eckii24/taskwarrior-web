@@ -345,202 +345,216 @@
 
                 <div v-else-if="modal.type === 'add'" class="modal-form">
                     <div class="field">
-                        <label>Task name</label>
                         <input
                             ref="modalInput"
                             type="text"
                             v-model="modal.description"
-                            class="text-input"
+                            class="text-input task-name-input"
                             placeholder="Task name"
                             autocomplete="off"
                             @keydown.enter="submitModal"
                         >
                     </div>
 
-                    <div class="modal-form-row">
-                        <div class="field field-half">
-                            <label>
-                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
-                                </svg>
-                                Due date
-                            </label>
-                            <div class="dropdown-container">
-                                <input
-                                    type="text"
-                                    v-model="modal.due"
-                                    class="text-input"
-                                    placeholder="e.g., tomorrow, eom, 2024-12-31"
-                                    autocomplete="off"
-                                    @keydown="handleCompletionKeydown($event, 'modal.due', null)"
-                                    @input="handleCompletionInput($event, 'modal.due')"
-                                    @blur="handleCompletionBlur('modal.due')"
-                                >
-                            </div>
-                        </div>
+                    <div class="task-attributes">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.due }"
+                            @click="toggleAttributeDropdown('due')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                            </svg>
+                            <span>{{ modal.due || 'Due date' }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
 
-                        <div class="field field-half">
-                            <label>
-                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
-                                </svg>
-                                Priority
-                            </label>
-                            <div class="dropdown-container">
-                                <input
-                                    type="text"
-                                    v-model="modal.priority"
-                                    class="text-input"
-                                    placeholder="H, M, L"
-                                    autocomplete="off"
-                                    @keydown="handleCompletionKeydown($event, 'modal.priority', null)"
-                                    @input="handleCompletionInput($event, 'modal.priority')"
-                                    @blur="handleCompletionBlur('modal.priority')"
-                                >
-                            </div>
-                        </div>
-                    </div>
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.priority }"
+                            @click="toggleAttributeDropdown('priority')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                            </svg>
+                            <span>{{ modal.priority || 'Priority' }}</span>
+                            <svg v-if="modal.priority" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('priority')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
 
-                    <div class="field">
-                        <label>
-                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.project }"
+                            @click="toggleAttributeDropdown('project')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
                             </svg>
-                            Project
-                        </label>
-                        <div class="dropdown-container">
-                            <input
-                                type="text"
-                                v-model="modal.project"
-                                class="text-input"
-                                placeholder="Select or type project name"
-                                autocomplete="off"
-                                @keydown="handleCompletionKeydown($event, 'modal.project', null)"
-                                @input="handleCompletionInput($event, 'modal.project')"
-                                @blur="handleCompletionBlur('modal.project')"
-                            >
-                        </div>
-                    </div>
+                            <span>{{ modal.project || 'Project' }}</span>
+                            <svg v-if="modal.project" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('project')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
 
-                    <div class="field">
-                        <label>
-                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.tags }"
+                            @click="toggleAttributeDropdown('tags')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
                             </svg>
-                            Tags
-                        </label>
-                        <div class="dropdown-container">
-                            <input
-                                type="text"
-                                v-model="modal.tags"
-                                class="text-input"
-                                placeholder="Add tags (comma separated)"
-                                autocomplete="off"
-                                @keydown="handleCompletionKeydown($event, 'modal.tags', null)"
-                                @input="handleCompletionInput($event, 'modal.tags')"
-                                @blur="handleCompletionBlur('modal.tags')"
+                            <span>{{ modal.tags || 'Tags' }}</span>
+                            <svg v-if="modal.tags" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('tags')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div v-if="modal.activeAttributeDropdown" class="attribute-dropdown">
+                        <input
+                            ref="attributeInput"
+                            type="text"
+                            v-model="modal.attributeInputValue"
+                            class="text-input"
+                            :placeholder="getAttributePlaceholder(modal.activeAttributeDropdown)"
+                            autocomplete="off"
+                            @keydown="handleAttributeKeydown($event)"
+                            @input="handleAttributeInput($event)"
+                            @blur="handleAttributeBlur"
+                        >
+                        <div
+                            v-if="completion.visible && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="selectAttributeSuggestion(suggestion)"
                             >
+                                {{ suggestion }}
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div v-else-if="modal.type === 'edit'" class="modal-form">
                     <div class="field">
-                        <label>Task name</label>
                         <input
                             ref="modalInput"
                             type="text"
                             v-model="modal.description"
-                            class="text-input"
+                            class="text-input task-name-input"
                             placeholder="Task name"
                             autocomplete="off"
                             @keydown.enter="submitModal"
                         >
                     </div>
 
-                    <div class="modal-form-row">
-                        <div class="field field-half">
-                            <label>
-                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
-                                </svg>
-                                Due date
-                            </label>
-                            <div class="dropdown-container">
-                                <input
-                                    type="text"
-                                    v-model="modal.due"
-                                    class="text-input"
-                                    placeholder="e.g., tomorrow, eom, 2024-12-31"
-                                    autocomplete="off"
-                                    @keydown="handleCompletionKeydown($event, 'modal.due', null)"
-                                    @input="handleCompletionInput($event, 'modal.due')"
-                                    @blur="handleCompletionBlur('modal.due')"
-                                >
-                            </div>
-                        </div>
+                    <div class="task-attributes">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.due }"
+                            @click="toggleAttributeDropdown('due')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                            </svg>
+                            <span>{{ modal.due || 'Due date' }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
 
-                        <div class="field field-half">
-                            <label>
-                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
-                                </svg>
-                                Priority
-                            </label>
-                            <div class="dropdown-container">
-                                <input
-                                    type="text"
-                                    v-model="modal.priority"
-                                    class="text-input"
-                                    placeholder="H, M, L"
-                                    autocomplete="off"
-                                    @keydown="handleCompletionKeydown($event, 'modal.priority', null)"
-                                    @input="handleCompletionInput($event, 'modal.priority')"
-                                    @blur="handleCompletionBlur('modal.priority')"
-                                >
-                            </div>
-                        </div>
-                    </div>
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.priority }"
+                            @click="toggleAttributeDropdown('priority')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                            </svg>
+                            <span>{{ modal.priority || 'Priority' }}</span>
+                            <svg v-if="modal.priority" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('priority')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
 
-                    <div class="field">
-                        <label>
-                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.project }"
+                            @click="toggleAttributeDropdown('project')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
                             </svg>
-                            Project
-                        </label>
-                        <div class="dropdown-container">
-                            <input
-                                type="text"
-                                v-model="modal.project"
-                                class="text-input"
-                                placeholder="Select or type project name"
-                                autocomplete="off"
-                                @keydown="handleCompletionKeydown($event, 'modal.project', null)"
-                                @input="handleCompletionInput($event, 'modal.project')"
-                                @blur="handleCompletionBlur('modal.project')"
-                            >
-                        </div>
-                    </div>
+                            <span>{{ modal.project || 'Project' }}</span>
+                            <svg v-if="modal.project" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('project')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
 
-                    <div class="field">
-                        <label>
-                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.tags }"
+                            @click="toggleAttributeDropdown('tags')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
                             </svg>
-                            Tags
-                        </label>
-                        <div class="dropdown-container">
-                            <input
-                                type="text"
-                                v-model="modal.tags"
-                                class="text-input"
-                                placeholder="Add tags (comma separated)"
-                                autocomplete="off"
-                                @keydown="handleCompletionKeydown($event, 'modal.tags', null)"
-                                @input="handleCompletionInput($event, 'modal.tags')"
-                                @blur="handleCompletionBlur('modal.tags')"
+                            <span>{{ modal.tags || 'Tags' }}</span>
+                            <svg v-if="modal.tags" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('tags')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div v-if="modal.activeAttributeDropdown" class="attribute-dropdown">
+                        <input
+                            ref="attributeInput"
+                            type="text"
+                            v-model="modal.attributeInputValue"
+                            class="text-input"
+                            :placeholder="getAttributePlaceholder(modal.activeAttributeDropdown)"
+                            autocomplete="off"
+                            @keydown="handleAttributeKeydown($event)"
+                            @input="handleAttributeInput($event)"
+                            @blur="handleAttributeBlur"
+                        >
+                        <div
+                            v-if="completion.visible && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="selectAttributeSuggestion(suggestion)"
                             >
+                                {{ suggestion }}
+                            </div>
                         </div>
                     </div>
 
