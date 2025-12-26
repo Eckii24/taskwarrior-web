@@ -161,11 +161,14 @@ async function ensureSettingsDb() {
 }
 
 // Retrieve the full taskrc as plain text
-app.get('/api/taskrc', asyncHandler(async (req, res) => {
-    await ensureTaskrcExists();
-    const content = await fs.readFile(TASKRC_PATH, { encoding: 'utf8' });
-    res.type('text/plain').send(content);
-}));
+app.get('/api/taskrc', 
+    apiLimiter,
+    asyncHandler(async (req, res) => {
+        await ensureTaskrcExists();
+        const content = await fs.readFile(TASKRC_PATH, { encoding: 'utf8' });
+        res.type('text/plain').send(content);
+    })
+);
 
 // Overwrite the full taskrc (plain text)
 app.put('/api/taskrc', 
@@ -233,11 +236,14 @@ async function cachedCompletionLines(cacheKey, argsArray, ttlMs = 3000) {
 }
 
 // Settings: custom filters
-app.get('/api/filters', asyncHandler(async (req, res) => {
-    const db = await ensureSettingsDb();
-    const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
-    res.json({ success: true, filters });
-}));
+app.get('/api/filters', 
+    apiLimiter,
+    asyncHandler(async (req, res) => {
+        const db = await ensureSettingsDb();
+        const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
+        res.json({ success: true, filters });
+    })
+);
 
 app.post('/api/filters', 
     writeLimiter,
