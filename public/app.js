@@ -113,6 +113,22 @@ class TaskApiClient {
         });
         return await response.json();
     }
+
+    async getBuiltinFilters() {
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
+        return await response.json();
+    }
+
+    async updateBuiltinFilter(key, payload) {
+        this.requireFetch();
+        const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters/${encodeURIComponent(String(key))}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        return await response.json();
+    }
 }
 
 class TaskQueryService {
@@ -144,7 +160,9 @@ class TaskQueryService {
             next: 'status:pending limit:page',
         };
 
-        const normalized = String(filterOrReport || '').trim() || 'next';
+        // Preserve "" as a valid filter expression (meaning "export all").
+        // Only default to "next" when no argument was provided.
+        const normalized = filterOrReport === undefined ? 'next' : String(filterOrReport || '').trim();
         const actualFilter = reportMap[normalized] !== undefined ? reportMap[normalized] : normalized;
         const args = actualFilter ? `${actualFilter} export` : 'export';
 
@@ -271,6 +289,17 @@ function createTaskwarriorApp({
             taskrcText: '',
             loadedTaskrcText: '',
 
+            builtinFilters: {
+                today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true },
+                next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true },
+                all: { key: 'all', name: 'All', filter: '', visible: true },
+            },
+            settingsBuiltinDraft: {
+                today: { name: 'Today', filter: 'due:today status:pending', visible: true },
+                next: { name: 'Next', filter: 'status:pending limit:page', visible: true },
+                all: { name: 'All', filter: '', visible: true },
+            },
+
             filters: [],
             draggedFilterId: null,
 
@@ -360,7 +389,10 @@ function createTaskwarriorApp({
             if (this.showTaskrc) return 'Settings';
             if (this.selectedView.type === 'search') return 'Search';
             if (this.selectedView.type === 'builtin') {
-                return this.selectedView.key === 'next' ? 'Next' : 'All';
+                const key = String(this.selectedView.key || '').trim();
+                const builtin = this.builtinFilters[key];
+                if (builtin?.name) return builtin.name;
+                return key === 'next' ? 'Next' : key === 'today' ? 'Today' : 'All';
             }
             if (this.selectedView.type === 'filter') {
                 const filter = this.filters.find((f) => f.id === this.selectedView.id);
@@ -394,11 +426,12 @@ function createTaskwarriorApp({
              return list;
          },
     },
-    async mounted() {
+        async mounted() {
         window.addEventListener('keydown', this.onGlobalKeydown);
 
         const restoredView = this.readPersistedSelectedView();
 
+        await this.refreshBuiltinFilters();
         await this.refreshFilters();
         this.applyRestoredSelectedView(restoredView);
 
@@ -462,8 +495,13 @@ function createTaskwarriorApp({
             if (!candidateView) return;
 
             if (candidateView.type === 'builtin') {
-                this.selectedView = { type: 'builtin', key: candidateView.key || 'next' };
-                this.showTaskrc = false;
+                const key = String(candidateView.key || 'next');
+                const builtin = this.builtinFilters[key];
+                const isHidden = builtin && builtin.visible === false;
+                if (!isHidden) {
+                    this.selectedView = { type: 'builtin', key };
+                    this.showTaskrc = false;
+                }
             } else if (candidateView.type === 'filter') {
                 const exists = this.filters.some((f) => f.id === candidateView.id);
                 if (exists) {
@@ -592,6 +630,8 @@ function createTaskwarriorApp({
             this.mainOutput = '';
             this.resetCompletion();
             this.toggleDrawer(false);
+
+            this.refreshBuiltinFilters();
 
             if (this.taskrcText === '' && this.loadedTaskrcText === '') {
                 this.loadTaskrc();
@@ -936,6 +976,53 @@ function createTaskwarriorApp({
             }, 150);
         },
 
+        async refreshBuiltinFilters() {
+            try {
+                const result = await apiClient.getBuiltinFilters();
+                if (result.success && Array.isArray(result.filters)) {
+                    const next = { ...this.builtinFilters };
+                    const draft = { ...this.settingsBuiltinDraft };
+
+                    for (const entry of result.filters) {
+                        const key = String(entry?.key || '').trim();
+                        if (!key) continue;
+
+                        next[key] = {
+                            key,
+                            name: String(entry?.name || key),
+                            filter: String(entry?.filter ?? ''),
+                            visible: Boolean(entry?.visible),
+                        };
+
+                        draft[key] = {
+                            name: next[key].name,
+                            filter: next[key].filter,
+                            visible: next[key].visible,
+                        };
+                    }
+
+                    this.builtinFilters = next;
+                    this.settingsBuiltinDraft = draft;
+
+                    if (this.selectedView.type === 'builtin') {
+                        const selectedKey = String(this.selectedView.key || '').trim();
+                        const selected = next[selectedKey];
+                        if (selected && selected.visible === false) {
+                            const fallbackKey = ['today', 'next', 'all'].find((k) => next[k] && next[k].visible !== false) || 'next';
+                            this.selectedView = { type: 'builtin', key: fallbackKey };
+                            this.persistSelectedView(this.selectedView);
+
+                            if (!this.showTaskrc) {
+                                await this.loadTasksForSelection();
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // ignore
+            }
+        },
+
         async refreshFilters() {
             try {
                 const result = await apiClient.getFilters();
@@ -954,8 +1041,12 @@ function createTaskwarriorApp({
         },
 
         selectBuiltin(key) {
+            const normalizedKey = String(key || '').trim();
+            const builtin = this.builtinFilters[normalizedKey];
+            if (builtin && builtin.visible === false) return;
+
             this.showTaskrc = false;
-            this.selectedView = { type: 'builtin', key };
+            this.selectedView = { type: 'builtin', key: normalizedKey };
             this.persistSelectedView(this.selectedView);
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
@@ -993,8 +1084,9 @@ function createTaskwarriorApp({
                 }
 
                 if (this.selectedView.type === 'builtin') {
-                    const key = this.selectedView.key;
-                    const query = key === 'next' ? 'next' : 'all';
+                    const key = String(this.selectedView.key || '').trim();
+                    const builtin = this.builtinFilters[key];
+                    const query = builtin ? builtin.filter : (key === 'next' ? 'next' : key === 'today' ? 'due:today status:pending' : 'all');
                     this.tasks = await queryService.getTasks(query);
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                     return;
@@ -1941,6 +2033,54 @@ function createTaskwarriorApp({
             } catch (error) {
                 this.showToast(`Error saving taskrc: ${error.message}`, 'error');
             }
+        },
+
+        async saveBuiltinFilters() {
+            const keys = ['today', 'next', 'all'];
+
+            try {
+                for (const key of keys) {
+                    const draft = this.settingsBuiltinDraft[key];
+                    if (!draft) continue;
+
+                    const payload = {
+                        name: String(draft.name || '').trim(),
+                        filter: String(draft.filter ?? ''),
+                        visible: Boolean(draft.visible),
+                    };
+
+                    const result = await apiClient.updateBuiltinFilter(key, payload);
+                    if (!result?.success) {
+                        throw new Error(result?.error || `Failed to save built-in filter: ${key}`);
+                    }
+                }
+
+                await this.refreshBuiltinFilters();
+                this.showToast('Saved filter settings', 'success');
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error');
+            }
+        },
+
+        toggleBuiltinVisibility(key) {
+            const k = String(key || '').trim();
+            if (!k || !this.settingsBuiltinDraft[k]) return;
+            this.settingsBuiltinDraft[k].visible = !this.settingsBuiltinDraft[k].visible;
+        },
+
+        resetBuiltinSettingsDraft() {
+            const keys = ['today', 'next', 'all'];
+            const next = { ...this.settingsBuiltinDraft };
+            for (const key of keys) {
+                const current = this.builtinFilters[key];
+                if (!current) continue;
+                next[key] = {
+                    name: current.name,
+                    filter: current.filter,
+                    visible: current.visible,
+                };
+            }
+            this.settingsBuiltinDraft = next;
         },
     },
 });

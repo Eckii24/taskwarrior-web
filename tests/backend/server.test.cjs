@@ -130,6 +130,47 @@ describe('Backend API (supertest)', () => {
         expect(missingDelete.body.success).toBe(false);
     });
 
+    test('builtin filters API (seed + update)', async () => {
+        const dir = tmpPath('builtin-filters');
+        const dbPath = path.join(dir, 'settings.sqlite');
+        const taskrcPath = path.join(dir, 'taskrc');
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const list = await request(app).get('/api/builtin-filters');
+        expect(list.status).toBe(200);
+        expect(list.body.success).toBe(true);
+        expect(Array.isArray(list.body.filters)).toBe(true);
+
+        const byKey = new Map(list.body.filters.map((f) => [f.key, f]));
+
+        expect(byKey.has('today')).toBe(true);
+        expect(byKey.has('next')).toBe(true);
+        expect(byKey.has('all')).toBe(true);
+
+        expect(byKey.get('today').filter).toBe('due:today status:pending');
+
+        const update = await request(app)
+            .put('/api/builtin-filters/today')
+            .send({ name: 'My Today', visible: false, filter: 'due:tomorrow status:pending' });
+        expect(update.status).toBe(200);
+        expect(update.body.success).toBe(true);
+        expect(update.body.filter.key).toBe('today');
+        expect(update.body.filter.name).toBe('My Today');
+        expect(update.body.filter.filter).toBe('due:tomorrow status:pending');
+        expect(update.body.filter.visible).toBe(0);
+
+        const list2 = await request(app).get('/api/builtin-filters');
+        const byKey2 = new Map(list2.body.filters.map((f) => [f.key, f]));
+        expect(byKey2.get('today').name).toBe('My Today');
+        expect(byKey2.get('today').visible).toBe(0);
+    });
+
     test('/api/task proxies to execTaskOverride and tokenizes string args', async () => {
         const dir = tmpPath('task');
         const dbPath = path.join(dir, 'settings.sqlite');

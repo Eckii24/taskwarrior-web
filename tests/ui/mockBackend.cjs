@@ -145,6 +145,7 @@ function taskMatchesTokens(task, tokens) {
 
     let status = null;
     let project = null;
+    let due = null;
     const requiredTags = [];
     const forbiddenTags = [];
     const terms = [];
@@ -158,6 +159,10 @@ function taskMatchesTokens(task, tokens) {
         }
         if (token.startsWith('project:')) {
             project = token.slice('project:'.length);
+            continue;
+        }
+        if (token.startsWith('due:')) {
+            due = token.slice('due:'.length);
             continue;
         }
         if (token.startsWith('+')) {
@@ -183,6 +188,11 @@ function taskMatchesTokens(task, tokens) {
         if (String(task?.project || '') !== String(project)) return false;
     }
 
+    if (due) {
+        // Best-effort: treat due tokens as string equality.
+        if (String(task?.due || '') !== String(due)) return false;
+    }
+
     const tagSet = new Set(Array.isArray(task?.tags) ? task.tags : []);
     for (const tag of requiredTags) {
         if (tag && !tagSet.has(tag)) return false;
@@ -205,6 +215,11 @@ function createMockBackend() {
     const state = {
         tasks: [],
         filters: [],
+        builtinFilters: {
+            today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true },
+            next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true },
+            all: { key: 'all', name: 'All', filter: '', visible: true },
+        },
         taskrc: '# taskrc\n',
         nextTaskId: 1,
         nextFilterId: 1,
@@ -224,6 +239,37 @@ function createMockBackend() {
         if (typeof state.beforeFetch === 'function') {
             const override = await state.beforeFetch({ href, parsed, pathname, method, init });
             if (override) return override;
+        }
+
+        if (pathname === '/api/builtin-filters' && method === 'GET') {
+            const filters = Object.values(state.builtinFilters)
+                .map((entry) => ({
+                    key: entry.key,
+                    name: entry.name,
+                    filter: entry.filter,
+                    visible: entry.visible ? 1 : 0,
+                }));
+            return jsonResponse({ success: true, filters });
+        }
+
+        if (pathname.startsWith('/api/builtin-filters/') && method === 'PUT') {
+            const key = String(pathname.split('/').pop() || '').trim();
+            if (!key || !state.builtinFilters[key]) {
+                return jsonResponse({ success: false, error: 'not found' }, { status: 404 });
+            }
+
+            const body = init.body ? JSON.parse(String(init.body)) : {};
+            const existing = state.builtinFilters[key];
+
+            const next = {
+                ...existing,
+                name: body.name !== undefined ? String(body.name) : existing.name,
+                filter: body.filter !== undefined ? String(body.filter) : existing.filter,
+                visible: body.visible !== undefined ? Boolean(body.visible) : existing.visible,
+            };
+
+            state.builtinFilters[key] = next;
+            return jsonResponse({ success: true, filter: { ...next, visible: next.visible ? 1 : 0 } });
         }
 
         if (pathname === '/api/filters' && method === 'GET') {

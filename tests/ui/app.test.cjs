@@ -441,6 +441,48 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.toast.text).toContain('Saved taskrc');
     });
 
+    test('built-in filters: Today view, rename, and hide', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due today', status: 'pending', due: 'today', urgency: 10 });
+        backend.state.tasks.push({ uuid: 'uuid-2', description: 'Due tomorrow', status: 'pending', due: 'tomorrow', urgency: 9 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.selectBuiltin('today');
+        await flushPromises(vm, 4);
+        expect(vm.tasks.map((t) => t.uuid)).toEqual(['uuid-1']);
+        expect(vm.currentTitle).toBe('Today');
+
+        vm.openSettings();
+        await flushPromises(vm, 3);
+
+        vm.settingsBuiltinDraft.today.name = 'My Today';
+        vm.settingsBuiltinDraft.today.filter = 'due:tomorrow status:pending';
+        vm.toggleBuiltinVisibility('today');
+        expect(vm.settingsBuiltinDraft.today.visible).toBe(false);
+
+        await vm.saveBuiltinFilters();
+        await flushPromises(vm, 4);
+
+        expect(vm.builtinFilters.today.name).toBe('My Today');
+        expect(vm.builtinFilters.today.visible).toBe(false);
+
+        vm.selectBuiltin('today');
+        await flushPromises(vm, 2);
+        expect(vm.selectedView).not.toEqual({ type: 'builtin', key: 'today' });
+
+        vm.toggleBuiltinVisibility('today');
+        expect(vm.settingsBuiltinDraft.today.visible).toBe(true);
+        await vm.saveBuiltinFilters();
+        await flushPromises(vm, 4);
+
+        vm.selectBuiltin('today');
+        await flushPromises(vm, 4);
+        expect(vm.currentTitle).toBe('My Today');
+        expect(vm.tasks.map((t) => t.uuid)).toEqual(['uuid-2']);
+    });
+
     test('persists selected view to URL (builtin/filter/search)', async () => {
         const backend = createMockBackend();
         backend.state.filters.push({ id: 10, name: 'Home', filter: 'project:Home status:pending', order: 0 });

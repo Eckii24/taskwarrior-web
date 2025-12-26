@@ -124,7 +124,27 @@ function openSettingsDb(settingsDbPath) {
         );
 
         CREATE UNIQUE INDEX IF NOT EXISTS idx_filters_order ON filters("order", id);
+
+        CREATE TABLE IF NOT EXISTS builtin_filters (
+            key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            filter TEXT NOT NULL,
+            visible INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
     `);
+
+    const now = new Date().toISOString();
+    const seedBuiltin = db.prepare(`
+        INSERT INTO builtin_filters (key, name, filter, visible, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(key) DO NOTHING
+    `);
+
+    seedBuiltin.run('today', 'Today', 'due:today status:pending', 1, now, now);
+    seedBuiltin.run('next', 'Next', 'status:pending limit:page', 1, now, now);
+    seedBuiltin.run('all', 'All', '', 1, now, now);
 
     return db;
 }
@@ -385,6 +405,60 @@ function createApp({
             const db = await ensureSettingsDb();
             const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
             res.json({ success: true, filters });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // Settings: built-in filters (Next/All/Today)
+    app.get('/api/builtin-filters', async (_req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const filters = db.prepare('SELECT key, name, filter, visible FROM builtin_filters ORDER BY key ASC').all();
+            res.json({ success: true, filters });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.put('/api/builtin-filters/:key', async (req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const key = String(req.params.key || '').trim();
+            if (!key) {
+                return res.status(400).json({ success: false, error: 'key is required' });
+            }
+
+            const existing = db.prepare('SELECT key, name, filter, visible FROM builtin_filters WHERE key = ?').get(key);
+            if (!existing) {
+                return res.status(404).json({ success: false, error: 'builtin filter not found' });
+            }
+
+            const hasName = typeof req.body?.name === 'string';
+            const hasFilter = typeof req.body?.filter === 'string';
+            const hasVisible = req.body?.visible !== undefined;
+
+            const name = hasName ? String(req.body.name).trim() : existing.name;
+            const filter = hasFilter ? String(req.body.filter).trim() : existing.filter;
+
+            let visible = existing.visible;
+            if (hasVisible) {
+                const rawVisible = req.body.visible;
+                visible = rawVisible ? 1 : 0;
+            }
+
+            if (hasName && !name) {
+                return res.status(400).json({ success: false, error: 'name must not be empty' });
+            }
+            if (hasFilter && filter === '') {
+                // Allow empty string filters (e.g. All)
+            }
+
+            const updatedAt = new Date().toISOString();
+            db.prepare('UPDATE builtin_filters SET name = ?, filter = ?, visible = ?, updated_at = ? WHERE key = ?')
+                .run(name, filter, visible, updatedAt, key);
+
+            res.json({ success: true, filter: { key, name, filter, visible } });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }

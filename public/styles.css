@@ -393,6 +393,38 @@ a:hover {
     padding-bottom: 6px;
 }
 
+.settings-section {
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(17, 17, 27, 0.18);
+}
+
+.settings-section-title {
+    font-weight: 800;
+    margin-bottom: 10px;
+}
+
+.settings-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 2fr;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.settings-row .text-input {
+    font-family: inherit;
+}
+
+.settings-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
 .main {
     grid-row: 2;
     height: calc(100vh - var(--topbar-h));
