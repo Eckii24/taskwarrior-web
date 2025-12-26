@@ -349,6 +349,32 @@ app.get('/api/complete', async (req, res) => {
             }
         }
 
+        const dateKeywords = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const dateValueAttrs = ['due', 'wait', 'until', 'scheduled', 'start', 'end'];
+
+        const isAttrAbbrev = (typedRaw, fullRaw) => {
+            const typed = String(typedRaw || '').toLowerCase();
+            const full = String(fullRaw || '').toLowerCase();
+            if (!typed) return false;
+            if (typed === full) return true;
+            return typed.length >= abbrevMin && full.startsWith(typed);
+        };
+
+        // Date-like completions (e.g. `due:to` -> `due:tomorrow`).
+        const attrValueMatch = token.match(/^([a-zA-Z_.]+):(.*)$/);
+        if (suggestions.length === 0 && attrValueMatch) {
+            const typedAttr = attrValueMatch[1];
+            const enteredValueRaw = attrValueMatch[2] || '';
+            const enteredValue = enteredValueRaw.toLowerCase();
+
+            const resolvedAttr = dateValueAttrs.find((attr) => isAttrAbbrev(typedAttr, attr));
+            if (resolvedAttr) {
+                suggestions = dateKeywords
+                    .filter((value) => value.startsWith(enteredValue))
+                    .map((value) => `${resolvedAttr}:${value}`);
+            }
+        }
+
         const tagMatch = token.match(/^([+-])(.*)$/);
         if (suggestions.length === 0 && tagMatch) {
             const sign = tagMatch[1];

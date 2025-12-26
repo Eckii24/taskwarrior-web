@@ -476,14 +476,15 @@ createApp({
             }
             
             if (field === 'modal.due') {
-                const dueSuggestions = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                const suggestions = dueSuggestions.filter(d => d.startsWith(token.toLowerCase()));
-                
+                const result = await apiClient.complete(`due:${token}`);
+                const suggestionsRaw = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+                const suggestions = suggestionsRaw.map((value) => value.replace(/^due:/, ''));
+
                 if (suggestions.length === 0) {
                     this.resetCompletion();
                     return [];
                 }
-                
+
                 const keepVisible = this.completion.visible && this.completion.field === field;
                 this.completion = {
                     field,
@@ -1083,14 +1084,15 @@ createApp({
             }
             
             if (attributeName === 'due') {
-                const dueSuggestions = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-                const suggestions = dueSuggestions.filter(d => d.startsWith(token.toLowerCase()));
-                
+                const result = await apiClient.complete(`due:${token}`);
+                const suggestionsRaw = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+                const suggestions = suggestionsRaw.map((value) => value.replace(/^due:/, ''));
+
                 if (suggestions.length === 0) {
                     this.resetCompletion();
                     return [];
                 }
-                
+
                 this.completion = {
                     field: 'modal.attributeInputValue',
                     token,
