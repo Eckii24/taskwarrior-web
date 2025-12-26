@@ -338,13 +338,86 @@ createApp({
     },
     async mounted() {
         window.addEventListener('keydown', this.onGlobalKeydown);
+
+        const restoredView = this.readPersistedSelectedView();
+
         await this.refreshFilters();
+        this.applyRestoredSelectedView(restoredView);
+
         await this.loadTasksForSelection();
     },
     beforeUnmount() {
         window.removeEventListener('keydown', this.onGlobalKeydown);
     },
     methods: {
+        persistSelectedView(view) {
+            try {
+                const safeView = view && typeof view === 'object' ? view : { type: 'builtin', key: 'next' };
+                const url = new URL(window.location.href);
+
+                url.searchParams.delete('viewType');
+                url.searchParams.delete('viewKey');
+                url.searchParams.delete('filterId');
+
+                if (safeView.type === 'builtin') {
+                    url.searchParams.set('viewType', 'builtin');
+                    url.searchParams.set('viewKey', String(safeView.key || 'next'));
+                } else if (safeView.type === 'filter') {
+                    url.searchParams.set('viewType', 'filter');
+                    url.searchParams.set('filterId', String(safeView.id));
+                } else if (safeView.type === 'search') {
+                    url.searchParams.set('viewType', 'search');
+                }
+
+                window.history.replaceState({}, '', url.toString());
+            } catch {
+                // ignore
+            }
+        },
+
+        readPersistedSelectedView() {
+            try {
+                const url = new URL(window.location.href);
+                const viewType = String(url.searchParams.get('viewType') || '').trim();
+
+                if (viewType === 'builtin') {
+                    const key = String(url.searchParams.get('viewKey') || 'next');
+                    return { type: 'builtin', key };
+                }
+
+                if (viewType === 'filter') {
+                    const filterId = Number(url.searchParams.get('filterId'));
+                    if (Number.isFinite(filterId)) return { type: 'filter', id: filterId };
+                }
+
+                if (viewType === 'search') {
+                    return { type: 'search' };
+                }
+
+                return null;
+            } catch {
+                return null;
+            }
+        },
+
+        applyRestoredSelectedView(candidateView) {
+            if (!candidateView) return;
+
+            if (candidateView.type === 'builtin') {
+                this.selectedView = { type: 'builtin', key: candidateView.key || 'next' };
+                this.showTaskrc = false;
+            } else if (candidateView.type === 'filter') {
+                const exists = this.filters.some((f) => f.id === candidateView.id);
+                if (exists) {
+                    this.selectedView = { type: 'filter', id: candidateView.id };
+                    this.showTaskrc = false;
+                }
+            } else if (candidateView.type === 'search') {
+                this.selectedView = { type: 'search' };
+                this.showTaskrc = false;
+            }
+        },
+
         onGlobalKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.modal.open) this.closeModal();
@@ -360,6 +433,7 @@ createApp({
 
         openSettings() {
             this.showTaskrc = true;
+            this.persistSelectedView({ type: 'builtin', key: 'next' });
             this.mainMode = 'tasks';
             this.mainOutput = '';
             this.resetCompletion();
@@ -735,9 +809,16 @@ createApp({
             }
         },
 
+        reloadAndReapplyCurrentView() {
+            // Persist before reload to make restoration deterministic.
+            this.persistSelectedView(this.selectedView);
+            window.location.reload();
+        },
+
         selectBuiltin(key) {
             this.showTaskrc = false;
             this.selectedView = { type: 'builtin', key };
+            this.persistSelectedView(this.selectedView);
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
             this.loadTasksForSelection();
@@ -746,6 +827,7 @@ createApp({
         selectSearch() {
             this.showTaskrc = false;
             this.selectedView = { type: 'search' };
+            this.persistSelectedView(this.selectedView);
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
             this.openCommandModal('search');
@@ -754,6 +836,7 @@ createApp({
         selectCustomFilter(filter) {
             this.showTaskrc = false;
             this.selectedView = { type: 'filter', id: filter.id };
+            this.persistSelectedView(this.selectedView);
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
             this.loadTasksForSelection();
@@ -1455,11 +1538,22 @@ createApp({
 
                 try {
                     if (this.modal.filterId) {
-                        const result = await apiClient.updateFilter(this.modal.filterId, { name, filter });
+                        const updatedId = this.modal.filterId;
+                        const wasActive = this.selectedView.type === 'filter' && this.selectedView.id === updatedId;
+
+                        const result = await apiClient.updateFilter(updatedId, { name, filter });
                         if (!result.success) {
                             this.showToast(result.error || 'Failed to update filter', 'error');
                             return;
                         }
+
+                        if (wasActive) {
+                            // Requirement: when an active filter is adjusted, reload and reapply it.
+                            this.closeModal();
+                            this.reloadAndReapplyCurrentView();
+                            return;
+                        }
+
                         await this.refreshFilters();
                         this.closeModal();
                         return;
