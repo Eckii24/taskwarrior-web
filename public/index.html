@@ -246,9 +246,8 @@
                                 >
                             </div>
                             <div class="task-main">
-                                <div class="task-desc">{{ task.description }}</div>
-                                <div class="task-meta">
-                                    <span class="pill" :class="task.status === 'completed' ? 'done' : 'pending'">{{ task.status }}</span>
+                                <div class="task-desc">
+                                    <span class="task-desc-text">{{ task.description }}</span>
 
                                     <span v-if="task.project" class="meta meta-project">
                                         <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -274,6 +273,16 @@
                             </div>
                             <div class="task-actions">
                                 <div class="task-action-buttons">
+                                    <div
+                                        v-if="task.status === 'completed' || task.status === 'deleted' || (task.urgency !== undefined && task.urgency !== null)"
+                                        class="urgency"
+                                    >
+                                        <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path fill="currentColor" d="M12 2 4.5 9.5 12 22l7.5-12.5L12 2zm0 4.2 4.18 6.98H7.82L12 6.2z"/>
+                                        </svg>
+                                        <span class="urgency-value">{{ formatUrgency(getTaskUrgency(task)) }}</span>
+                                    </div>
+
                                     <button v-if="task.status === 'pending'" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
                                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                                             <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
@@ -284,16 +293,6 @@
                                             <path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                                         </svg>
                                     </button>
-                                </div>
-
-                                <div
-                                    v-if="task.status === 'completed' || task.status === 'deleted' || (task.urgency !== undefined && task.urgency !== null)"
-                                    class="urgency"
-                                >
-                                    <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M12 2 4.5 9.5 12 22l7.5-12.5L12 2zm0 4.2 4.18 6.98H7.82L12 6.2z"/>
-                                    </svg>
-                                    <span class="urgency-value">{{ formatUrgency(getTaskUrgency(task)) }}</span>
                                 </div>
                             </div>
                         </div>

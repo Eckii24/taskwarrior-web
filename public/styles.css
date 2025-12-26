@@ -428,12 +428,12 @@ a:hover {
     padding: 12px;
     display: flex;
     gap: 10px;
-    align-items: flex-start;
+    align-items: center;
     box-shadow: 0 6px 24px rgba(17, 17, 27, 0.45);
 }
 
 .task-check {
-    padding-top: 2px;
+    padding-top: 0;
 }
 
 .task-check input[type="checkbox"] {
@@ -450,43 +450,27 @@ a:hover {
 
 .task-desc {
     font-weight: 700;
-    margin-bottom: 8px;
     line-height: 1.25;
-}
-
-.task-meta {
     display: flex;
     flex-wrap: wrap;
+    align-items: baseline;
     gap: 8px;
-    color: var(--muted);
-    font-size: 0.9rem;
 }
 
-.pill {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    font-size: 0.82rem;
-    color: var(--muted);
+.task-desc-text {
+    min-width: 0;
 }
 
-.pill.pending {
-    border-color: rgba(250, 179, 135, 0.45);
-    color: var(--ctp-peach);
-}
-
-.pill.done {
-    border-color: rgba(166, 227, 161, 0.45);
-    color: var(--ctp-green);
-}
+/* Keeps meta inline with the title in a cleaner layout */
 
 .meta {
     opacity: 0.95;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 0.9rem;
 }
 
 .meta-icon {
@@ -525,7 +509,7 @@ a:hover {
 .task-action-buttons {
     display: flex;
     gap: 8px;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .task-action-buttons .icon-btn.small {
@@ -544,7 +528,8 @@ a:hover {
     align-items: center;
     gap: 6px;
     padding: 2px 8px;
-    border-radius: 999px;
+    height: 34px;
+    border-radius: 12px;
     border: 1px solid var(--line);
     background: rgba(108, 112, 134, 0.12);
     color: var(--muted);
