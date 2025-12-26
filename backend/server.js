@@ -227,156 +227,38 @@ function createApp({
         return value;
     }
 
-    // Settings: custom filters
-    app.get('/api/filters', async (_req, res) => {
-        try {
-            const db = await ensureSettingsDb();
-            const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
-            res.json({ success: true, filters });
-        } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    app.post('/api/filters', async (req, res) => {
-    try {
-        const db = await ensureSettingsDb();
-        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-        const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
-
-        if (!name) {
-            return res.status(400).json({ success: false, error: 'name is required' });
-        }
-        if (!filter) {
-            return res.status(400).json({ success: false, error: 'filter is required' });
-        }
-
-        const maxOrderRow = db.prepare('SELECT COALESCE(MAX("order"), -1) AS maxOrder FROM filters').get();
-        const nextOrder = Number(maxOrderRow?.maxOrder ?? -1) + 1;
-
-        const createdAt = new Date().toISOString();
-        const stmt = db.prepare('INSERT INTO filters (name, filter, "order", created_at) VALUES (?, ?, ?, ?)');
-        const info = stmt.run(name, filter, nextOrder, createdAt);
-
-        res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, order: nextOrder } });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+    function parsePositiveIntParam(rawValue) {
+        const raw = String(rawValue || '');
+        if (!/^\d+$/.test(raw)) return null;
+        const numberValue = Number(raw);
+        if (!Number.isSafeInteger(numberValue)) return null;
+        return numberValue;
     }
-});
 
-    app.put('/api/filters/reorder', async (req, res) => {
-    try {
-        const db = await ensureSettingsDb();
-        const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
-        const parsedIds = ids.map((val) => Number(val)).filter((val) => Number.isFinite(val));
+    const STATIC_STATUSES = ['pending', 'completed', 'deleted', 'waiting'];
+    const DATE_KEYWORDS = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const DATE_VALUE_ATTRS = ['due', 'wait', 'until', 'scheduled', 'start', 'end'];
 
-        if (parsedIds.length !== ids.length || parsedIds.length === 0) {
-            return res.status(400).json({ success: false, error: 'ids must be a non-empty array of numbers' });
-        }
-
-        const unique = new Set(parsedIds);
-        if (unique.size !== parsedIds.length) {
-            return res.status(400).json({ success: false, error: 'ids must be unique' });
-        }
-
-        const existingIds = db.prepare('SELECT id FROM filters').all().map((row) => row.id);
-        const existingSet = new Set(existingIds);
-        for (const id of parsedIds) {
-            if (!existingSet.has(id)) {
-                return res.status(404).json({ success: false, error: `filter not found: ${id}` });
-            }
-        }
-
-        const run = db.transaction(() => {
-            const stmt = db.prepare('UPDATE filters SET "order" = ? WHERE id = ?');
-            parsedIds.forEach((id, index) => {
-                stmt.run(index, id);
-            });
-        });
-
-        run();
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-    app.put('/api/filters/:id', async (req, res) => {
-    try {
-        const db = await ensureSettingsDb();
-        const idRaw = String(req.params.id || '');
-        if (!/^\d+$/.test(idRaw)) {
-            return res.status(400).json({ success: false, error: 'invalid id' });
-        }
-        const id = Number(idRaw);
-
-        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
-        const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
-        const orderValue = req.body?.order;
-        const hasOrder = orderValue !== undefined;
-        const parsedOrder = hasOrder ? Number(orderValue) : null;
-
-        if (name !== undefined && typeof req.body?.name === 'string' && name.length === 0) {
-            return res.status(400).json({ success: false, error: 'name must not be empty' });
-        }
-        if (filter !== undefined && typeof req.body?.filter === 'string' && filter.length === 0) {
-            return res.status(400).json({ success: false, error: 'filter must not be empty' });
-        }
-        if (hasOrder && !Number.isFinite(parsedOrder)) {
-            return res.status(400).json({ success: false, error: 'order must be a number' });
-        }
-
-        const existing = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters WHERE id = ?').get(id);
-        if (!existing) {
-            return res.status(404).json({ success: false, error: 'filter not found' });
-        }
-
-        const nextName = name || existing.name;
-        const nextFilter = filter || existing.filter;
-        const nextOrder = hasOrder ? parsedOrder : existing.order;
-
-        db.prepare('UPDATE filters SET name = ?, filter = ?, "order" = ? WHERE id = ?').run(nextName, nextFilter, nextOrder, id);
-
-        res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, order: nextOrder } });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-    app.delete('/api/filters/:id', async (req, res) => {
-    try {
-        const db = await ensureSettingsDb();
-        const idRaw = String(req.params.id || '');
-        if (!/^\d+$/.test(idRaw)) {
-            return res.status(400).json({ success: false, error: 'invalid id' });
-        }
-        const id = Number(idRaw);
-
-        const info = db.prepare('DELETE FROM filters WHERE id = ?').run(id);
-        if (info.changes === 0) {
-            return res.status(404).json({ success: false, error: 'filter not found' });
-        }
-
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Lightweight completion endpoint.
-// Accepts the current token under cursor (e.g. "proj:", "project:ho", "+ur", "rc.co").
-    app.get('/api/complete', async (req, res) => {
-    try {
-        const token = typeof req.query.token === 'string' ? req.query.token : '';
-        const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
-
-        const staticStatuses = ['pending', 'completed', 'deleted', 'waiting'];
-
+    async function getAbbreviationMinimum() {
         const abbrevLines = await cachedCompletionLines('abbreviation.minimum', ['rc.hooks=0', '_get', 'rc.abbreviation.minimum'], 15000);
         const abbrevMinParsed = Number(abbrevLines[0]);
-        const abbrevMin = Number.isFinite(abbrevMinParsed) && abbrevMinParsed >= 1 ? abbrevMinParsed : 2;
+        if (Number.isFinite(abbrevMinParsed) && abbrevMinParsed >= 1) return abbrevMinParsed;
+        return 2;
+    }
 
-        const rcToken = token.startsWith('rc.') ? token : '';
+    function createAttrAbbrevChecker(abbrevMin) {
+        return (typedRaw, fullRaw) => {
+            const typed = String(typedRaw || '').toLowerCase();
+            const full = String(fullRaw || '').toLowerCase();
+            if (!typed) return false;
+            if (typed === full) return true;
+            return typed.length >= abbrevMin && full.startsWith(typed);
+        };
+    }
+
+    async function getCompletionSuggestions(token) {
+        const abbrevMin = await getAbbreviationMinimum();
+        const isAttrAbbrev = createAttrAbbrevChecker(abbrevMin);
 
         let suggestions = [];
 
@@ -398,7 +280,7 @@ function createApp({
         const statusMatch = token.match(/^status:(.*)$/);
         if (suggestions.length === 0 && statusMatch) {
             const enteredValue = statusMatch[1] || '';
-            suggestions = staticStatuses
+            suggestions = STATIC_STATUSES
                 .filter((value) => value.startsWith(enteredValue))
                 .map((value) => `status:${value}`);
         }
@@ -416,27 +298,15 @@ function createApp({
             }
         }
 
-        const dateKeywords = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-        const dateValueAttrs = ['due', 'wait', 'until', 'scheduled', 'start', 'end'];
-
-        const isAttrAbbrev = (typedRaw, fullRaw) => {
-            const typed = String(typedRaw || '').toLowerCase();
-            const full = String(fullRaw || '').toLowerCase();
-            if (!typed) return false;
-            if (typed === full) return true;
-            return typed.length >= abbrevMin && full.startsWith(typed);
-        };
-
-        // Date-like completions (e.g. `due:to` -> `due:tomorrow`).
         const attrValueMatch = token.match(/^([a-zA-Z_.]+):(.*)$/);
         if (suggestions.length === 0 && attrValueMatch) {
             const typedAttr = attrValueMatch[1];
             const enteredValueRaw = attrValueMatch[2] || '';
             const enteredValue = enteredValueRaw.toLowerCase();
 
-            const resolvedAttr = dateValueAttrs.find((attr) => isAttrAbbrev(typedAttr, attr));
+            const resolvedAttr = DATE_VALUE_ATTRS.find((attr) => isAttrAbbrev(typedAttr, attr));
             if (resolvedAttr) {
-                suggestions = dateKeywords
+                suggestions = DATE_KEYWORDS
                     .filter((value) => value.startsWith(enteredValue))
                     .map((value) => `${resolvedAttr}:${value}`);
             }
@@ -452,14 +322,14 @@ function createApp({
                 .map((value) => `${sign}${value}`);
         }
 
+        const rcToken = token.startsWith('rc.') ? token : '';
         const rcColonToken = token === 'rc:' ? token : '';
         if (suggestions.length === 0 && (rcToken || rcColonToken)) {
             const enteredValue = rcToken ? rcToken.slice('rc.'.length) : '';
             const configKeys = await cachedCompletionLines('config', ['rc.hooks=0', '_config'], 15000);
-            const candidates = configKeys
+            suggestions = configKeys
                 .filter((value) => value.startsWith(enteredValue))
                 .map((value) => `rc.${value}:`);
-            suggestions = candidates;
         }
 
         if (suggestions.length === 0) {
@@ -478,27 +348,24 @@ function createApp({
             suggestions = candidates;
         }
 
-        // If we still have no suggestions (e.g. token is a word without a ':'),
-        // offer commands and aliases to support report/custom command inputs.
         if (suggestions.length === 0) {
             const commands = await cachedCompletionLines('commands', ['rc.hooks=0', '_commands'], 15000);
             const aliases = await cachedCompletionLines('aliases', ['rc.hooks=0', '_aliases'], 15000);
 
             const prefix = token.trim();
-            const candidates = [...commands, ...aliases]
+            suggestions = [...commands, ...aliases]
                 .filter((value) => value.startsWith(prefix));
-
-            suggestions = candidates;
         }
 
         if (suggestions.length === 0 && /^\d+$/.test(token.trim())) {
-            const ids = await cachedCompletionLines('ids', ['rc.hooks=0', '_ids'], 2000);
-            suggestions = ids;
+            suggestions = await cachedCompletionLines('ids', ['rc.hooks=0', '_ids'], 2000);
         }
 
-        suggestions = suggestions.slice(0, limit);
+        return suggestions;
+    }
 
-        const values = suggestions.map((suggestion) => {
+    function completionValuesFromSuggestions(suggestions) {
+        return suggestions.map((suggestion) => {
             const statusValue = suggestion.match(/^status:(.+)$/);
             if (statusValue) return statusValue[1];
 
@@ -510,20 +377,165 @@ function createApp({
 
             return suggestion;
         });
-
-        res.json({
-            success: true,
-            token,
-            suggestions,
-            values,
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: error.stderr || error.message,
-        });
     }
-});
+
+    // Settings: custom filters
+    app.get('/api/filters', async (_req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const filters = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
+            res.json({ success: true, filters });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/filters', async (req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+            const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
+
+            if (!name) {
+                return res.status(400).json({ success: false, error: 'name is required' });
+            }
+            if (!filter) {
+                return res.status(400).json({ success: false, error: 'filter is required' });
+            }
+
+            const maxOrderRow = db.prepare('SELECT COALESCE(MAX("order"), -1) AS maxOrder FROM filters').get();
+            const nextOrder = Number(maxOrderRow?.maxOrder ?? -1) + 1;
+
+            const createdAt = new Date().toISOString();
+            const stmt = db.prepare('INSERT INTO filters (name, filter, "order", created_at) VALUES (?, ?, ?, ?)');
+            const info = stmt.run(name, filter, nextOrder, createdAt);
+
+            res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, order: nextOrder } });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.put('/api/filters/reorder', async (req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+            const parsedIds = ids.map((val) => Number(val)).filter((val) => Number.isFinite(val));
+
+            if (parsedIds.length !== ids.length || parsedIds.length === 0) {
+                return res.status(400).json({ success: false, error: 'ids must be a non-empty array of numbers' });
+            }
+
+            const unique = new Set(parsedIds);
+            if (unique.size !== parsedIds.length) {
+                return res.status(400).json({ success: false, error: 'ids must be unique' });
+            }
+
+            const existingIds = db.prepare('SELECT id FROM filters').all().map((row) => row.id);
+            const existingSet = new Set(existingIds);
+            for (const id of parsedIds) {
+                if (!existingSet.has(id)) {
+                    return res.status(404).json({ success: false, error: `filter not found: ${id}` });
+                }
+            }
+
+            const run = db.transaction(() => {
+                const stmt = db.prepare('UPDATE filters SET "order" = ? WHERE id = ?');
+                parsedIds.forEach((id, index) => {
+                    stmt.run(index, id);
+                });
+            });
+
+            run();
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.put('/api/filters/:id', async (req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const id = parsePositiveIntParam(req.params.id);
+            if (id === null) {
+                return res.status(400).json({ success: false, error: 'invalid id' });
+            }
+
+            const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+            const filter = typeof req.body?.filter === 'string' ? req.body.filter.trim() : '';
+            const orderValue = req.body?.order;
+            const hasOrder = orderValue !== undefined;
+            const parsedOrder = hasOrder ? Number(orderValue) : null;
+
+            if (name !== undefined && typeof req.body?.name === 'string' && name.length === 0) {
+                return res.status(400).json({ success: false, error: 'name must not be empty' });
+            }
+            if (filter !== undefined && typeof req.body?.filter === 'string' && filter.length === 0) {
+                return res.status(400).json({ success: false, error: 'filter must not be empty' });
+            }
+            if (hasOrder && !Number.isFinite(parsedOrder)) {
+                return res.status(400).json({ success: false, error: 'order must be a number' });
+            }
+
+            const existing = db.prepare('SELECT id, name, filter, "order" AS "order" FROM filters WHERE id = ?').get(id);
+            if (!existing) {
+                return res.status(404).json({ success: false, error: 'filter not found' });
+            }
+
+            const nextName = name || existing.name;
+            const nextFilter = filter || existing.filter;
+            const nextOrder = hasOrder ? parsedOrder : existing.order;
+
+            db.prepare('UPDATE filters SET name = ?, filter = ?, "order" = ? WHERE id = ?').run(nextName, nextFilter, nextOrder, id);
+
+            res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, order: nextOrder } });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.delete('/api/filters/:id', async (req, res) => {
+        try {
+            const db = await ensureSettingsDb();
+            const id = parsePositiveIntParam(req.params.id);
+            if (id === null) {
+                return res.status(400).json({ success: false, error: 'invalid id' });
+            }
+
+            const info = db.prepare('DELETE FROM filters WHERE id = ?').run(id);
+            if (info.changes === 0) {
+                return res.status(404).json({ success: false, error: 'filter not found' });
+            }
+
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+// Lightweight completion endpoint.
+// Accepts the current token under cursor (e.g. "proj:", "project:ho", "+ur", "rc.co").
+    app.get('/api/complete', async (req, res) => {
+        try {
+            const token = typeof req.query.token === 'string' ? req.query.token : '';
+            const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
+
+            let suggestions = await getCompletionSuggestions(token);
+            suggestions = suggestions.slice(0, limit);
+
+            res.json({
+                success: true,
+                token,
+                suggestions,
+                values: completionValuesFromSuggestions(suggestions),
+            });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.stderr || error.message,
+            });
+        }
+    });
 
 // Single endpoint to execute taskwarrior commands
     app.post('/api/task', async (req, res) => {
