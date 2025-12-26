@@ -22,10 +22,11 @@ const schemas = {
             .min(1)
             .max(500)
             .required()
-            .pattern(/^[a-zA-Z0-9_.:+-\s]+$/)
+            // More permissive pattern - allows taskwarrior syntax including parens, quotes, operators
+            .pattern(/^[a-zA-Z0-9_.:+\-\s()"'<>=!]+$/)
             .messages({
                 'string.empty': 'Filter query is required',
-                'string.pattern.base': 'Filter contains invalid characters. Only alphanumeric, dots, colons, plus, minus, and spaces allowed',
+                'string.pattern.base': 'Filter contains potentially dangerous characters',
                 'string.max': 'Filter query must be at most 500 characters'
             })
     }),
@@ -43,7 +44,7 @@ const schemas = {
             .trim()
             .min(1)
             .max(500)
-            .pattern(/^[a-zA-Z0-9_.:+-\s]+$/)
+            .pattern(/^[a-zA-Z0-9_.:+\-\s()"'<>=!]+$/)
             .optional(),
         order: Joi.number()
             .integer()
@@ -90,12 +91,11 @@ const schemas = {
             // Validate each line
             const lines = value.split('\n');
             const dangerousPatterns = [
-                /hooks\s*=/i,           // Prevent hook execution
-                /on-\w+\s*=/i,          // Prevent event handlers
-                /<script/i,             // Prevent script injection
-                /eval\s*\(/i,           // Prevent eval
-                /\$\(/,                 // Prevent command substitution
-                /`[^`]*`/,              // Prevent backtick command execution
+                /^hooks\./i,            // Prevent hook execution (hooks.*)
+                /^on-\w+=/i,            // Prevent event handlers
+                /\$\(.*\)/,             // Prevent command substitution
+                /`.*`/,                 // Prevent backtick command execution
+                /;\s*\w+/,              // Prevent command chaining
             ];
             
             for (let i = 0; i < lines.length; i++) {
@@ -114,7 +114,8 @@ const schemas = {
                 }
                 
                 // Validate line format: key=value or key.subkey=value
-                if (!/^[\w.-]+=.*$/.test(line)) {
+                // Taskwarrior keys can contain letters, numbers, dots, underscores, colons
+                if (!/^[\w.:-]+=.*$/.test(line)) {
                     return helpers.error('any.custom', {
                         message: `Line ${i + 1} has invalid format: ${line.substring(0, 50)}`
                     });
@@ -197,20 +198,30 @@ function validateQuery(schema) {
 }
 
 /**
- * Validates that task arguments don't contain shell metacharacters
+ * Validates that task arguments don't contain shell metacharacters or command injection patterns
+ * Note: Allows parentheses and brackets for legitimate taskwarrior syntax (date calc, UDAs)
  * 
  * @param {string|string[]} args - Task arguments to validate
- * @throws {Error} If args contain dangerous characters
+ * @throws {Error} If args contain dangerous characters or patterns
  */
 function validateTaskArgs(args) {
     const argsArray = Array.isArray(args) ? args : [args];
-    const dangerousPatterns = /[;&|`$(){}[\]<>\\]/;
+    
+    // Block only the most dangerous shell metacharacters
+    // Allow ( ) [ ] for taskwarrior syntax but block command execution chars
+    const dangerousPatterns = /[;&|`$\\]/;
     
     for (const arg of argsArray) {
-        if (typeof arg === 'string' && dangerousPatterns.test(arg)) {
-            throw new Error(
-                'Arguments contain forbidden shell metacharacters: ' + arg.substring(0, 50)
-            );
+        if (typeof arg === 'string') {
+            if (dangerousPatterns.test(arg)) {
+                throw new Error(
+                    'Arguments contain forbidden shell metacharacters: ' + arg.substring(0, 50)
+                );
+            }
+            // Also check for command substitution patterns
+            if (/\$\(/.test(arg) || /`/.test(arg)) {
+                throw new Error('Arguments contain command substitution: ' + arg.substring(0, 50));
+            }
         }
     }
 }

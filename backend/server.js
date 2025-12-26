@@ -184,7 +184,11 @@ app.put('/api/taskrc',
         
         const tmpPath = `${TASKRC_PATH}.tmp`;
         await fs.writeFile(tmpPath, content, { encoding: 'utf8', mode: 0o600 });
+        // Explicitly set permissions in case file already existed
+        await fs.chmod(tmpPath, 0o600);
         await fs.rename(tmpPath, TASKRC_PATH);
+        // Ensure final file has correct permissions
+        await fs.chmod(TASKRC_PATH, 0o600);
         
         logger.info('Taskrc updated', { path: TASKRC_PATH });
         res.type('text/plain').send('OK');
@@ -483,7 +487,13 @@ app.post('/api/task',
         } else {
             // Use shell-quote to properly parse arguments
             const parsed = parseArgs(args);
+            // Only allow string results, reject any objects/special constructs
             argsArray = parsed.filter(arg => typeof arg === 'string' && arg.length > 0);
+            
+            // Verify all parsed elements were strings
+            if (argsArray.length !== parsed.filter(arg => arg !== undefined && arg !== null).length) {
+                throw new AppError('Arguments contain special shell constructs', 400);
+            }
         }
         
         // Validate args don't contain shell metacharacters

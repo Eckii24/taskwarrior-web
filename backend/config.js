@@ -13,6 +13,9 @@ const configSchema = Joi.object({
     TASKDATA: Joi.string().optional(),
     TASKRC: Joi.string().optional(),
     SETTINGS_DB: Joi.string().optional(),
+    ALLOWED_TASK_PATHS: Joi.string()
+        .optional()
+        .description('Comma-separated list of allowed base paths for task data'),
     LOG_LEVEL: Joi.string()
         .valid('error', 'warn', 'info', 'debug')
         .default('info'),
@@ -31,10 +34,11 @@ const configSchema = Joi.object({
  * @param {string} configuredPath - The path to validate
  * @param {string} defaultPath - Default path if configuredPath is not provided
  * @param {string} name - Name of the path for error messages
+ * @param {string[]} allowedPaths - List of allowed base paths
  * @returns {string} The validated absolute path
  * @throws {Error} If path contains traversal or is outside allowed directories
  */
-function validatePath(configuredPath, defaultPath, name) {
+function validatePath(configuredPath, defaultPath, name, allowedPaths) {
     if (!configuredPath) return defaultPath;
     
     const resolved = path.resolve(configuredPath);
@@ -46,14 +50,6 @@ function validatePath(configuredPath, defaultPath, name) {
     }
     
     // Ensure it's within allowed directories
-    const home = os.homedir();
-    const allowedPaths = [
-        home,
-        '/var/lib/taskwarrior',
-        '/app/.task',
-        '/app/data'  // For Docker environments
-    ];
-    
     const isAllowed = allowedPaths.some(allowed => {
         const resolvedAllowed = path.resolve(allowed);
         return resolved.startsWith(resolvedAllowed);
@@ -93,23 +89,38 @@ function loadConfig() {
     const DEFAULT_TASKRC_PATH = path.join(DEFAULT_TASKDATA_PATH, 'taskrc');
     const DEFAULT_SETTINGS_DB_PATH = path.join(DEFAULT_TASKDATA_PATH, 'taskwarrior-web.sqlite');
     
+    // Get allowed paths from config or use defaults
+    const defaultAllowedPaths = [
+        os.homedir(),
+        '/var/lib/taskwarrior',
+        '/app/.task',
+        '/app/data'  // For Docker environments
+    ];
+    
+    const allowedPaths = value.ALLOWED_TASK_PATHS 
+        ? value.ALLOWED_TASK_PATHS.split(',').map(p => p.trim())
+        : defaultAllowedPaths;
+    
     try {
         value.TASKDATA_PATH = validatePath(
             value.TASKDATA,
             DEFAULT_TASKDATA_PATH,
-            'TASKDATA'
+            'TASKDATA',
+            allowedPaths
         );
         
         value.TASKRC_PATH = validatePath(
             value.TASKRC,
             DEFAULT_TASKRC_PATH,
-            'TASKRC'
+            'TASKRC',
+            allowedPaths
         );
         
         value.SETTINGS_DB_PATH = validatePath(
             value.SETTINGS_DB,
             DEFAULT_SETTINGS_DB_PATH,
-            'SETTINGS_DB'
+            'SETTINGS_DB',
+            allowedPaths
         );
     } catch (pathError) {
         console.error('Path validation failed:', pathError.message);

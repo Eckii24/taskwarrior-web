@@ -252,16 +252,81 @@ class TaskApiClient {
 
 ## Configuration
 
+### Environment Variables
+
+The application can be configured using environment variables. Copy `.env.example` to `.env` and adjust as needed:
+
+```bash
+cp .env.example .env
+```
+
+Available configuration options:
+
+- `PORT`: Server port (default: 3000)
+- `NODE_ENV`: Environment mode (`development`, `production`, `test`)
+- `LOG_LEVEL`: Logging level (`error`, `warn`, `info`, `debug`)
+- `ALLOWED_ORIGINS`: Comma-separated list of allowed CORS origins
+- `TASKDATA`: Custom taskwarrior data directory (optional)
+- `TASKRC`: Custom taskrc file path (optional)
+- `SETTINGS_DB`: Custom settings database path (optional)
+- `SESSION_SECRET`: Secret for session management (required in production)
+
+### Taskwarrior Configuration
+
 The application uses your existing taskwarrior configuration (`~/.taskrc`). Any custom reports, filters, or settings defined in your taskwarrior configuration will be available in the web interface.
+
+## Security
+
+**Important Security Considerations:**
+
+This application includes several security measures:
+
+- ✅ **Rate Limiting**: Protects against DoS attacks
+- ✅ **Input Validation**: Validates all user inputs
+- ✅ **Path Validation**: Prevents path traversal attacks
+- ✅ **Security Headers**: HSTS, CSP, X-Frame-Options, etc.
+- ✅ **Error Handling**: Sanitized error messages in production
+- ✅ **Structured Logging**: Comprehensive audit trail
+- ⚠️ **No Authentication**: This application does NOT include authentication
+
+**For Production Deployment:**
+
+1. **Set SESSION_SECRET**: Generate a secure random secret
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+
+2. **Use HTTPS**: Always deploy behind a reverse proxy (nginx, Apache) with HTTPS
+
+3. **Restrict CORS**: Set `ALLOWED_ORIGINS` to specific domains only
+
+4. **Add Authentication**: Implement authentication before exposing to the internet
+   - Consider HTTP Basic Auth via reverse proxy
+   - Or add authentication middleware (see `SECURITY_ANALYSIS.md`)
+
+5. **Review Logs**: Check logs regularly for suspicious activity
+   - `logs/error.log` - Error events
+   - `logs/combined.log` - All requests
+
+6. **Validate Paths**: Ensure `TASKDATA` and `TASKRC` point to secure locations
+
+**See `SECURITY_ANALYSIS.md` for detailed security analysis and recommendations.**
 
 ## Development
 
 To modify the application:
 
-1. **Backend**: Edit `backend/server.js`
-2. **Frontend HTML**: Edit `public/index.html`
-3. **Frontend JavaScript**: Edit `public/app.js`
-4. **Frontend Styles**: Edit `public/styles.css`
+1. **Backend**: 
+   - `backend/server.js` - Main server file
+   - `backend/config.js` - Configuration and validation
+   - `backend/validation.js` - Input validation schemas
+   - `backend/logger.js` - Logging setup
+   - `backend/errorHandler.js` - Error handling
+   
+2. **Frontend**: 
+   - `public/index.html` - HTML template
+   - `public/app.js` - Vue.js application
+   - `public/styles.css` - Styles
 
 ## License
 
