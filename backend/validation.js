@@ -92,8 +92,9 @@ const schemas = {
             const lines = value.split('\n');
             const dangerousPatterns = [
                 /^hooks\./i,            // Prevent hook execution (hooks.*)
-                /^on-\w+=/i,            // Prevent event handlers
-                /\$\(.*\)/,             // Prevent command substitution
+                /^on-.+=/i,             // Prevent ALL event handlers (on-*)
+                /\$\(.*\)/,             // Prevent command substitution $(...)
+                /\$\{.*\}/,             // Prevent variable expansion ${...}
                 /`.*`/,                 // Prevent backtick command execution
                 /;\s*\w+/,              // Prevent command chaining
             ];
@@ -199,7 +200,7 @@ function validateQuery(schema) {
 
 /**
  * Validates that task arguments don't contain shell metacharacters or command injection patterns
- * Note: Allows parentheses and brackets for legitimate taskwarrior syntax (date calc, UDAs)
+ * Note: Allows parentheses for taskwarrior date calculations but blocks command execution
  * 
  * @param {string|string[]} args - Task arguments to validate
  * @throws {Error} If args contain dangerous characters or patterns
@@ -207,20 +208,20 @@ function validateQuery(schema) {
 function validateTaskArgs(args) {
     const argsArray = Array.isArray(args) ? args : [args];
     
-    // Block only the most dangerous shell metacharacters
-    // Allow ( ) [ ] for taskwarrior syntax but block command execution chars
-    const dangerousPatterns = /[;&|`$\\]/;
+    // Block dangerous shell metacharacters
+    // Allow ( ) for taskwarrior syntax but block command execution and redirection
+    const dangerousChars = /[;&|`$\\><*?{}~\n\r]/;
     
     for (const arg of argsArray) {
         if (typeof arg === 'string') {
-            if (dangerousPatterns.test(arg)) {
+            if (dangerousChars.test(arg)) {
                 throw new Error(
                     'Arguments contain forbidden shell metacharacters: ' + arg.substring(0, 50)
                 );
             }
-            // Also check for command substitution patterns
-            if (/\$\(/.test(arg) || /`/.test(arg)) {
-                throw new Error('Arguments contain command substitution: ' + arg.substring(0, 50));
+            // Also check for command substitution and variable expansion
+            if (/\$[\({]/.test(arg)) {
+                throw new Error('Arguments contain command/variable expansion: ' + arg.substring(0, 50));
             }
         }
     }

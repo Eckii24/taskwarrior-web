@@ -42,17 +42,22 @@ function validatePath(configuredPath, defaultPath, name, allowedPaths) {
     if (!configuredPath) return defaultPath;
     
     const resolved = path.resolve(configuredPath);
-    const normalized = path.normalize(resolved);
     
-    // Ensure path doesn't contain traversal sequences
-    if (resolved !== normalized) {
+    // Check for path traversal sequences before and after resolution
+    if (configuredPath.includes('..')) {
+        throw new Error(`Invalid ${name}: contains path traversal sequence`);
+    }
+    
+    // Additional check: ensure no '..' components in normalized path
+    const parts = resolved.split(path.sep);
+    if (parts.includes('..')) {
         throw new Error(`Invalid ${name}: contains path traversal`);
     }
     
     // Ensure it's within allowed directories
     const isAllowed = allowedPaths.some(allowed => {
         const resolvedAllowed = path.resolve(allowed);
-        return resolved.startsWith(resolvedAllowed);
+        return resolved.startsWith(resolvedAllowed + path.sep) || resolved === resolvedAllowed;
     });
     
     if (!isAllowed) {
