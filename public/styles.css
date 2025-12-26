@@ -753,3 +753,84 @@ a:hover {
         height: 100svh;
     }
 }
+
+/* Enhanced modal form styles */
+.modal-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.modal-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.field-half {
+    min-width: 0;
+}
+
+.field label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.field-icon {
+    width: 16px;
+    height: 16px;
+    fill: var(--muted);
+}
+
+.dropdown-container {
+    position: relative;
+}
+
+.collapsible-section {
+    margin-top: 8px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.collapsible-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    font-weight: 700;
+    transition: background 0.2s;
+}
+
+.collapsible-header:hover {
+    background: var(--hover);
+}
+
+.collapsible-icon {
+    width: 20px;
+    height: 20px;
+    fill: var(--muted);
+    transition: transform 0.2s;
+}
+
+.collapsible-icon.expanded {
+    transform: rotate(180deg);
+}
+
+.collapsible-content {
+    padding: 12px;
+    border-top: 1px solid var(--line);
+    background: rgba(17, 17, 27, 0.35);
+}
+
+@media (max-width: 768px) {
+    .modal-form-row {
+        grid-template-columns: 1fr;
+    }
+}

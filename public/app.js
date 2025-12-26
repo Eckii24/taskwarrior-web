@@ -219,6 +219,15 @@ createApp({
                 filterId: null,
                 filterName: '',
                 filterValue: '',
+                // New structured fields for add/edit
+                description: '',
+                notes: '',
+                project: '',
+                tags: '',
+                priority: '',
+                due: '',
+                showTaskDetails: false,
+                taskDetailsOutput: '',
             },
 
             searchPendingOnly: true,
@@ -352,6 +361,99 @@ createApp({
 
         async updateCompletion(field, tokenInfo) {
             const token = tokenInfo.token || '';
+            
+            // Handle field-specific completions
+            if (field === 'modal.project') {
+                const result = await apiClient.complete(`project:${token}`);
+                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+                const projectSuggestions = suggestions.map(s => s.replace(/^project:/, ''));
+                
+                if (projectSuggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                const keepVisible = this.completion.visible && this.completion.field === field;
+                this.completion = {
+                    field,
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions: projectSuggestions,
+                    selectedIndex: 0,
+                    visible: keepVisible,
+                };
+                return projectSuggestions;
+            }
+            
+            if (field === 'modal.tags') {
+                const result = await apiClient.complete(`+${token}`);
+                const suggestions = result && result.success && Array.isArray(result.suggestions) ? result.suggestions : [];
+                const tagSuggestions = suggestions.map(s => s.replace(/^\+/, ''));
+                
+                if (tagSuggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                const keepVisible = this.completion.visible && this.completion.field === field;
+                this.completion = {
+                    field,
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions: tagSuggestions,
+                    selectedIndex: 0,
+                    visible: keepVisible,
+                };
+                return tagSuggestions;
+            }
+            
+            if (field === 'modal.priority') {
+                const priorities = ['H', 'M', 'L'];
+                const suggestions = priorities.filter(p => p.toLowerCase().startsWith(token.toLowerCase()));
+                
+                if (suggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                const keepVisible = this.completion.visible && this.completion.field === field;
+                this.completion = {
+                    field,
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions,
+                    selectedIndex: 0,
+                    visible: keepVisible,
+                };
+                return suggestions;
+            }
+            
+            if (field === 'modal.due') {
+                const dueSuggestions = ['today', 'tomorrow', 'eom', 'eoy', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                const suggestions = dueSuggestions.filter(d => d.startsWith(token.toLowerCase()));
+                
+                if (suggestions.length === 0) {
+                    this.resetCompletion();
+                    return [];
+                }
+                
+                const keepVisible = this.completion.visible && this.completion.field === field;
+                this.completion = {
+                    field,
+                    token,
+                    start: tokenInfo.start,
+                    end: tokenInfo.end,
+                    suggestions,
+                    selectedIndex: 0,
+                    visible: keepVisible,
+                };
+                return suggestions;
+            }
+            
+            // Default completion logic for other fields
             if (!token.trim()) {
                 this.resetCompletion();
                 return [];
@@ -689,6 +791,14 @@ createApp({
             this.modal.filterId = null;
             this.modal.filterName = '';
             this.modal.filterValue = '';
+            this.modal.description = '';
+            this.modal.notes = '';
+            this.modal.project = '';
+            this.modal.tags = '';
+            this.modal.priority = '';
+            this.modal.due = '';
+            this.modal.showTaskDetails = false;
+            this.modal.taskDetailsOutput = '';
             this.resetCompletion();
         },
 
@@ -696,9 +806,32 @@ createApp({
             const type = this.modal.type;
 
             if (type === 'add') {
-                const text = String(this.modal.value || '').trim();
-                if (!text) return;
-                const result = await commandService.addTask(text);
+                const description = String(this.modal.description || '').trim();
+                if (!description) return;
+                
+                // Build task command from structured fields
+                let taskCommand = description;
+                
+                if (this.modal.project) {
+                    taskCommand += ` project:${this.modal.project}`;
+                }
+                
+                if (this.modal.tags) {
+                    const tags = this.modal.tags.split(',').map(t => t.trim()).filter(t => t);
+                    tags.forEach(tag => {
+                        taskCommand += ` +${tag}`;
+                    });
+                }
+                
+                if (this.modal.priority) {
+                    taskCommand += ` priority:${this.modal.priority}`;
+                }
+                
+                if (this.modal.due) {
+                    taskCommand += ` due:${this.modal.due}`;
+                }
+                
+                const result = await commandService.addTask(taskCommand);
                 if (result.success) {
                     this.showToast('Added task', 'success');
                     this.closeModal();
@@ -711,9 +844,51 @@ createApp({
 
             if (type === 'edit') {
                 const taskId = this.modal.taskId;
-                const modifications = String(this.modal.value || '').trim();
-                if (!taskId || !modifications) return;
-
+                if (!taskId) return;
+                
+                // Build modification command from structured fields
+                const parts = [];
+                
+                if (this.modal.description) {
+                    parts.push(this.modal.description);
+                }
+                
+                if (this.modal.project !== undefined && this.modal.project !== this.modal.originalProject) {
+                    parts.push(`project:${this.modal.project || ''}`);
+                }
+                
+                if (this.modal.priority !== undefined && this.modal.priority !== this.modal.originalPriority) {
+                    parts.push(`priority:${this.modal.priority || ''}`);
+                }
+                
+                if (this.modal.due !== undefined && this.modal.due !== this.modal.originalDue) {
+                    parts.push(`due:${this.modal.due || ''}`);
+                }
+                
+                if (this.modal.tags !== undefined && this.modal.tags !== this.modal.originalTags) {
+                    // Remove old tags and add new ones
+                    const oldTags = (this.modal.originalTags || '').split(',').map(t => t.trim()).filter(t => t);
+                    const newTags = (this.modal.tags || '').split(',').map(t => t.trim()).filter(t => t);
+                    
+                    oldTags.forEach(tag => {
+                        if (!newTags.includes(tag)) {
+                            parts.push(`-${tag}`);
+                        }
+                    });
+                    
+                    newTags.forEach(tag => {
+                        if (!oldTags.includes(tag)) {
+                            parts.push(`+${tag}`);
+                        }
+                    });
+                }
+                
+                if (parts.length === 0) {
+                    this.closeModal();
+                    return;
+                }
+                
+                const modifications = parts.join(' ');
                 const result = await commandService.modifyTask(taskId, modifications);
                 if (result.success) {
                     this.showToast('Updated task', 'success');
@@ -795,6 +970,23 @@ createApp({
         async editTask(taskUuid) {
             const task = this.tasks.find((t) => String(t.uuid) === String(taskUuid));
             const currentDescription = task?.description ? String(task.description) : '';
+            const currentProject = task?.project ? String(task.project) : '';
+            const currentTags = Array.isArray(task?.tags) ? task.tags.join(', ') : '';
+            const currentPriority = task?.priority ? String(task.priority) : '';
+            const currentDue = task?.due ? String(task.due) : '';
+            
+            // Fetch full task details for the collapsible section
+            let taskDetailsOutput = '';
+            try {
+                const result = await commandService.showTask(taskUuid);
+                if (result.success) {
+                    const output = (result.output || '').trim();
+                    const err = (result.error || '').trim();
+                    taskDetailsOutput = [output, err].filter(Boolean).join('\n') || 'No details available';
+                }
+            } catch (error) {
+                taskDetailsOutput = 'Failed to load task details';
+            }
 
             this.modal = {
                 open: true,
@@ -805,6 +997,19 @@ createApp({
                 filterId: null,
                 filterName: '',
                 filterValue: '',
+                description: currentDescription,
+                notes: '',
+                project: currentProject,
+                tags: currentTags,
+                priority: currentPriority,
+                due: currentDue,
+                showTaskDetails: false,
+                taskDetailsOutput: taskDetailsOutput,
+                // Store original values for comparison
+                originalProject: currentProject,
+                originalTags: currentTags,
+                originalPriority: currentPriority,
+                originalDue: currentDue,
             };
 
             this.resetCompletion();
@@ -813,7 +1018,7 @@ createApp({
                 if (input) {
                     input.focus();
                     try {
-                        const len = String(this.modal.value || '').length;
+                        const len = String(this.modal.description || '').length;
                         input.setSelectionRange(len, len);
                     } catch {
                         // ignore

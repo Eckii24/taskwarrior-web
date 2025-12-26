@@ -343,34 +343,242 @@
                     </label>
                 </div>
 
-                <div v-else-if="modal.type === 'add'" class="field">
-                    <label>Add task</label>
-                    <input
-                        ref="modalInput"
-                        type="text"
-                        v-model="modal.value"
-                        class="text-input"
-                        placeholder="Buy milk project:groceries +shopping due:tomorrow"
-                        autocomplete="off"
-                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
-                        @input="handleCompletionInput($event, 'modal.value')"
-                        @blur="handleCompletionBlur('modal.value')"
-                    >
+                <div v-else-if="modal.type === 'add'" class="modal-form">
+                    <div class="field">
+                        <label>Task name</label>
+                        <input
+                            ref="modalInput"
+                            type="text"
+                            v-model="modal.description"
+                            class="text-input"
+                            placeholder="Task name"
+                            autocomplete="off"
+                            @keydown.enter="submitModal"
+                        >
+                    </div>
+
+                    <div class="field">
+                        <label>Description</label>
+                        <textarea
+                            v-model="modal.notes"
+                            class="text-input"
+                            placeholder="Additional notes (optional)"
+                            rows="2"
+                        ></textarea>
+                    </div>
+
+                    <div class="modal-form-row">
+                        <div class="field field-half">
+                            <label>
+                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                                </svg>
+                                Due date
+                            </label>
+                            <div class="dropdown-container">
+                                <input
+                                    type="text"
+                                    v-model="modal.due"
+                                    class="text-input"
+                                    placeholder="e.g., tomorrow, eom, 2024-12-31"
+                                    autocomplete="off"
+                                    @keydown="handleCompletionKeydown($event, 'modal.due', null)"
+                                    @input="handleCompletionInput($event, 'modal.due')"
+                                    @blur="handleCompletionBlur('modal.due')"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="field field-half">
+                            <label>
+                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                                </svg>
+                                Priority
+                            </label>
+                            <div class="dropdown-container">
+                                <input
+                                    type="text"
+                                    v-model="modal.priority"
+                                    class="text-input"
+                                    placeholder="H, M, L"
+                                    autocomplete="off"
+                                    @keydown="handleCompletionKeydown($event, 'modal.priority', null)"
+                                    @input="handleCompletionInput($event, 'modal.priority')"
+                                    @blur="handleCompletionBlur('modal.priority')"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>
+                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                            </svg>
+                            Project
+                        </label>
+                        <div class="dropdown-container">
+                            <input
+                                type="text"
+                                v-model="modal.project"
+                                class="text-input"
+                                placeholder="Select or type project name"
+                                autocomplete="off"
+                                @keydown="handleCompletionKeydown($event, 'modal.project', null)"
+                                @input="handleCompletionInput($event, 'modal.project')"
+                                @blur="handleCompletionBlur('modal.project')"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>
+                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
+                            </svg>
+                            Tags
+                        </label>
+                        <div class="dropdown-container">
+                            <input
+                                type="text"
+                                v-model="modal.tags"
+                                class="text-input"
+                                placeholder="Add tags (comma separated)"
+                                autocomplete="off"
+                                @keydown="handleCompletionKeydown($event, 'modal.tags', null)"
+                                @input="handleCompletionInput($event, 'modal.tags')"
+                                @blur="handleCompletionBlur('modal.tags')"
+                            >
+                        </div>
+                    </div>
                 </div>
 
-                <div v-else-if="modal.type === 'edit'" class="field">
-                    <label>Edit task</label>
-                    <input
-                        ref="modalInput"
-                        type="text"
-                        v-model="modal.value"
-                        class="text-input"
-                        placeholder="priority:H project:work due:tomorrow or new description"
-                        autocomplete="off"
-                        @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
-                        @input="handleCompletionInput($event, 'modal.value')"
-                        @blur="handleCompletionBlur('modal.value')"
-                    >
+                <div v-else-if="modal.type === 'edit'" class="modal-form">
+                    <div class="field">
+                        <label>Task name</label>
+                        <input
+                            ref="modalInput"
+                            type="text"
+                            v-model="modal.description"
+                            class="text-input"
+                            placeholder="Task name"
+                            autocomplete="off"
+                            @keydown.enter="submitModal"
+                        >
+                    </div>
+
+                    <div class="field">
+                        <label>Description</label>
+                        <textarea
+                            v-model="modal.notes"
+                            class="text-input"
+                            placeholder="Additional notes (optional)"
+                            rows="2"
+                        ></textarea>
+                    </div>
+
+                    <div class="modal-form-row">
+                        <div class="field field-half">
+                            <label>
+                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                                </svg>
+                                Due date
+                            </label>
+                            <div class="dropdown-container">
+                                <input
+                                    type="text"
+                                    v-model="modal.due"
+                                    class="text-input"
+                                    placeholder="e.g., tomorrow, eom, 2024-12-31"
+                                    autocomplete="off"
+                                    @keydown="handleCompletionKeydown($event, 'modal.due', null)"
+                                    @input="handleCompletionInput($event, 'modal.due')"
+                                    @blur="handleCompletionBlur('modal.due')"
+                                >
+                            </div>
+                        </div>
+
+                        <div class="field field-half">
+                            <label>
+                                <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                                </svg>
+                                Priority
+                            </label>
+                            <div class="dropdown-container">
+                                <input
+                                    type="text"
+                                    v-model="modal.priority"
+                                    class="text-input"
+                                    placeholder="H, M, L"
+                                    autocomplete="off"
+                                    @keydown="handleCompletionKeydown($event, 'modal.priority', null)"
+                                    @input="handleCompletionInput($event, 'modal.priority')"
+                                    @blur="handleCompletionBlur('modal.priority')"
+                                >
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>
+                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                            </svg>
+                            Project
+                        </label>
+                        <div class="dropdown-container">
+                            <input
+                                type="text"
+                                v-model="modal.project"
+                                class="text-input"
+                                placeholder="Select or type project name"
+                                autocomplete="off"
+                                @keydown="handleCompletionKeydown($event, 'modal.project', null)"
+                                @input="handleCompletionInput($event, 'modal.project')"
+                                @blur="handleCompletionBlur('modal.project')"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>
+                            <svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
+                            </svg>
+                            Tags
+                        </label>
+                        <div class="dropdown-container">
+                            <input
+                                type="text"
+                                v-model="modal.tags"
+                                class="text-input"
+                                placeholder="Add tags (comma separated)"
+                                autocomplete="off"
+                                @keydown="handleCompletionKeydown($event, 'modal.tags', null)"
+                                @input="handleCompletionInput($event, 'modal.tags')"
+                                @blur="handleCompletionBlur('modal.tags')"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="collapsible-section">
+                        <button
+                            type="button"
+                            class="collapsible-header"
+                            @click="modal.showTaskDetails = !modal.showTaskDetails"
+                        >
+                            <svg class="collapsible-icon" :class="{ expanded: modal.showTaskDetails }" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                            </svg>
+                            <span>All Task Information</span>
+                        </button>
+                        <div v-if="modal.showTaskDetails" class="collapsible-content">
+                            <pre class="command-output">{{ modal.taskDetailsOutput }}</pre>
+                        </div>
+                    </div>
                 </div>
 
                 <div v-else-if="modal.type === 'show'" class="field">
