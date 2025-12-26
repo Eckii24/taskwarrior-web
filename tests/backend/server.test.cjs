@@ -87,6 +87,44 @@ describe('Backend API (supertest)', () => {
         expect(list3.body.filters[0].id).toBe(idB);
     });
 
+    test('filters icon validation + clearing', async () => {
+        const dir = tmpPath('filters-icon');
+        const dbPath = path.join(dir, 'settings.sqlite');
+        const taskrcPath = path.join(dir, 'taskrc');
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const tooLong = await request(app)
+            .post('/api/filters')
+            .send({ name: 'A', filter: 'status:pending', icon: 'x'.repeat(17) });
+        expect(tooLong.status).toBe(400);
+        expect(tooLong.body.success).toBe(false);
+
+        const created = await request(app)
+            .post('/api/filters')
+            .send({ name: 'A', filter: 'status:pending', icon: '🏠' });
+        const id = created.body.filter.id;
+
+        const cleared = await request(app).put(`/api/filters/${id}`).send({ icon: null });
+        expect(cleared.status).toBe(200);
+        expect(cleared.body.success).toBe(true);
+        expect(cleared.body.filter.icon).toBe(null);
+
+        const list = await request(app).get('/api/filters');
+        expect(list.body.filters[0].icon).toBe(null);
+
+        const tooLongUpdate = await request(app).put(`/api/filters/${id}`).send({ icon: 'x'.repeat(17) });
+        expect(tooLongUpdate.status).toBe(400);
+        expect(tooLongUpdate.body.success).toBe(false);
+    });
+
+
+
     test('filters: negative paths (reorder validation + invalid ids)', async () => {
         const dir = tmpPath('filters-invalid');
         const dbPath = path.join(dir, 'settings.sqlite');
@@ -172,6 +210,31 @@ describe('Backend API (supertest)', () => {
         const byKey2 = new Map(list2.body.filters.map((f) => [f.key, f]));
         expect(byKey2.get('today').name).toBe('My Today');
         expect(byKey2.get('today').visible).toBe(0);
+    });
+
+    test('builtin filters API: negative paths (missing/unknown key + empty name)', async () => {
+        const dir = tmpPath('builtin-filters-invalid');
+        const dbPath = path.join(dir, 'settings.sqlite');
+        const taskrcPath = path.join(dir, 'taskrc');
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const missingKey = await request(app).put('/api/builtin-filters/%20').send({ name: 'X' });
+        expect(missingKey.status).toBe(400);
+        expect(missingKey.body.success).toBe(false);
+
+        const unknownKey = await request(app).put('/api/builtin-filters/unknown').send({ name: 'X' });
+        expect(unknownKey.status).toBe(404);
+        expect(unknownKey.body.success).toBe(false);
+
+        const emptyName = await request(app).put('/api/builtin-filters/today').send({ name: '   ' });
+        expect(emptyName.status).toBe(400);
+        expect(emptyName.body.success).toBe(false);
     });
 
     test('/api/task proxies to execTaskOverride and tokenizes string args', async () => {
