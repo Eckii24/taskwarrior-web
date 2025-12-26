@@ -370,6 +370,9 @@
             </div>
 
             <div class="modal-body">
+                <div v-if="modalEscHintVisible" class="modal-esc-hint" role="status">
+                    Press Esc again to close
+                </div>
                 <div v-if="modal.type === 'search'" class="field">
                     <label>Search</label>
                     <input

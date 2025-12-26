@@ -657,6 +657,17 @@ a:hover {
     padding: 12px;
 }
 
+.modal-esc-hint {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(243, 139, 168, 0.12);
+    border: 1px solid rgba(243, 139, 168, 0.35);
+    color: var(--ctp-rosewater);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
 .field {
     display: flex;
     flex-direction: column;

@@ -260,10 +260,17 @@ createApp({
                  originalTags: '',
                  originalPriority: '',
                  originalDue: '',
+                 // Original values for filter editing
+                 originalFilterName: '',
+                 originalFilterValue: '',
                  // Attribute dropdown state
                  activeAttributeDropdown: null,
                  attributeInputValue: '',
             },
+
+            modalEscHintVisible: false,
+            modalEscForceCloseUntil: 0,
+            modalEscHintTimeoutId: null,
 
             searchPendingOnly: true,
             lastSearch: {
@@ -418,9 +425,105 @@ createApp({
             }
         },
 
+        isModalUnchangedOrEmpty() {
+            if (!this.modal?.open) return true;
+
+            const type = String(this.modal.type || '').trim();
+
+            if (type === 'show') return true;
+
+            if (type === 'add') {
+                const descriptionEmpty = !String(this.modal.description || '').trim();
+                const projectEmpty = !String(this.modal.project || '').trim();
+                const tagsEmpty = !String(this.modal.tags || '').trim();
+                const priorityEmpty = !String(this.modal.priority || '').trim();
+                const dueEmpty = !String(this.modal.due || '').trim();
+
+                const noAttributeDropdown = !this.modal.activeAttributeDropdown;
+                const attributeValueEmpty = !String(this.modal.attributeInputValue || '').trim();
+
+                return (
+                    descriptionEmpty &&
+                    projectEmpty &&
+                    tagsEmpty &&
+                    priorityEmpty &&
+                    dueEmpty &&
+                    noAttributeDropdown &&
+                    attributeValueEmpty
+                );
+            }
+
+            if (type === 'edit') {
+                const noAttributeDropdown = !this.modal.activeAttributeDropdown;
+                const attributeValueEmpty = !String(this.modal.attributeInputValue || '').trim();
+
+                const baseFieldsUnchanged =
+                    String(this.modal.description || '') === String(this.modal.originalDescription || '') &&
+                    String(this.modal.project || '') === String(this.modal.originalProject || '') &&
+                    String(this.modal.tags || '') === String(this.modal.originalTags || '') &&
+                    String(this.modal.priority || '') === String(this.modal.originalPriority || '') &&
+                    String(this.modal.due || '') === String(this.modal.originalDue || '');
+
+                const annotationsClean =
+                    !String(this.modal.annotationDraft || '').trim() &&
+                    !this.modal.annotationEditKey &&
+                    !String(this.modal.annotationEditDraft || '').trim();
+
+                return baseFieldsUnchanged && annotationsClean && noAttributeDropdown && attributeValueEmpty;
+            }
+
+            if (type === 'filter') {
+                const name = String(this.modal.filterName || '');
+                const filter = String(this.modal.filterValue || '');
+
+                const nameUnchanged = name === String(this.modal.originalFilterName || '');
+                const filterUnchanged = filter === String(this.modal.originalFilterValue || '');
+
+                const emptyNew = !String(this.modal.filterId || '').trim() && !name.trim() && !filter.trim();
+
+                return emptyNew || (nameUnchanged && filterUnchanged);
+            }
+
+            // search/exec/other single input modals
+            const value = String(this.modal.value || '').trim();
+            return !value;
+        },
+
+        showModalEscHint(durationMs = 2000) {
+            const ms = Math.max(250, Number(durationMs) || 2000);
+            const until = Date.now() + ms;
+
+            this.modalEscHintVisible = true;
+            this.modalEscForceCloseUntil = until;
+
+            if (this.modalEscHintTimeoutId) clearTimeout(this.modalEscHintTimeoutId);
+            this.modalEscHintTimeoutId = setTimeout(() => {
+                this.modalEscHintVisible = false;
+                this.modalEscForceCloseUntil = 0;
+                this.modalEscHintTimeoutId = null;
+            }, ms);
+        },
+
+        clearModalEscHint() {
+            if (this.modalEscHintTimeoutId) clearTimeout(this.modalEscHintTimeoutId);
+            this.modalEscHintVisible = false;
+            this.modalEscForceCloseUntil = 0;
+            this.modalEscHintTimeoutId = null;
+        },
+
         onGlobalKeydown(event) {
             if (event.key === 'Escape') {
-                if (this.modal.open) this.closeModal();
+                if (this.modal.open) {
+                    const canClose = this.isModalUnchangedOrEmpty();
+                    const now = Date.now();
+
+                    if (canClose || (this.modalEscHintVisible && now <= this.modalEscForceCloseUntil)) {
+                        this.closeModal();
+                    } else {
+                        this.showModalEscHint(2000);
+                    }
+                }
+
                 if (this.drawerOpen) this.toggleDrawer(false);
                 this.closeReschedule();
                 this.resetCompletion();
@@ -922,7 +1025,17 @@ createApp({
         },
 
         openAddFilter() {
-            this.modal = { open: true, type: 'filter', value: '', taskId: null, filterId: null, filterName: '', filterValue: '' };
+            this.modal = {
+                open: true,
+                type: 'filter',
+                value: '',
+                taskId: null,
+                filterId: null,
+                filterName: '',
+                filterValue: '',
+                originalFilterName: '',
+                originalFilterValue: '',
+            };
             this.resetCompletion();
             this.$nextTick(() => {
                 if (this.$refs.modalNameInput) this.$refs.modalNameInput.focus();
@@ -930,14 +1043,19 @@ createApp({
         },
 
         openEditFilter(filter) {
+            const name = filter?.name ? String(filter.name) : '';
+            const value = filter?.filter ? String(filter.filter) : '';
+
             this.modal = {
                 open: true,
                 type: 'filter',
                 value: '',
                 taskId: null,
                 filterId: filter.id,
-                filterName: filter.name,
-                filterValue: filter.filter,
+                filterName: name,
+                filterValue: value,
+                originalFilterName: name,
+                originalFilterValue: value,
             };
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1005,6 +1123,7 @@ createApp({
         },
 
         closeModal() {
+            this.clearModalEscHint();
             this.modal.open = false;
             this.modal.type = null;
             this.modal.value = '';
@@ -1030,9 +1149,11 @@ createApp({
              this.modal.originalTags = '';
              this.modal.originalPriority = '';
              this.modal.originalDue = '';
-             this.modal.activeAttributeDropdown = null;
-             this.modal.attributeInputValue = '';
-             this.resetCompletion();
+             this.modal.originalFilterName = '';
+             this.modal.originalFilterValue = '';
+              this.modal.activeAttributeDropdown = null;
+              this.modal.attributeInputValue = '';
+              this.resetCompletion();
         },
 
         toggleAttributeDropdown(attributeName) {
