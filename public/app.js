@@ -286,10 +286,6 @@ createApp({
             };
             return map[this.modal.type] || 'Command';
         },
-        activeCompletionField() {
-            if (this.modal.type === 'filter') return 'modal.filterValue';
-            return 'modal.value';
-        },
     },
     async mounted() {
         window.addEventListener('keydown', this.onGlobalKeydown);
