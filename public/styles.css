@@ -506,11 +506,45 @@ a:hover {
     margin-left: auto;
 }
 
-.task-action-buttons {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-}
+ .task-action-buttons {
+     display: flex;
+     gap: 8px;
+     align-items: center;
+ }
+
+ .reschedule {
+     position: relative;
+     display: inline-flex;
+     align-items: center;
+ }
+
+ .reschedule-pop {
+     position: absolute;
+     right: 0;
+     top: calc(100% + 8px);
+     z-index: 10;
+     min-width: 260px;
+     padding: 10px;
+     background: var(--panel-2);
+     border: 1px solid var(--line);
+     border-radius: 14px;
+     box-shadow: 0 10px 28px rgba(17, 17, 27, 0.55);
+ }
+
+ .reschedule-presets {
+     display: flex;
+     gap: 8px;
+     flex-wrap: wrap;
+     margin-bottom: 10px;
+ }
+
+ .reschedule-custom {
+     display: grid;
+     grid-template-columns: 1fr auto;
+     gap: 8px;
+     align-items: center;
+ }
+
 
 .task-action-buttons .icon-btn.small {
     width: 34px;
@@ -550,10 +584,17 @@ a:hover {
     font-weight: 700;
 }
 
-.btn.small {
-    padding: 6px 9px;
-    font-size: 0.9rem;
-}
+ .btn.small {
+     padding: 6px 9px;
+     font-size: 0.9rem;
+ }
+
+ .btn.tiny {
+     padding: 6px 8px;
+     font-size: 0.82rem;
+     border-radius: 10px;
+ }
+
 
 .btn.primary {
     border-color: rgba(203, 166, 247, 0.55);
@@ -628,15 +669,21 @@ a:hover {
     font-size: 0.9rem;
 }
 
-.text-input {
-    width: 100%;
-    border: 1px solid var(--line);
-    background: rgba(17, 17, 27, 0.35);
-    color: var(--text);
-    border-radius: 14px;
-    padding: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-}
+ .text-input {
+     width: 100%;
+     border: 1px solid var(--line);
+     background: rgba(17, 17, 27, 0.35);
+     color: var(--text);
+     border-radius: 14px;
+     padding: 12px;
+     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+ }
+
+ .text-input.compact {
+     padding: 8px 10px;
+     border-radius: 10px;
+ }
+
 
 .text-input:focus {
     outline: none;

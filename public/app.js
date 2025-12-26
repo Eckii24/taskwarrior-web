@@ -286,6 +286,12 @@ createApp({
                 selectedIndex: 0,
                 visible: false,
             },
+
+            reschedule: {
+                open: false,
+                taskUuid: null,
+                custom: '',
+            },
         };
     },
     computed: {
@@ -343,6 +349,7 @@ createApp({
             if (event.key === 'Escape') {
                 if (this.modal.open) this.closeModal();
                 if (this.drawerOpen) this.toggleDrawer(false);
+                this.closeReschedule();
                 this.resetCompletion();
             }
         },
@@ -382,6 +389,70 @@ createApp({
                 selectedIndex: 0,
                 visible: false,
             };
+        },
+
+        closeReschedule() {
+            if (!this.reschedule.open) return;
+            this.reschedule = { open: false, taskUuid: null, custom: '' };
+        },
+
+        toggleReschedule(taskUuid) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            if (this.reschedule.open && this.reschedule.taskUuid === uuid) {
+                this.closeReschedule();
+                return;
+            }
+
+            this.reschedule = { open: true, taskUuid: uuid, custom: '' };
+        },
+
+        async rescheduleTask(taskUuid, dueValue) {
+            const uuid = String(taskUuid || '').trim();
+            const due = String(dueValue || '').trim();
+            if (!uuid || !due) return;
+
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.modifyTask(uuid, `due:${due}`);
+                if (result.success) {
+                    this.showToast('Rescheduled task', 'success');
+                    this.closeReschedule();
+                    await this.refreshCurrentPanel();
+                } else {
+                    this.showToast(result.error || 'Failed to reschedule', 'error');
+                }
+            });
+        },
+
+        async clearTaskDue(taskUuid) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.modifyTask(uuid, 'due:');
+                if (result.success) {
+                    this.showToast('Cleared due date', 'success');
+                    this.closeReschedule();
+                    await this.refreshCurrentPanel();
+                } else {
+                    this.showToast(result.error || 'Failed to clear due date', 'error');
+                }
+            });
+        },
+
+        async applyReschedulePreset(taskUuid, preset) {
+            const key = String(preset || '').trim();
+
+            if (key === 'today') return await this.rescheduleTask(taskUuid, 'today');
+            if (key === 'tomorrow') return await this.rescheduleTask(taskUuid, 'tomorrow');
+            if (key === 'sonw') return await this.rescheduleTask(taskUuid, 'sonw');
+        },
+
+        async applyRescheduleCustom(taskUuid) {
+            const value = String(this.reschedule.custom || '').trim();
+            if (!value) return;
+            await this.rescheduleTask(taskUuid, value);
         },
 
         getFieldValue(field) {

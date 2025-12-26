@@ -234,7 +234,7 @@
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
                     <div class="tasks-heading">{{ currentTitle }}</div>
                     <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
-                    <div v-else class="task-list">
+                    <div v-else class="task-list" @click="closeReschedule">
                         <div class="task-card" v-for="task in tasks" :key="task.uuid">
                             <div class="task-check">
                                 <input
@@ -287,6 +287,52 @@
                                             <path fill="currentColor" d="M12 2 4.5 9.5 12 22l7.5-12.5L12 2zm0 4.2 4.18 6.98H7.82L12 6.2z"/>
                                         </svg>
                                         <span class="urgency-value">{{ formatUrgency(getTaskUrgency(task)) }}</span>
+                                    </div>
+
+                                    <div v-if="task.status === 'pending'" class="reschedule">
+                                        <button
+                                            class="icon-btn small"
+                                            type="button"
+                                            aria-label="Reschedule task"
+                                            @click.stop="toggleReschedule(task.uuid)"
+                                            :disabled="busyTaskUuids[task.uuid]"
+                                        >
+                                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                                            </svg>
+                                        </button>
+
+                                        <div
+                                            v-if="reschedule.open && reschedule.taskUuid === task.uuid"
+                                            class="reschedule-pop"
+                                            @click.stop
+                                        >
+                                            <div class="reschedule-presets">
+                                                <button class="btn tiny" type="button" @click="applyReschedulePreset(task.uuid, 'today')">Today</button>
+                                                <button class="btn tiny" type="button" @click="applyReschedulePreset(task.uuid, 'tomorrow')">Tomorrow</button>
+                                                <button class="btn tiny" type="button" @click="applyReschedulePreset(task.uuid, 'sonw')">Next week</button>
+                                                <button class="btn tiny danger" type="button" @click="clearTaskDue(task.uuid)" :disabled="busyTaskUuids[task.uuid]">Clear</button>
+                                            </div>
+
+                                            <div class="reschedule-custom">
+                                                <input
+                                                    type="text"
+                                                    class="text-input compact"
+                                                    v-model="reschedule.custom"
+                                                    placeholder="due value (e.g. 2025-01-03, eom)"
+                                                    autocomplete="off"
+                                                    @keydown.enter.prevent="applyRescheduleCustom(task.uuid)"
+                                                >
+                                                <button
+                                                    class="btn tiny primary"
+                                                    type="button"
+                                                    @click="applyRescheduleCustom(task.uuid)"
+                                                    :disabled="!reschedule.custom || busyTaskUuids[task.uuid]"
+                                                >
+                                                    Set
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <button v-if="task.status === 'pending'" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
