@@ -332,6 +332,24 @@
                         @input="handleCompletionInput($event, 'modal.value')"
                         @blur="handleCompletionBlur('modal.value')"
                     >
+                    <div
+                        v-if="completion.visible && completion.field === 'modal.value' && completion.suggestions.length > 0"
+                        class="completion-panel"
+                        role="listbox"
+                        aria-label="Completions"
+                    >
+                        <div
+                            v-for="(suggestion, idx) in completion.suggestions"
+                            :key="idx"
+                            class="completion-item"
+                            :class="{ active: idx === completion.selectedIndex }"
+                            role="option"
+                            :aria-selected="idx === completion.selectedIndex"
+                            @mousedown.prevent="applyModalCompletion('modal.value', suggestion)"
+                        >
+                            {{ suggestion }}
+                        </div>
+                    </div>
                     <label class="checkbox-row">
                         <input type="checkbox" v-model="searchPendingOnly">
                         Only pending
@@ -347,8 +365,28 @@
                             class="text-input task-name-input"
                             placeholder="Task name"
                             autocomplete="off"
-                            @keydown.enter="submitModal"
+                            @keydown="handleCompletionKeydown($event, 'modal.description', 'submitModal')"
+                            @input="handleCompletionInput($event, 'modal.description')"
+                            @blur="handleCompletionBlur('modal.description')"
                         >
+                        <div
+                            v-if="completion.visible && completion.field === 'modal.description' && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="applyModalCompletion('modal.description', suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
                     </div>
 
                     <div class="task-attributes">
@@ -455,8 +493,28 @@
                             class="text-input task-name-input"
                             placeholder="Task name"
                             autocomplete="off"
-                            @keydown.enter="submitModal"
+                            @keydown="handleCompletionKeydown($event, 'modal.description', 'submitModal')"
+                            @input="handleCompletionInput($event, 'modal.description')"
+                            @blur="handleCompletionBlur('modal.description')"
                         >
+                        <div
+                            v-if="completion.visible && completion.field === 'modal.description' && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="applyModalCompletion('modal.description', suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
                     </div>
 
                     <div class="task-attributes">
@@ -588,6 +646,24 @@
                         @input="handleCompletionInput($event, 'modal.value')"
                         @blur="handleCompletionBlur('modal.value')"
                     >
+                    <div
+                        v-if="completion.visible && completion.field === 'modal.value' && completion.suggestions.length > 0"
+                        class="completion-panel"
+                        role="listbox"
+                        aria-label="Completions"
+                    >
+                        <div
+                            v-for="(suggestion, idx) in completion.suggestions"
+                            :key="idx"
+                            class="completion-item"
+                            :class="{ active: idx === completion.selectedIndex }"
+                            role="option"
+                            :aria-selected="idx === completion.selectedIndex"
+                            @mousedown.prevent="applyModalCompletion('modal.value', suggestion)"
+                        >
+                            {{ suggestion }}
+                        </div>
+                    </div>
                 </div>
 
                 <div v-else-if="modal.type === 'filter'" class="field">
@@ -606,6 +682,24 @@
                         @input="handleCompletionInput($event, 'modal.filterValue')"
                         @blur="handleCompletionBlur('modal.filterValue')"
                     >
+                    <div
+                        v-if="completion.visible && completion.field === 'modal.filterValue' && completion.suggestions.length > 0"
+                        class="completion-panel"
+                        role="listbox"
+                        aria-label="Completions"
+                    >
+                        <div
+                            v-for="(suggestion, idx) in completion.suggestions"
+                            :key="idx"
+                            class="completion-item"
+                            :class="{ active: idx === completion.selectedIndex }"
+                            role="option"
+                            :aria-selected="idx === completion.selectedIndex"
+                            @mousedown.prevent="applyModalCompletion('modal.filterValue', suggestion)"
+                        >
+                            {{ suggestion }}
+                        </div>
+                    </div>
                 </div>
             </div>
 

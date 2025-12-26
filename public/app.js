@@ -499,11 +499,25 @@ createApp({
             });
         },
 
+        applyModalCompletion(field, suggestion) {
+            const inputEl = this.$refs.modalInput;
+            if (!inputEl) return;
+
+            this.applyCompletionSuggestion(inputEl, field, suggestion);
+            this.resetCompletion();
+            this.$nextTick(() => inputEl.focus());
+        },
+
         async handleCompletionKeydown(event, field, actionName) {
             const inputEl = event.target;
             if (!inputEl || typeof inputEl.selectionStart !== 'number') return;
 
-            if (event.key === 'Tab') event.preventDefault();
+            // Prevent the browser from moving focus on Tab.
+            // This must be synchronous (before any await).
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                event.stopPropagation();
+            }
 
             const isActive = this.completion.visible && this.completion.field === field;
 
@@ -538,7 +552,13 @@ createApp({
                 await this.updateCompletion(field, tokenInfo);
             }
 
-            if (this.completion.suggestions.length === 0) return;
+            if (this.completion.suggestions.length === 0) {
+                if (event.key === 'Tab' && isActive) {
+                    this.resetCompletion();
+                }
+                return;
+            }
+
 
             if (this.completion.suggestions.length === 1 && event.key === 'Tab') {
                 this.applyCompletionSuggestion(inputEl, field, this.completion.suggestions[0]);
@@ -586,7 +606,10 @@ createApp({
         },
 
         handleCompletionBlur(field) {
-            if (this.completion.field === field) this.resetCompletion();
+            // Delay so mousedown on a suggestion can apply it.
+            setTimeout(() => {
+                if (this.completion.field === field) this.resetCompletion();
+            }, 150);
         },
 
         async refreshFilters() {
