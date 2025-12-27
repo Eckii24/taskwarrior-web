@@ -524,7 +524,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await flushPromises(vm, 5);
         expect(vm.currentGroupBy).toBe('project');
 
-        await vm.resetSortGroupSettings();
+        await vm.resetGroupSettings();
         await flushPromises(vm, 6);
         expect(vm.currentGroupBy).toBe(null);
         expect(backend.state.builtinFilters.next.group_by).toBe(null);

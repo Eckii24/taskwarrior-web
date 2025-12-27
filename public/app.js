@@ -151,21 +151,6 @@ class TaskQueryService {
         return list;
     }
 
-    sortTasks(tasks, sortBy) {
-        // Always sort by urgency (default behavior)
-        const list = Array.isArray(tasks) ? tasks.slice() : [];
-
-        const urgencyFor = (task) => {
-            const status = String(task?.status || '').toLowerCase();
-            if (status === 'completed' || status === 'deleted') return 0;
-            const num = typeof task?.urgency === 'number' ? task.urgency : Number(task?.urgency);
-            return Number.isFinite(num) ? num : 0;
-        };
-
-        list.sort((a, b) => urgencyFor(b) - urgencyFor(a));
-        return list;
-    }
-
     groupTasks(tasks, groupBy) {
         if (!groupBy || groupBy === 'none') {
             return [{ key: null, name: null, tasks }];
@@ -230,7 +215,7 @@ class TaskQueryService {
         return result;
     }
 
-    async getTasks(filterOrReport, sortBy = null, groupBy = null) {
+    async getTasks(filterOrReport, groupBy = null) {
         const reportMap = {
             list: 'status:pending',
             pending: 'status:pending',
@@ -255,7 +240,7 @@ class TaskQueryService {
 
         try {
             const tasks = JSON.parse(rawOutput);
-            const sorted = this.sortTasks(tasks, null); // Always sort by urgency
+            const sorted = this.sortByUrgency(tasks);
             return { tasks: sorted, groups: this.groupTasks(sorted, groupBy) };
         } catch (error) {
             throw new Error(`Failed to parse task export JSON: ${error.message}`);
@@ -1206,7 +1191,7 @@ function createTaskwarriorApp({
                     const builtin = this.builtinFilters[key];
                     const query = builtin ? builtin.filter : (key === 'next' ? 'next' : key === 'today' ? 'due:today status:pending' : 'all');
                     this.currentGroupBy = builtin?.group_by || null;
-                    const result = await queryService.getTasks(query, null, this.currentGroupBy);
+                    const result = await queryService.getTasks(query, this.currentGroupBy);
                     this.tasks = result.tasks;
                     this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
@@ -1222,7 +1207,7 @@ function createTaskwarriorApp({
                         return;
                     }
                     this.currentGroupBy = filter?.group_by || null;
-                    const result = await queryService.getTasks(filter.filter, null, this.currentGroupBy);
+                    const result = await queryService.getTasks(filter.filter, this.currentGroupBy);
                     this.tasks = result.tasks;
                     this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
@@ -1249,7 +1234,7 @@ function createTaskwarriorApp({
 
                 const prefix = this.lastSearch.pendingOnly ? 'status:pending ' : '';
                 this.mainMode = 'tasks';
-                const result = await queryService.getTasks(`${prefix}${term}`, null, this.currentGroupBy);
+                const result = await queryService.getTasks(`${prefix}${term}`, this.currentGroupBy);
                 this.tasks = result.tasks;
                 this.taskGroups = result.groups;
                 this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
@@ -1279,7 +1264,7 @@ function createTaskwarriorApp({
             await this.refreshCurrentPanel();
         },
 
-        async resetSortGroupSettings() {
+        async resetGroupSettings() {
             this.currentGroupBy = null;
             this.groupDropdownOpen = false;
             await this.saveGroupSettings();
@@ -1921,7 +1906,7 @@ function createTaskwarriorApp({
 
                 const prefix = this.searchPendingOnly ? 'status:pending ' : '';
                 this.mainMode = 'tasks';
-                const result = await queryService.getTasks(`${prefix}${term}`, null, this.currentGroupBy);
+                const result = await queryService.getTasks(`${prefix}${term}`, this.currentGroupBy);
                 this.tasks = result.tasks;
                 this.taskGroups = result.groups;
                 this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';

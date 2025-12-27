@@ -216,9 +216,9 @@ function createMockBackend() {
         tasks: [],
         filters: [],
         builtinFilters: {
-            today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, sort_by: null, group_by: null },
-            next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, sort_by: null, group_by: null },
-            all: { key: 'all', name: 'All', filter: '', visible: true, sort_by: null, group_by: null },
+            today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
+            next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
+            all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
         },
         taskrc: '# taskrc\n',
         nextTaskId: 1,
@@ -248,7 +248,6 @@ function createMockBackend() {
                     name: entry.name,
                     filter: entry.filter,
                     visible: entry.visible ? 1 : 0,
-                    sort_by: entry.sort_by ?? null,
                     group_by: entry.group_by ?? null,
                 }));
             return jsonResponse({ success: true, filters });
@@ -268,7 +267,6 @@ function createMockBackend() {
                 name: body.name !== undefined ? String(body.name) : existing.name,
                 filter: body.filter !== undefined ? String(body.filter) : existing.filter,
                 visible: body.visible !== undefined ? Boolean(body.visible) : existing.visible,
-                sort_by: body.sort_by !== undefined ? String(body.sort_by || '').trim() || null : existing.sort_by,
                 group_by: body.group_by !== undefined ? String(body.group_by || '').trim() || null : existing.group_by,
             };
 
@@ -288,7 +286,6 @@ function createMockBackend() {
                 filter: body.filter,
                 icon: body.icon ?? null,
                 order: state.filters.length,
-                sort_by: body.sort_by !== undefined ? String(body.sort_by || '').trim() || null : null,
                 group_by: body.group_by !== undefined ? String(body.group_by || '').trim() || null : null,
             };
             state.filters.push(filter);
@@ -333,7 +330,6 @@ function createMockBackend() {
                 name: body.name ?? state.filters[idx].name,
                 filter: body.filter ?? state.filters[idx].filter,
                 icon: body.icon !== undefined ? body.icon : state.filters[idx].icon,
-                sort_by: body.sort_by !== undefined ? String(body.sort_by || '').trim() || null : state.filters[idx].sort_by,
                 group_by: body.group_by !== undefined ? String(body.group_by || '').trim() || null : state.filters[idx].group_by,
             };
             return jsonResponse({ success: true, filter: state.filters[idx] });
