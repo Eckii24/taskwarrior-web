@@ -2,6 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { createMockBackend } = require('./mockBackend.cjs');
 
+// Load TaskColors module
+global.TaskColors = require('../../public/task-colors.js');
+
 function loadIndexHtml() {
     const htmlPath = path.join(__dirname, '..', '..', 'public', 'index.html');
     return fs.readFileSync(htmlPath, 'utf8');
@@ -1148,5 +1151,105 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.toast.type).toBe('error');
         expect(backend.state.tasks).toHaveLength(1);
         expect(document.body.textContent).toContain('Delete me');
+    });
+    describe('TaskWarrior color support', () => {
+        test('parses color rules from taskrc and applies them to tasks', async () => {
+            const backend = createMockBackend();
+            backend.state.taskrc = `
+# TaskWarrior color configuration
+color.pending=blue
+color.priority.H=bold red
+color.project.Work=yellow on gray5
+color.tag.urgent=underline red
+            `.trim();
+
+            backend.state.tasks.push(
+                { uuid: 'uuid-1', description: 'Pending task', status: 'pending', urgency: 1.0 },
+                { uuid: 'uuid-2', description: 'High priority', status: 'pending', priority: 'H', urgency: 2.0 },
+                { uuid: 'uuid-3', description: 'Work project', status: 'pending', project: 'Work', urgency: 1.5 },
+                { uuid: 'uuid-4', description: 'Urgent task', status: 'pending', tags: ['urgent'], urgency: 3.0 }
+            );
+
+            const { vm } = mountWithBackend(backend);
+            await flushPromises(vm, 6);
+
+            // Load taskrc to parse colors
+            await vm.loadTaskrc();
+            await flushPromises(vm, 2);
+
+            // Check that color rules are parsed
+            expect(vm.taskrcColorRules).toBeDefined();
+            expect(vm.taskrcColorRules.pending).toBeDefined();
+            expect(vm.taskrcColorRules.pending.color).toBe('#0000ff');
+
+            // Check that color styles are applied correctly
+            const pendingTask = { status: 'pending' };
+            const style1 = vm.getTaskColorStyle(pendingTask);
+            expect(style1.color).toBe('#0000ff');
+
+            const highPriorityTask = { status: 'pending', priority: 'H' };
+            const style2 = vm.getTaskColorStyle(highPriorityTask);
+            expect(style2.color).toBe('#ff0000');
+            expect(style2.fontWeight).toBe('bold');
+
+            const workTask = { status: 'pending', project: 'Work' };
+            const style3 = vm.getTaskColorStyle(workTask);
+            expect(style3.color).toBe('#ffff00');
+            expect(style3.backgroundColor).toMatch(/^#/);
+
+            const urgentTask = { status: 'pending', tags: ['urgent'] };
+            const style4 = vm.getTaskColorStyle(urgentTask);
+            expect(style4.color).toBe('#ff0000');
+            expect(style4.textDecoration).toBe('underline');
+        });
+
+        test('handles taskrc without color config gracefully', async () => {
+            const backend = createMockBackend();
+            backend.state.taskrc = `
+# TaskWarrior configuration
+data.location=/home/user/.task
+            `.trim();
+
+            backend.state.tasks.push(
+                { uuid: 'uuid-1', description: 'Task without colors', status: 'pending', urgency: 1.0 }
+            );
+
+            const { vm } = mountWithBackend(backend);
+            await flushPromises(vm, 6);
+
+            // Load taskrc
+            await vm.loadTaskrc();
+            await flushPromises(vm, 2);
+
+            // Check that no color rules are parsed
+            expect(vm.taskrcColorRules).toEqual({});
+
+            // Check that getTaskColorStyle returns empty object
+            const task = { status: 'pending' };
+            const style = vm.getTaskColorStyle(task);
+            expect(style).toEqual({});
+        });
+
+        test('re-parses colors after saving taskrc', async () => {
+            const backend = createMockBackend();
+            backend.state.taskrc = `# No colors`;
+
+            const { vm } = mountWithBackend(backend);
+            await flushPromises(vm, 6);
+
+            // Load taskrc
+            await vm.loadTaskrc();
+            await flushPromises(vm, 2);
+            expect(vm.taskrcColorRules).toEqual({});
+
+            // Update taskrc with colors
+            vm.taskrcText = `color.pending=red`;
+            await vm.saveTaskrc();
+            await flushPromises(vm, 2);
+
+            // Check that colors are now parsed
+            expect(vm.taskrcColorRules.pending).toBeDefined();
+            expect(vm.taskrcColorRules.pending.color).toBe('#ff0000');
+        });
     });
 });
