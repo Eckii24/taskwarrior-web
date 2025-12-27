@@ -920,7 +920,7 @@ function createTaskwarriorApp({
             };
         },
 
-        async updateCompletion(field, tokenInfo) {
+        async updateCompletion(field, tokenInfo, { autoTrigger = false } = {}) {
             const token = tokenInfo.token || '';
             const spec = this.getCompletionSpec(field);
 
@@ -946,7 +946,7 @@ function createTaskwarriorApp({
                 return [];
             }
 
-            this.setCompletionState(field, tokenInfo, token, suggestions);
+            this.setCompletionState(field, tokenInfo, token, suggestions, { forceVisible: autoTrigger });
             return suggestions;
         },
 
@@ -1013,7 +1013,7 @@ function createTaskwarriorApp({
                 this.completion.end !== tokenInfo.end;
 
             if (tokenChanged || !isActive) {
-                await this.updateCompletion(field, tokenInfo);
+                await this.updateCompletion(field, tokenInfo, { autoTrigger: true });
             }
 
             if (this.completion.suggestions.length === 0) {
@@ -1061,11 +1061,19 @@ function createTaskwarriorApp({
                 return;
             }
 
+            const text = String(this.getFieldValue(field) || '');
+            const cursor = inputEl.selectionStart;
+            const tokenInfo = getTokenAtCursor(text, cursor);
+
+            // Auto-trigger completion when token has meaningful length (>= 2 chars)
+            const shouldAutoTrigger = tokenInfo.token && tokenInfo.token.length >= 2;
+            
             if (this.completion.visible && this.completion.field === field) {
-                const text = String(this.getFieldValue(field) || '');
-                const cursor = inputEl.selectionStart;
-                const tokenInfo = getTokenAtCursor(text, cursor);
                 await this.updateCompletion(field, tokenInfo);
+            } else if (shouldAutoTrigger) {
+                await this.updateCompletion(field, tokenInfo, { autoTrigger: true });
+            } else {
+                this.resetCompletion();
             }
         },
 
