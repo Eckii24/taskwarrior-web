@@ -266,7 +266,7 @@
         }
 
         // Priority: Most specific rules take precedence
-        // Order: tag-specific > project-specific > priority-specific > status-specific
+        // Order: tag-specific > project-specific > priority-specific > attribute-specific > status-specific
         // (Later assignments override earlier ones)
 
         const status = String(task?.status || 'pending').toLowerCase();
@@ -281,7 +281,58 @@
             matchedRule = colorRules[status];
         }
 
-        // Check priority-specific colors (overrides status)
+        // Check attribute-based colors
+        // These apply based on task attributes being present or meeting certain conditions
+        
+        // color.active - task is active (has start date, not completed/deleted)
+        if (task?.start && status !== 'completed' && status !== 'deleted' && colorRules['active']) {
+            matchedRule = colorRules['active'];
+        }
+
+        // color.due - task has a due date
+        if (task?.due && colorRules['due']) {
+            matchedRule = colorRules['due'];
+        }
+
+        // color.overdue - task is overdue (due date in the past)
+        if (task?.due && colorRules['overdue']) {
+            const now = new Date();
+            const dueDate = new Date(task.due);
+            if (dueDate < now && status === 'pending') {
+                matchedRule = colorRules['overdue'];
+            }
+        }
+
+        // color.scheduled - task has a scheduled date
+        if (task?.scheduled && colorRules['scheduled']) {
+            matchedRule = colorRules['scheduled'];
+        }
+
+        // color.until - task has an until date
+        if (task?.until && colorRules['until']) {
+            matchedRule = colorRules['until'];
+        }
+
+        // color.recurring - task is recurring
+        if (task?.recur && colorRules['recurring']) {
+            matchedRule = colorRules['recurring'];
+        }
+
+        // color.tagged - task has tags
+        if (tags.length > 0 && colorRules['tagged']) {
+            matchedRule = colorRules['tagged'];
+        }
+
+        // color.blocked - task is blocked (has dependencies)
+        if (Array.isArray(task?.depends) && task.depends.length > 0 && colorRules['blocked']) {
+            matchedRule = colorRules['blocked'];
+        }
+
+        // color.blocking - task is blocking others
+        // Note: This would require checking if other tasks depend on this one,
+        // which we don't have context for in this function
+
+        // Check priority-specific colors (overrides attributes)
         if (priority && colorRules[`priority.${priority}`]) {
             matchedRule = colorRules[`priority.${priority}`];
         }

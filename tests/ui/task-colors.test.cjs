@@ -255,5 +255,90 @@ color.tag.urgent=underline yellow
             expect(TaskColors.getTaskColorStyle(null, colorRules)).toEqual({});
             expect(TaskColors.getTaskColorStyle({}, null)).toEqual({});
         });
+
+        describe('attribute-based colors', () => {
+            const attributeRules = {
+                'pending': TaskColors.parseColorRule('white'),
+                'due': TaskColors.parseColorRule('red'),
+                'overdue': TaskColors.parseColorRule('bold red'),
+                'active': TaskColors.parseColorRule('green'),
+                'scheduled': TaskColors.parseColorRule('yellow'),
+                'recurring': TaskColors.parseColorRule('blue'),
+                'tagged': TaskColors.parseColorRule('cyan'),
+                'blocked': TaskColors.parseColorRule('magenta'),
+            };
+
+            test('applies color.due when task has due date', () => {
+                const task = { status: 'pending', due: '2099-12-31T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#ff0000');
+            });
+
+            test('applies color.overdue when task is overdue', () => {
+                const task = { status: 'pending', due: '2020-01-01T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#ff0000');
+                expect(style.fontWeight).toBe('bold');
+            });
+
+            test('does not apply color.overdue to completed tasks', () => {
+                const task = { status: 'completed', due: '2020-01-01T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                // Should not match overdue, might match status or nothing
+                expect(style.fontWeight).not.toBe('bold');
+            });
+
+            test('applies color.active when task is active', () => {
+                const task = { status: 'pending', start: '2024-01-01T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#00ff00');
+            });
+
+            test('applies color.scheduled when task has scheduled date', () => {
+                const task = { status: 'pending', scheduled: '2024-01-01T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#ffff00');
+            });
+
+            test('applies color.recurring when task is recurring', () => {
+                const task = { status: 'pending', recur: 'weekly' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#0000ff');
+            });
+
+            test('applies color.tagged when task has tags', () => {
+                const task = { status: 'pending', tags: ['work'] };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#00ffff');
+            });
+
+            test('applies color.blocked when task has dependencies', () => {
+                const task = { status: 'pending', depends: ['uuid-123'] };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#ff00ff');
+            });
+
+            test('priority overrides attribute-based colors', () => {
+                const rulesWithPriority = {
+                    ...attributeRules,
+                    'priority.H': TaskColors.parseColorRule('bold white'),
+                };
+                const task = { status: 'pending', due: '2099-12-31T00:00:00Z', priority: 'H' };
+                const style = TaskColors.getTaskColorStyle(task, rulesWithPriority);
+                expect(style.color).toBe('#ffffff');
+                expect(style.fontWeight).toBe('bold');
+            });
+
+            test('tag-specific overrides attribute-based colors', () => {
+                const rulesWithTag = {
+                    ...attributeRules,
+                    'tag.urgent': TaskColors.parseColorRule('underline white'),
+                };
+                const task = { status: 'pending', due: '2099-12-31T00:00:00Z', tags: ['urgent'] };
+                const style = TaskColors.getTaskColorStyle(task, rulesWithTag);
+                expect(style.color).toBe('#ffffff');
+                expect(style.textDecoration).toBe('underline');
+            });
+        });
     });
 });
