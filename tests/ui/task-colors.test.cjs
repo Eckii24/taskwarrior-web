@@ -275,21 +275,24 @@ color.tag.urgent=underline yellow
             });
 
             test('applies color.overdue when task is overdue', () => {
-                const task = { status: 'pending', due: '2020-01-01T00:00:00Z' };
+                const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // yesterday
+                const task = { status: 'pending', due: pastDate };
                 const style = TaskColors.getTaskColorStyle(task, attributeRules);
                 expect(style.color).toBe('#ff0000');
                 expect(style.fontWeight).toBe('bold');
             });
 
             test('does not apply color.overdue to completed tasks', () => {
-                const task = { status: 'completed', due: '2020-01-01T00:00:00Z' };
+                const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // yesterday
+                const task = { status: 'completed', due: pastDate };
                 const style = TaskColors.getTaskColorStyle(task, attributeRules);
                 // Should not match overdue, might match status or nothing
                 expect(style.fontWeight).not.toBe('bold');
             });
 
             test('applies color.overdue to waiting tasks that are overdue', () => {
-                const task = { status: 'waiting', due: '2020-01-01T00:00:00Z' };
+                const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // yesterday
+                const task = { status: 'waiting', due: pastDate };
                 const style = TaskColors.getTaskColorStyle(task, attributeRules);
                 expect(style.color).toBe('#ff0000');
                 expect(style.fontWeight).toBe('bold');
