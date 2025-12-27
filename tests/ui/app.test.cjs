@@ -441,6 +441,28 @@ describe('Taskwarrior Web UI (component-style)', () => {
         const { vm } = mountWithBackend(backend);
         await flushPromises(vm, 2);
 
+        function pad2(value) {
+            return String(value).padStart(2, '0');
+        }
+
+        function formatExpectedZulu(taskwarriorZulu) {
+            const match = String(taskwarriorZulu || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+            if (!match) throw new Error(`Invalid zulu timestamp: ${taskwarriorZulu}`);
+
+            const [, y, mon, d, h, min, s] = match;
+            const date = new Date(`${y}-${mon}-${d}T${h}:${min}:${s}Z`);
+
+            const dateText = `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}.${date.getFullYear()}`;
+            const hour = date.getHours();
+            const minute = date.getMinutes();
+
+            if ((hour === 0 && minute === 0) || (hour === 23 && minute === 59)) {
+                return dateText;
+            }
+
+            return `${dateText} ${pad2(hour)}:${pad2(minute)}`;
+        }
+
         // Date-only
         expect(vm.formatDate('20251224')).toBe('24.12.2025');
 
@@ -448,13 +470,13 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.formatDate('20251224T235900')).toBe('24.12.2025');
         expect(vm.formatDate('20251224T010500')).toBe('24.12.2025 01:05');
 
-        // Zulu timestamps are converted to the local timezone.
-        // Using Europe/Berlin TZ in this test suite:
-        // 00:30Z on Jan 2 -> 01:30 local.
-        expect(vm.formatDate('20250102T003000Z')).toBe('02.01.2025 01:30');
+        // Zulu timestamps are converted to the runtime's local timezone.
+        // Note: some CI images don't ship full tzdata, so `process.env.TZ`
+        // may silently fall back to UTC.
+        expect(vm.formatDate('20250102T003000Z')).toBe(formatExpectedZulu('20250102T003000Z'));
 
         // Placeholder times are hidden even after conversion.
-        expect(vm.formatDate('20250102T225900Z')).toBe('02.01.2025');
+        expect(vm.formatDate('20250102T225900Z')).toBe(formatExpectedZulu('20250102T225900Z'));
     });
 
     test('TaskQueryService groups UDAs using configured order', async () => {
