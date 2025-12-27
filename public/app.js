@@ -342,6 +342,47 @@ function replaceRange(text, start, end, replacement) {
     return safeText.slice(0, s) + replacement + safeText.slice(e);
 }
 
+const DEFAULT_ATTR_ABBREV_MIN = 2;
+const DATE_VALUE_ATTRS = ['due', 'wait', 'until', 'scheduled', 'start', 'end'];
+
+function escapeRegExp(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveAbbreviatedAttr(typedAttr, candidates = DATE_VALUE_ATTRS, minLen = DEFAULT_ATTR_ABBREV_MIN) {
+    const typed = String(typedAttr || '').trim();
+    if (!typed) return null;
+
+    const normalized = typed.toLowerCase();
+
+    const direct = candidates.find((value) => value === normalized);
+    if (direct) return direct;
+
+    if (normalized.length < minLen) return null;
+
+    const matches = candidates.filter((value) => value.startsWith(normalized));
+    if (matches.length === 1) return matches[0];
+
+    return null;
+}
+
+function resolveTaskFieldName(obj, typedField) {
+    if (!obj) return null;
+
+    const raw = String(typedField || '').trim();
+    if (!raw) return null;
+
+    if (Object.prototype.hasOwnProperty.call(obj, raw)) return raw;
+
+    const canonical = resolveAbbreviatedAttr(raw);
+    if (canonical && Object.prototype.hasOwnProperty.call(obj, canonical)) return canonical;
+
+    const matches = Object.keys(obj).filter((key) => key.startsWith(raw));
+    if (matches.length === 1) return matches[0];
+
+    return null;
+}
+
 function sanitizeTaskCommandArg(value) {
     const text = String(value ?? '').replace(/[\r\n\t]/g, ' ').trim();
     if (!text) return "''";
@@ -940,11 +981,11 @@ function createTaskwarriorApp({
             }
             if (field === 'modal.due') {
                 const scheduleField = this.rescheduleFieldName();
-                const escaped = scheduleField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const canonical = resolveAbbreviatedAttr(scheduleField) || scheduleField;
                 return {
                     type: 'api',
                     requestPrefix: `${scheduleField}:`,
-                    stripPrefix: new RegExp(`^${escaped}:`),
+                    stripPrefix: new RegExp(`^${escapeRegExp(canonical)}:`),
                 };
             }
             if (field === 'modal.priority') {
@@ -2091,12 +2132,12 @@ function createTaskwarriorApp({
             const currentTags = Array.isArray(task?.tags) ? task.tags.join(', ') : '';
             const currentPriority = task?.priority ? String(task.priority) : '';
 
-            const scheduleField = this.rescheduleFieldName();
-            const hasField = (obj, field) => Boolean(obj && Object.prototype.hasOwnProperty.call(obj, field));
+            const scheduleFieldRaw = this.rescheduleFieldName();
 
             let currentDue = '';
-            if (hasField(task, scheduleField)) {
-                currentDue = task[scheduleField] ? String(task[scheduleField]) : '';
+            const resolvedFromList = resolveTaskFieldName(task, scheduleFieldRaw);
+            if (resolvedFromList) {
+                currentDue = task[resolvedFromList] ? String(task[resolvedFromList]) : '';
             } else {
                 try {
                     const exportResult = await commandService.exportTask(uuid);
@@ -2105,8 +2146,9 @@ function createTaskwarriorApp({
                         const parsed = payload ? JSON.parse(payload) : [];
                         const exportedTask = Array.isArray(parsed) ? parsed[0] : parsed;
 
-                        if (hasField(exportedTask, scheduleField)) {
-                            currentDue = exportedTask[scheduleField] ? String(exportedTask[scheduleField]) : '';
+                        const resolvedFromExport = resolveTaskFieldName(exportedTask, scheduleFieldRaw);
+                        if (resolvedFromExport) {
+                            currentDue = exportedTask[resolvedFromExport] ? String(exportedTask[resolvedFromExport]) : '';
                         }
                     }
                 } catch {

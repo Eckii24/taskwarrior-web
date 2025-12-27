@@ -753,6 +753,44 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.modal.due).toBe('tomorrow');
     });
 
+    test('edit modal resolves abbreviated schedule field (schedule -> scheduled)', async () => {
+        const backend = createMockBackend();
+        backend.state.settings.reschedule_field = 'schedule';
+
+        // List view task does not include the scheduling field.
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Scheduled', status: 'pending', urgency: 1 });
+
+        backend.state.beforeFetch = async ({ pathname, method, init }) => {
+            if (pathname !== '/api/task' || method !== 'POST') return null;
+
+            const body = init.body ? JSON.parse(String(init.body)) : {};
+            const args = String(body.args || '');
+            if (args.trim() !== 'uuid-1 export') return null;
+
+            return {
+                ok: true,
+                status: 200,
+                async json() {
+                    return {
+                        success: true,
+                        output: JSON.stringify([{ uuid: 'uuid-1', scheduled: 'tomorrow' }]),
+                        error: '',
+                    };
+                },
+            };
+        };
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        await vm.editTask('uuid-1');
+        await flushPromises(vm, 4);
+
+        expect(vm.modal.open).toBe(true);
+        expect(vm.modal.type).toBe('edit');
+        expect(vm.modal.due).toBe('tomorrow');
+    });
+
     test('completion panel keyboard flow applies suggestion', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5, project: 'Home' });
