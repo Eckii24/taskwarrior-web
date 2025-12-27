@@ -583,6 +583,22 @@ a:hover {
     color: var(--ctp-sky);
 }
 
+.meta-scheduled {
+    color: var(--ctp-yellow);
+}
+
+.meta-scheduled .meta-icon {
+    color: var(--ctp-yellow);
+}
+
+.meta-wait {
+    color: var(--ctp-blue);
+}
+
+.meta-wait .meta-icon {
+    color: var(--ctp-blue);
+}
+
 .priority-icon {
     font-size: 0.95rem;
     line-height: 1;

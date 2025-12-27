@@ -78,6 +78,37 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(document.body.textContent).toContain('Hello');
     });
 
+    test('renders due, scheduled, and waiting dates in task list', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({
+            uuid: 'uuid-1',
+            description: 'Dates',
+            status: 'pending',
+            urgency: 1.5,
+            due: '2025-01-03',
+            scheduled: '2025-01-04',
+            wait: '2025-01-05',
+        });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        const card = document.querySelector('.task-card');
+        expect(card).toBeTruthy();
+
+        const dueEl = card.querySelector('.meta.meta-due');
+        expect(dueEl).toBeTruthy();
+        expect(dueEl.textContent).toContain('03.01.2025');
+
+        const scheduledEl = card.querySelector('.meta.meta-scheduled');
+        expect(scheduledEl).toBeTruthy();
+        expect(scheduledEl.textContent).toContain('04.01.2025');
+
+        const waitEl = card.querySelector('.meta.meta-wait');
+        expect(waitEl).toBeTruthy();
+        expect(waitEl.textContent).toContain('05.01.2025');
+    });
+
     test('opens add task modal from topbar plus button', async () => {
         const backend = createMockBackend();
         const { vm } = mountWithBackend(backend);
