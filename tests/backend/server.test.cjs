@@ -204,6 +204,36 @@ describe('Backend API (supertest)', () => {
         expect(getAfter.body.settings.reschedule_field).toBe('wait');
     });
 
+    test('settings API validates reschedule_field', async () => {
+        const dir = tmpPath('settings-validation');
+        const dbPath = path.join(dir, 'settings.sqlite');
+        const taskrcPath = path.join(dir, 'taskrc');
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const missing = await request(app).put('/api/settings').send({});
+        expect(missing.status).toBe(400);
+        expect(missing.body.success).toBe(false);
+        expect(String(missing.body.error)).toContain('reschedule_field');
+
+        const wrongType = await request(app).put('/api/settings').send({ reschedule_field: 123 });
+        expect(wrongType.status).toBe(400);
+        expect(wrongType.body.success).toBe(false);
+
+        const empty = await request(app).put('/api/settings').send({ reschedule_field: '   ' });
+        expect(empty.status).toBe(400);
+        expect(empty.body.success).toBe(false);
+
+        const invalidChars = await request(app).put('/api/settings').send({ reschedule_field: 'due;rm -rf' });
+        expect(invalidChars.status).toBe(400);
+        expect(invalidChars.body.success).toBe(false);
+    });
+
     test('builtin filters API (seed + update)', async () => {
         const dir = tmpPath('builtin-filters');
         const dbPath = path.join(dir, 'settings.sqlite');

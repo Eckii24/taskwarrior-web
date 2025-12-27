@@ -410,6 +410,79 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(tagSuggestions).toEqual(['groceries']);
     });
 
+    test('app settings save + reset work from settings panel', async () => {
+        const backend = createMockBackend();
+        backend.state.settings.reschedule_field = 'wait';
+
+        const { vm } = mountWithBackend(backend);
+        vm.openSettings();
+        await flushPromises(vm, 6);
+
+        expect(vm.settingsAppLoaded.reschedule_field).toBe('wait');
+        expect(vm.settingsAppDraft.reschedule_field).toBe('wait');
+
+        vm.settingsAppDraft.reschedule_field = 'scheduled';
+        await flushPromises(vm, 1);
+
+        vm.resetAppSettingsDraft();
+        expect(vm.settingsAppDraft.reschedule_field).toBe('wait');
+
+        vm.settingsAppDraft.reschedule_field = 'scheduled';
+        await vm.saveAppSettings();
+        await flushPromises(vm, 4);
+
+        expect(backend.state.settings.reschedule_field).toBe('scheduled');
+        expect(vm.settingsAppLoaded.reschedule_field).toBe('scheduled');
+        expect(vm.toast.text).toContain('Saved app settings');
+    });
+
+    test('formatDate handles date-only, local and zulu timestamps', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 2);
+
+        // Date-only
+        expect(vm.formatDate('20251224')).toBe('24.12.2025');
+
+        // Local timestamps keep their wall-clock time.
+        expect(vm.formatDate('20251224T235900')).toBe('24.12.2025');
+        expect(vm.formatDate('20251224T010500')).toBe('24.12.2025 01:05');
+
+        // Zulu timestamps are converted to the local timezone.
+        // Using Europe/Berlin TZ in this test suite:
+        // 00:30Z on Jan 2 -> 01:30 local.
+        expect(vm.formatDate('20250102T003000Z')).toBe('02.01.2025 01:30');
+
+        // Placeholder times are hidden even after conversion.
+        expect(vm.formatDate('20250102T225900Z')).toBe('02.01.2025');
+    });
+
+    test('TaskQueryService groups UDAs using configured order', async () => {
+        const backend = createMockBackend();
+        backend.state.taskConfig['uda.team.values'] = 'Bravo, Alpha';
+
+        const { TaskwarriorWeb } = mountWithBackend(backend);
+
+        const apiClient = new TaskwarriorWeb.TaskApiClient('/api', backend.fetchImpl);
+        const queryService = new TaskwarriorWeb.TaskQueryService(apiClient);
+
+        const tasks = [
+            { uuid: '1', status: 'pending', urgency: 3, team: 'Charlie' },
+            { uuid: '2', status: 'pending', urgency: 2, team: 'Alpha' },
+            { uuid: '3', status: 'pending', urgency: 1, team: 'Bravo' },
+        ];
+
+        const groups = await queryService.groupTasks(tasks, 'team');
+        expect(groups.map((g) => g.name)).toEqual(['Bravo', 'Alpha', 'Charlie']);
+
+        // Verify caching (second call should not hit backend for _get again).
+        const execSpy = jest.spyOn(apiClient, 'execute');
+        const groups2 = await queryService.groupTasks(tasks, 'team');
+        expect(groups2.map((g) => g.name)).toEqual(['Bravo', 'Alpha', 'Charlie']);
+        expect(execSpy).not.toHaveBeenCalled();
+        execSpy.mockRestore();
+    });
+
     test('Escape closes drawer/reschedule/completion and respects modal safety', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5 });
