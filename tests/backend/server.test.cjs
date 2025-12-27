@@ -53,9 +53,10 @@ describe('Backend API (supertest)', () => {
             execTaskOverride: async () => ({ stdout: '', stderr: '' }),
         });
 
-        const createA = await request(app).post('/api/filters').send({ name: 'A', filter: 'status:pending', icon: '🏠' });
+        const createA = await request(app).post('/api/filters').send({ name: 'A', filter: 'status:pending', icon: '🏠', group_by: 'project' });
         expect(createA.status).toBe(200);
         expect(createA.body.filter.icon).toBe('🏠');
+        expect(createA.body.filter.group_by).toBe('project');
         const idA = createA.body.filter.id;
 
         const createB = await request(app).post('/api/filters').send({ name: 'B', filter: 'status:pending project:Home' });
@@ -66,6 +67,7 @@ describe('Backend API (supertest)', () => {
         expect(list1.body.success).toBe(true);
         expect(list1.body.filters.map((f) => f.id)).toEqual([idA, idB]);
         expect(list1.body.filters[0].icon).toBe('🏠');
+        expect(list1.body.filters[0].group_by).toBe('project');
 
         const reorder = await request(app).put('/api/filters/reorder').send({ ids: [idB, idA] });
         expect(reorder.status).toBe(200);
@@ -74,10 +76,15 @@ describe('Backend API (supertest)', () => {
         const list2 = await request(app).get('/api/filters');
         expect(list2.body.filters.map((f) => f.id)).toEqual([idB, idA]);
 
-        const update = await request(app).put(`/api/filters/${idB}`).send({ name: 'B2', icon: '💼' });
+        const update = await request(app).put(`/api/filters/${idB}`).send({ name: 'B2', icon: '💼', group_by: 'tags' });
         expect(update.status).toBe(200);
         expect(update.body.filter.name).toBe('B2');
         expect(update.body.filter.icon).toBe('💼');
+        expect(update.body.filter.group_by).toBe('tags');
+
+        const clearGroup = await request(app).put(`/api/filters/${idB}`).send({ group_by: '' });
+        expect(clearGroup.status).toBe(200);
+        expect(clearGroup.body.filter.group_by).toBe(null);
 
         const del = await request(app).delete(`/api/filters/${idA}`);
         expect(del.status).toBe(200);
@@ -195,21 +202,34 @@ describe('Backend API (supertest)', () => {
         expect(byKey.has('all')).toBe(true);
 
         expect(byKey.get('today').filter).toBe('due:today status:pending');
+        expect(byKey.get('today').group_by).toBe(null);
 
         const update = await request(app)
             .put('/api/builtin-filters/today')
-            .send({ name: 'My Today', visible: false, filter: 'due:tomorrow status:pending' });
+            .send({ name: 'My Today', visible: false, filter: 'due:tomorrow status:pending', group_by: 'project' });
         expect(update.status).toBe(200);
         expect(update.body.success).toBe(true);
         expect(update.body.filter.key).toBe('today');
         expect(update.body.filter.name).toBe('My Today');
         expect(update.body.filter.filter).toBe('due:tomorrow status:pending');
         expect(update.body.filter.visible).toBe(0);
+        expect(update.body.filter.group_by).toBe('project');
 
         const list2 = await request(app).get('/api/builtin-filters');
         const byKey2 = new Map(list2.body.filters.map((f) => [f.key, f]));
         expect(byKey2.get('today').name).toBe('My Today');
         expect(byKey2.get('today').visible).toBe(0);
+        expect(byKey2.get('today').group_by).toBe('project');
+
+        const clearGroup = await request(app)
+            .put('/api/builtin-filters/today')
+            .send({ group_by: '' });
+        expect(clearGroup.status).toBe(200);
+        expect(clearGroup.body.filter.group_by).toBe(null);
+
+        const list3 = await request(app).get('/api/builtin-filters');
+        const byKey3 = new Map(list3.body.filters.map((f) => [f.key, f]));
+        expect(byKey3.get('today').group_by).toBe(null);
     });
 
     test('builtin filters API: negative paths (missing/unknown key + empty name)', async () => {
