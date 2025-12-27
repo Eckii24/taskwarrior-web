@@ -10,8 +10,13 @@ const Database = require('better-sqlite3');
 const execFileAsync = promisify(execFile);
 const PORT = process.env.PORT || 3000;
 
-const DEFAULT_TASKDATA_PATH = path.join(process.env.HOME || os.homedir(), '.task');
-const DEFAULT_TASKRC_PATH = path.join(DEFAULT_TASKDATA_PATH, 'taskrc');
+const HOME_DIR = process.env.HOME || os.homedir();
+
+// Taskwarrior defaults:
+// - config: ~/.taskrc
+// - data: ~/.task
+const DEFAULT_TASKDATA_PATH = path.join(HOME_DIR, '.task');
+const DEFAULT_TASKRC_PATH = path.join(HOME_DIR, '.taskrc');
 
 const TASKDATA_PATH_DEFAULT = process.env.TASKDATA || DEFAULT_TASKDATA_PATH;
 const TASKRC_PATH_DEFAULT = process.env.TASKRC || DEFAULT_TASKRC_PATH;

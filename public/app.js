@@ -2547,6 +2547,21 @@ function createTaskwarriorApp({
             }
         },
         
+        getTaskTextStyle(task) {
+            const full = this.getTaskColorStyle(task);
+            if (!full || typeof full !== 'object') return {};
+
+            const styles = { ...full };
+            delete styles.backgroundColor;
+            return styles;
+        },
+
+        getTaskCardStyle(task) {
+            const full = this.getTaskColorStyle(task);
+            const bg = full && typeof full === 'object' ? full.backgroundColor : null;
+            return bg ? { backgroundColor: bg } : {};
+        },
+
         getTaskColorStyle(task) {
             // Use TaskColors module if available
             if (typeof TaskColors !== 'undefined' && TaskColors.getTaskColorStyle) {
