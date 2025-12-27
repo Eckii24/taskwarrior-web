@@ -467,6 +467,15 @@ function createTaskwarriorApp({
                 taskUuid: null,
                 custom: '',
             },
+
+            groupDropdownOpen: false,
+            groupOptions: [
+                { value: null, label: 'None' },
+                { value: 'project', label: 'Project' },
+                { value: 'priority', label: 'Priority' },
+                { value: 'tags', label: 'Tags' },
+                { value: 'status', label: 'Status' },
+            ],
         };
     },
     computed: {
@@ -521,6 +530,7 @@ function createTaskwarriorApp({
     },
         async mounted() {
         window.addEventListener('keydown', this.onGlobalKeydown);
+        window.addEventListener('click', this.onGlobalClick);
 
         const restoredView = this.readPersistedSelectedView();
 
@@ -532,6 +542,7 @@ function createTaskwarriorApp({
     },
     beforeUnmount() {
         window.removeEventListener('keydown', this.onGlobalKeydown);
+        window.removeEventListener('click', this.onGlobalClick);
     },
     methods: {
         persistSelectedView(view) {
@@ -693,6 +704,16 @@ function createTaskwarriorApp({
             this.modalEscHintTimeoutId = null;
         },
 
+        onGlobalClick(event) {
+            // Close group dropdown when clicking outside
+            if (this.groupDropdownOpen) {
+                const dropdown = event.target.closest('.tasks-controls');
+                if (!dropdown) {
+                    this.groupDropdownOpen = false;
+                }
+            }
+        },
+
         onGlobalKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.modal.open) {
@@ -709,6 +730,7 @@ function createTaskwarriorApp({
                 if (this.drawerOpen) this.toggleDrawer(false);
                 this.closeReschedule();
                 this.resetCompletion();
+                this.groupDropdownOpen = false;
             }
         },
 
@@ -1237,6 +1259,20 @@ function createTaskwarriorApp({
             await this.loadTasksForSelection();
         },
 
+        toggleGroupDropdown() {
+            this.groupDropdownOpen = !this.groupDropdownOpen;
+        },
+
+        selectGroupOption(value) {
+            this.groupDropdownOpen = false;
+            this.updateGroupBy(value);
+        },
+
+        getGroupByLabel(value) {
+            const option = this.groupOptions.find(opt => opt.value === value);
+            return option ? option.label : 'Group by';
+        },
+
         async updateGroupBy(groupBy) {
             this.currentGroupBy = groupBy || null;
             await this.saveGroupSettings();
@@ -1245,6 +1281,7 @@ function createTaskwarriorApp({
 
         async resetSortGroupSettings() {
             this.currentGroupBy = null;
+            this.groupDropdownOpen = false;
             await this.saveGroupSettings();
             await this.refreshCurrentPanel();
         },

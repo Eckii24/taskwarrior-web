@@ -1240,54 +1240,64 @@ a:hover {
     }
 }
 
-/* Sort and Group Controls */
-.sort-group-controls {
-    margin: 1rem 0;
-    padding: 1rem;
-    background-color: var(--color-bg-elevated);
+/* Tasks heading row with controls */
+.tasks-heading-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 4px 2px 12px;
+    gap: 12px;
+}
+
+.tasks-controls {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--line);
     border-radius: 8px;
-    border: 1px solid var(--color-border);
-}
-
-.control-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: center;
-}
-
-.control-group {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.control-label {
+    color: var(--muted);
+    cursor: pointer;
     font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--color-text-secondary);
+    transition: all 0.2s;
+    position: relative;
     white-space: nowrap;
 }
 
-.control-select {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.9rem;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    cursor: pointer;
-    transition: border-color 0.2s;
+.control-btn:hover {
+    background: var(--hover);
+    border-color: var(--accent);
+    color: var(--text);
 }
 
-.control-select:hover {
-    border-color: var(--color-primary);
+.control-btn.has-value {
+    background: var(--panel-2);
+    border-color: var(--accent);
+    color: var(--text);
 }
 
-.control-select:focus {
-    outline: none;
-    border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+.control-icon {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.group-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 160px;
+    z-index: 100;
 }
 
 /* Task Group Styles */
@@ -1306,28 +1316,20 @@ a:hover {
 .task-group-header {
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--color-text);
+    color: var(--text);
     padding: 0.5rem 0;
-    border-bottom: 2px solid var(--color-border);
+    border-bottom: 2px solid var(--line);
     margin-bottom: 0.5rem;
 }
 
 @media (max-width: 768px) {
-    .control-row {
-        flex-direction: column;
-        align-items: stretch;
+    .tasks-heading-row {
+        flex-direction: row;
+        align-items: center;
     }
     
-    .control-group {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    
-    .control-label {
+    .control-btn {
         font-size: 0.85rem;
-    }
-    
-    .control-select {
-        width: 100%;
+        padding: 6px 10px;
     }
 }

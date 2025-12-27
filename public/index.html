@@ -308,30 +308,35 @@
                 </div>
 
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
-                    <div class="tasks-heading">{{ currentTitle }}</div>
-                    
-                    <div v-if="!showTaskrc && selectedView.type !== 'search'" class="sort-group-controls">
-                        <div class="control-row">
-                            <div class="control-group">
-                                <label class="control-label">Group by:</label>
-                                <select class="control-select" v-model="currentGroupBy" @change="updateGroupBy(currentGroupBy)">
-                                    <option :value="null">None (default)</option>
-                                    <option value="none">None</option>
-                                    <option value="project">Project</option>
-                                    <option value="priority">Priority</option>
-                                    <option value="tags">Tags</option>
-                                    <option value="status">Status</option>
-                                </select>
-                            </div>
-                            
+                    <div class="tasks-heading-row">
+                        <div class="tasks-heading">{{ currentTitle }}</div>
+                        <div v-if="!showTaskrc && selectedView.type !== 'search'" class="tasks-controls">
                             <button 
-                                v-if="currentGroupBy && currentGroupBy !== 'none'" 
-                                class="btn small"
                                 type="button"
-                                @click="resetSortGroupSettings"
+                                class="control-btn"
+                                :class="{ 'has-value': currentGroupBy && currentGroupBy !== 'none' }"
+                                @click="toggleGroupDropdown"
                             >
-                                Reset
+                                <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
+                                </svg>
+                                <span>{{ currentGroupBy && currentGroupBy !== 'none' ? getGroupByLabel(currentGroupBy) : 'Group by' }}</span>
+                                <svg v-if="currentGroupBy && currentGroupBy !== 'none'" class="clear-icon" viewBox="0 0 24 24" @click.stop="resetSortGroupSettings">
+                                    <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                                </svg>
                             </button>
+                            
+                            <div v-if="groupDropdownOpen" class="attribute-dropdown group-dropdown">
+                                <div 
+                                    v-for="option in groupOptions" 
+                                    :key="option.value"
+                                    class="dropdown-item"
+                                    :class="{ active: currentGroupBy === option.value }"
+                                    @click="selectGroupOption(option.value)"
+                                >
+                                    {{ option.label }}
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
