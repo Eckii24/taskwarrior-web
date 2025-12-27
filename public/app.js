@@ -485,6 +485,9 @@ function createTaskwarriorApp({
             showTaskrc: false,
             taskrcText: '',
             loadedTaskrcText: '',
+            
+            // TaskWarrior color rules
+            taskrcColorRules: {},
 
             builtinFilters: {
                 today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
@@ -2510,6 +2513,9 @@ function createTaskwarriorApp({
                 const text = await response.text();
                 this.taskrcText = text;
                 this.loadedTaskrcText = text;
+                
+                // Parse color rules from taskrc
+                this.parseTaskrcColors(text);
             } catch (error) {
                 this.showToast(`Error loading taskrc: ${error.message}`, 'error');
             }
@@ -2524,10 +2530,44 @@ function createTaskwarriorApp({
                 });
                 if (!response.ok) throw new Error(await response.text());
                 this.loadedTaskrcText = this.taskrcText;
+                
+                // Re-parse color rules after saving
+                this.parseTaskrcColors(this.taskrcText);
+                
                 this.showToast('Saved taskrc', 'success');
             } catch (error) {
                 this.showToast(`Error saving taskrc: ${error.message}`, 'error');
             }
+        },
+        
+        parseTaskrcColors(taskrcContent) {
+            // Use TaskColors module if available
+            if (typeof TaskColors !== 'undefined' && TaskColors.parseTaskrcColors) {
+                this.taskrcColorRules = TaskColors.parseTaskrcColors(taskrcContent);
+            }
+        },
+        
+        getTaskTextStyle(task) {
+            const full = this.getTaskColorStyle(task);
+            if (!full || typeof full !== 'object') return {};
+
+            const styles = { ...full };
+            delete styles.backgroundColor;
+            return styles;
+        },
+
+        getTaskCardStyle(task) {
+            const full = this.getTaskColorStyle(task);
+            const bg = full && typeof full === 'object' ? full.backgroundColor : null;
+            return bg ? { backgroundColor: bg } : {};
+        },
+
+        getTaskColorStyle(task) {
+            // Use TaskColors module if available
+            if (typeof TaskColors !== 'undefined' && TaskColors.getTaskColorStyle) {
+                return TaskColors.getTaskColorStyle(task, this.taskrcColorRules);
+            }
+            return {};
         },
 
         async saveBuiltinFilters() {

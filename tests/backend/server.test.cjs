@@ -18,6 +18,38 @@ function tmpPath(prefix) {
 }
 
 describe('Backend API (supertest)', () => {
+    test('defaults taskrc to ~/.taskrc (not ~/.task/taskrc)', async () => {
+        const originalHome = process.env.HOME;
+        const originalTaskdata = process.env.TASKDATA;
+        const originalTaskrc = process.env.TASKRC;
+
+        const homeDir = tmpPath('home');
+
+        process.env.HOME = homeDir;
+        delete process.env.TASKDATA;
+        delete process.env.TASKRC;
+
+        jest.resetModules();
+        const { createApp } = require('../../backend/server.js');
+
+        const app = createApp({
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const getRes = await request(app).get('/api/taskrc');
+        expect(getRes.status).toBe(200);
+        expect(getRes.text).toContain(`data.location=${path.join(homeDir, '.task')}`);
+
+        expect(fs.existsSync(path.join(homeDir, '.taskrc'))).toBe(true);
+        expect(fs.existsSync(path.join(homeDir, '.task', 'taskrc'))).toBe(false);
+
+        process.env.HOME = originalHome;
+        if (originalTaskdata === undefined) delete process.env.TASKDATA;
+        else process.env.TASKDATA = originalTaskdata;
+        if (originalTaskrc === undefined) delete process.env.TASKRC;
+        else process.env.TASKRC = originalTaskrc;
+    });
+
     test('taskrc roundtrip (GET then PUT)', async () => {
         const dir = tmpPath('taskrc');
         const taskrcPath = path.join(dir, 'taskrc');
