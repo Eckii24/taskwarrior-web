@@ -284,8 +284,8 @@
         // Check attribute-based colors
         // These apply based on task attributes being present or meeting certain conditions
         
-        // color.active - task is active (has start date, not completed/deleted)
-        if (task?.start && status !== 'completed' && status !== 'deleted' && colorRules['active']) {
+        // color.active - task is active (has start date, not completed/deleted/waiting)
+        if (task?.start && status !== 'completed' && status !== 'deleted' && status !== 'waiting' && colorRules['active']) {
             matchedRule = colorRules['active'];
         }
 
@@ -294,11 +294,11 @@
             matchedRule = colorRules['due'];
         }
 
-        // color.overdue - task is overdue (due date in the past)
+        // color.overdue - task is overdue (due date in the past, task not completed/deleted)
         if (task?.due && colorRules['overdue']) {
             const now = new Date();
             const dueDate = new Date(task.due);
-            if (dueDate < now && status === 'pending') {
+            if (dueDate < now && status !== 'completed' && status !== 'deleted') {
                 matchedRule = colorRules['overdue'];
             }
         }

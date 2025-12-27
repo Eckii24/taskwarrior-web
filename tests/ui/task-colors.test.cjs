@@ -288,10 +288,23 @@ color.tag.urgent=underline yellow
                 expect(style.fontWeight).not.toBe('bold');
             });
 
+            test('applies color.overdue to waiting tasks that are overdue', () => {
+                const task = { status: 'waiting', due: '2020-01-01T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).toBe('#ff0000');
+                expect(style.fontWeight).toBe('bold');
+            });
+
             test('applies color.active when task is active', () => {
                 const task = { status: 'pending', start: '2024-01-01T00:00:00Z' };
                 const style = TaskColors.getTaskColorStyle(task, attributeRules);
                 expect(style.color).toBe('#00ff00');
+            });
+
+            test('does not apply color.active to waiting tasks even with start date', () => {
+                const task = { status: 'waiting', start: '2024-01-01T00:00:00Z' };
+                const style = TaskColors.getTaskColorStyle(task, attributeRules);
+                expect(style.color).not.toBe('#00ff00');
             });
 
             test('applies color.scheduled when task has scheduled date', () => {
