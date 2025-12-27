@@ -1391,3 +1391,9 @@ a:hover {
         padding: 6px 10px;
     }
 }
+
+@media (max-width: 768px) {
+    .urgency {
+        display: none;
+    }
+}

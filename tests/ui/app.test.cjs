@@ -109,6 +109,22 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(waitEl.textContent).toContain('05.01.2025');
     });
 
+    test('hides urgency chip on mobile widths', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        const urgencyEl = document.querySelector('.task-card .urgency');
+        expect(urgencyEl).toBeTruthy();
+
+        const stylesPath = path.join(__dirname, '..', '..', 'public', 'styles.css');
+        const styles = fs.readFileSync(stylesPath, 'utf8');
+
+        expect(styles).toMatch(/@media \(max-width: 768px\)[\s\S]*?\.urgency\s*\{[\s\S]*?display:\s*none;/);
+    });
+
     test('opens add task modal from topbar plus button', async () => {
         const backend = createMockBackend();
         const { vm } = mountWithBackend(backend);
