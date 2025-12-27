@@ -114,22 +114,38 @@ class TaskApiClient {
         return await response.json();
     }
 
-    async getBuiltinFilters() {
-        this.requireFetch();
-        const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
-        return await response.json();
-    }
+     async getBuiltinFilters() {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
+         return await response.json();
+     }
 
-    async updateBuiltinFilter(key, payload) {
-        this.requireFetch();
-        const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters/${encodeURIComponent(String(key))}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        return await response.json();
-    }
-}
+     async updateBuiltinFilter(key, payload) {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters/${encodeURIComponent(String(key))}`, {
+             method: 'PUT',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(payload),
+         });
+         return await response.json();
+     }
+
+     async getSettings() {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/settings`);
+         return await response.json();
+     }
+
+     async updateSettings(payload) {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/settings`, {
+             method: 'PUT',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(payload),
+         });
+         return await response.json();
+     }
+ }
 
 class TaskQueryService {
     constructor(apiClient) {
@@ -359,11 +375,19 @@ function createTaskwarriorApp({
                 next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
                 all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
             },
-            settingsBuiltinDraft: {
-                today: { name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
-                next: { name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
-                all: { name: 'All', filter: '', visible: true, group_by: null },
-            },
+             settingsBuiltinDraft: {
+                 today: { name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
+                 next: { name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
+                 all: { name: 'All', filter: '', visible: true, group_by: null },
+             },
+
+             settingsAppDraft: {
+                 reschedule_field: 'due',
+             },
+
+             settingsAppLoaded: {
+                 reschedule_field: 'due',
+             },
 
              filters: [],
              draggedFilterId: null,
@@ -521,6 +545,7 @@ function createTaskwarriorApp({
 
         await this.refreshBuiltinFilters();
         await this.refreshFilters();
+        await this.refreshAppSettings();
         this.applyRestoredSelectedView(restoredView);
 
         await this.loadTasksForSelection();
@@ -732,6 +757,7 @@ function createTaskwarriorApp({
             this.toggleDrawer(false);
 
             this.refreshBuiltinFilters();
+            this.refreshAppSettings();
 
             if (this.taskrcText === '' && this.loadedTaskrcText === '') {
                 this.loadTaskrc();
@@ -776,13 +802,32 @@ function createTaskwarriorApp({
             this.reschedule = { open: true, taskUuid: uuid, custom: '' };
         },
 
-        async rescheduleTask(taskUuid, dueValue) {
+        rescheduleFieldName() {
+            return String(this.settingsAppLoaded?.reschedule_field || 'due').trim() || 'due';
+        },
+
+        rescheduleFieldLabel() {
+            const field = this.rescheduleFieldName();
+            return field ? `${field[0].toUpperCase()}${field.slice(1)}` : 'Due';
+        },
+
+        formatTaskDateInput(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+
+            const formatted = this.formatDate(raw);
+            return formatted || raw;
+        },
+
+        async rescheduleTask(taskUuid, dateValue) {
             const uuid = String(taskUuid || '').trim();
-            const due = String(dueValue || '').trim();
-            if (!uuid || !due) return;
+            const value = String(dateValue || '').trim();
+            if (!uuid || !value) return;
+
+            const field = this.rescheduleFieldName();
 
             await this.withBusyTask(uuid, async () => {
-                const result = await commandService.modifyTask(uuid, `due:${due}`);
+                const result = await commandService.modifyTask(uuid, `${field}:${value}`);
                 if (result.success) {
                     this.showToast('Rescheduled task', 'success');
                     this.closeReschedule();
@@ -793,18 +838,20 @@ function createTaskwarriorApp({
             });
         },
 
-        async clearTaskDue(taskUuid) {
+        async clearRescheduleField(taskUuid) {
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
 
+            const field = this.rescheduleFieldName();
+
             await this.withBusyTask(uuid, async () => {
-                const result = await commandService.modifyTask(uuid, 'due:');
+                const result = await commandService.modifyTask(uuid, `${field}:`);
                 if (result.success) {
-                    this.showToast('Cleared due date', 'success');
+                    this.showToast(`Cleared ${field}`, 'success');
                     this.closeReschedule();
                     await this.refreshCurrentPanel();
                 } else {
-                    this.showToast(result.error || 'Failed to clear due date', 'error');
+                    this.showToast(result.error || `Failed to clear ${field}`, 'error');
                 }
             });
         },
@@ -892,7 +939,13 @@ function createTaskwarriorApp({
                 return { type: 'api', requestPrefix: '+', stripPrefix: /^\+/ };
             }
             if (field === 'modal.due') {
-                return { type: 'api', requestPrefix: 'due:', stripPrefix: /^due:/ };
+                const scheduleField = this.rescheduleFieldName();
+                const escaped = scheduleField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                return {
+                    type: 'api',
+                    requestPrefix: `${scheduleField}:`,
+                    stripPrefix: new RegExp(`^${escaped}:`),
+                };
             }
             if (field === 'modal.priority') {
                 return {
@@ -1141,6 +1194,46 @@ function createTaskwarriorApp({
                 }
             } catch {
                 // ignore
+            }
+        },
+
+        async refreshAppSettings() {
+            try {
+                const result = await apiClient.getSettings();
+                if (!result?.success) return;
+
+                const rescheduleField = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
+
+                this.settingsAppLoaded = {
+                    reschedule_field: rescheduleField,
+                };
+                this.settingsAppDraft = {
+                    reschedule_field: rescheduleField,
+                };
+            } catch {
+                // ignore
+            }
+        },
+
+        resetAppSettingsDraft() {
+            this.settingsAppDraft = { ...this.settingsAppLoaded };
+        },
+
+        async saveAppSettings() {
+            try {
+                const payload = {
+                    reschedule_field: String(this.settingsAppDraft?.reschedule_field || '').trim(),
+                };
+
+                const result = await apiClient.updateSettings(payload);
+                if (!result?.success) {
+                    throw new Error(result?.error || 'Failed to save settings');
+                }
+
+                await this.refreshAppSettings();
+                this.showToast('Saved app settings', 'success');
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error');
             }
         },
 
@@ -1434,8 +1527,25 @@ function createTaskwarriorApp({
             }
         },
 
-        openCommandModal(type) {
-            this.modal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '', filterIcon: '' };
+         openCommandModal(type) {
+             const baseModal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '', filterIcon: '' };
+
+             if (type === 'add') {
+                 baseModal.description = '';
+                 baseModal.project = '';
+                 baseModal.tags = '';
+                 baseModal.priority = '';
+                 baseModal.due = '';
+                 baseModal.originalDescription = '';
+                 baseModal.originalProject = '';
+                 baseModal.originalTags = '';
+                 baseModal.originalPriority = '';
+                 baseModal.originalDue = '';
+                 baseModal.activeAttributeDropdown = null;
+                 baseModal.attributeInputValue = '';
+             }
+
+             this.modal = baseModal;
             if (type === 'exec') this.showTaskrc = false;
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1510,15 +1620,17 @@ function createTaskwarriorApp({
             }
         },
 
-        getAttributePlaceholder(attributeName) {
-            const placeholders = {
-                due: 'e.g., tomorrow, eom, 2024-12-31',
-                priority: 'H, M, L',
-                project: 'Select or type project name',
-                tags: 'Add tags (comma separated)'
-            };
-            return placeholders[attributeName] || '';
-        },
+         getAttributePlaceholder(attributeName) {
+             const scheduleField = this.rescheduleFieldName();
+
+             const placeholders = {
+                 due: `e.g., tomorrow, eom, 2024-12-31 (sets ${scheduleField})`,
+                 priority: 'H, M, L',
+                 project: 'Select or type project name',
+                 tags: 'Add tags (comma separated)',
+             };
+             return placeholders[attributeName] || '';
+         },
 
         async handleAttributeKeydown(event) {
             const inputEl = event.target;
@@ -1795,9 +1907,10 @@ function createTaskwarriorApp({
                     taskCommand += ` priority:${this.modal.priority}`;
                 }
                 
-                if (this.modal.due) {
-                    taskCommand += ` due:${this.modal.due}`;
-                }
+                 const scheduleField = this.rescheduleFieldName();
+                 if (this.modal.due) {
+                     taskCommand += ` ${scheduleField}:${this.modal.due}`;
+                 }
                 
                 const result = await commandService.addTask(taskCommand);
                 if (result.success) {
@@ -1840,13 +1953,14 @@ function createTaskwarriorApp({
                     }
                 }
                 
-                if (this.modal.due !== this.modal.originalDue) {
-                    if (this.modal.due) {
-                        parts.push(`due:${this.modal.due}`);
-                    } else {
-                        parts.push('due:');
-                    }
-                }
+                 if (this.modal.due !== this.modal.originalDue) {
+                     const scheduleField = this.rescheduleFieldName();
+                     if (this.modal.due) {
+                         parts.push(`${scheduleField}:${this.modal.due}`);
+                     } else {
+                         parts.push(`${scheduleField}:`);
+                     }
+                 }
                 
                 if (this.modal.tags !== this.modal.originalTags) {
                     // Remove old tags and add new ones
@@ -1968,23 +2082,48 @@ function createTaskwarriorApp({
         },
 
         async editTask(taskUuid) {
-            const task = this.tasks.find((t) => String(t.uuid) === String(taskUuid));
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            const task = this.tasks.find((t) => String(t.uuid) === uuid);
             const currentDescription = task?.description ? String(task.description) : '';
             const currentProject = task?.project ? String(task.project) : '';
             const currentTags = Array.isArray(task?.tags) ? task.tags.join(', ') : '';
             const currentPriority = task?.priority ? String(task.priority) : '';
-            const currentDue = task?.due ? String(task.due) : '';
-            
+
+            const scheduleField = this.rescheduleFieldName();
+            const hasField = (obj, field) => Boolean(obj && Object.prototype.hasOwnProperty.call(obj, field));
+
+            let currentDue = '';
+            if (hasField(task, scheduleField)) {
+                currentDue = task[scheduleField] ? String(task[scheduleField]) : '';
+            } else {
+                try {
+                    const exportResult = await commandService.exportTask(uuid);
+                    if (exportResult.success) {
+                        const payload = String(exportResult.output || '').trim();
+                        const parsed = payload ? JSON.parse(payload) : [];
+                        const exportedTask = Array.isArray(parsed) ? parsed[0] : parsed;
+
+                        if (hasField(exportedTask, scheduleField)) {
+                            currentDue = exportedTask[scheduleField] ? String(exportedTask[scheduleField]) : '';
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+
             // Fetch full task details for the collapsible section
             let taskDetailsOutput = '';
             try {
-                const result = await commandService.showTask(taskUuid);
+                const result = await commandService.showTask(uuid);
                 if (result.success) {
                     const output = (result.output || '').trim();
                     const err = (result.error || '').trim();
                     taskDetailsOutput = [output, err].filter(Boolean).join('\n') || 'No details available';
                 }
-            } catch (error) {
+            } catch {
                 taskDetailsOutput = 'Failed to load task details';
             }
 
@@ -1995,7 +2134,7 @@ function createTaskwarriorApp({
                  type: 'edit',
                  value: currentDescription,
                  output: '',
-                 taskId: taskUuid,
+                 taskId: uuid,
                 filterId: null,
                 filterName: '',
                 filterValue: '',
@@ -2156,30 +2295,72 @@ function createTaskwarriorApp({
             return normalized;
         },
 
-        formatDate(dateStr) {
-            const normalized = this.normalizeTaskDate(dateStr);
-            if (!normalized) return '';
+        parseNormalizedDateParts(normalized) {
+            const value = String(normalized || '').trim();
+            if (!value) return null;
 
-            const date = new Date(normalized);
-            if (Number.isNaN(date.getTime())) return '';
+            // `normalized` is either YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS[Z]
+            const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(Z)?)?$/);
+            if (!match) return null;
 
-            return date.toLocaleDateString();
+            const [, yearText, monthText, dayText, hourText, minuteText, _secondText, zuluMarker] = match;
+            const hasTime = hourText !== undefined && minuteText !== undefined;
+            const isZulu = Boolean(zuluMarker);
+
+            // Treat date-only values and local timestamps as local wall-clock times.
+            // Only convert when Taskwarrior exported a UTC timestamp (with trailing 'Z').
+            if (!hasTime || !isZulu) {
+                return {
+                    year: Number(yearText),
+                    month: Number(monthText),
+                    day: Number(dayText),
+                    hour: hasTime ? Number(hourText) : null,
+                    minute: hasTime ? Number(minuteText) : null,
+                    hasTime,
+                };
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return null;
+
+            return {
+                year: date.getFullYear(),
+                month: date.getMonth() + 1,
+                day: date.getDate(),
+                hour: date.getHours(),
+                minute: date.getMinutes(),
+                hasTime,
+            };
         },
 
-        formatDateTime(dateStr) {
+        pad2(value) {
+            return String(value).padStart(2, '0');
+        },
+
+        formatDate(dateStr) {
             const normalized = this.normalizeTaskDate(dateStr);
-            if (!normalized) return '';
+            const parts = this.parseNormalizedDateParts(normalized);
+            if (!parts) return '';
 
-            const date = new Date(normalized);
-            if (Number.isNaN(date.getTime())) return '';
+            const dateText = `${this.pad2(parts.day)}.${this.pad2(parts.month)}.${parts.year}`;
 
-            return date.toLocaleString(undefined, {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-            });
+            if (!parts.hasTime) return dateText;
+
+            const hour = parts.hour ?? 0;
+            const minute = parts.minute ?? 0;
+
+            // Hide time when it is a placeholder (00:00 or 23:59), but only if time exists.
+            if ((hour === 0 && minute === 0) || (hour === 23 && minute === 59)) {
+                return dateText;
+            }
+
+            return `${dateText} ${this.pad2(hour)}:${this.pad2(minute)}`;
+        },
+
+        // Keep for compatibility with templates that expect a date+time formatter.
+        // With deterministic formatting, it's the same as `formatDate`.
+        formatDateTime(dateStr) {
+            return this.formatDate(dateStr);
         },
 
         formatUrgency(value) {

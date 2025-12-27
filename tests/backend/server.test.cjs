@@ -178,6 +178,32 @@ describe('Backend API (supertest)', () => {
         expect(missingDelete.body.success).toBe(false);
     });
 
+    test('settings API (default + update)', async () => {
+        const dir = tmpPath('settings');
+        const dbPath = path.join(dir, 'settings.sqlite');
+        const taskrcPath = path.join(dir, 'taskrc');
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const getDefault = await request(app).get('/api/settings');
+        expect(getDefault.status).toBe(200);
+        expect(getDefault.body.success).toBe(true);
+        expect(getDefault.body.settings.reschedule_field).toBe('due');
+
+        const put = await request(app).put('/api/settings').send({ reschedule_field: 'wait' });
+        expect(put.status).toBe(200);
+        expect(put.body.success).toBe(true);
+        expect(put.body.settings.reschedule_field).toBe('wait');
+
+        const getAfter = await request(app).get('/api/settings');
+        expect(getAfter.body.settings.reschedule_field).toBe('wait');
+    });
+
     test('builtin filters API (seed + update)', async () => {
         const dir = tmpPath('builtin-filters');
         const dbPath = path.join(dir, 'settings.sqlite');

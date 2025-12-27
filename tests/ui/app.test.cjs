@@ -25,6 +25,18 @@ function mountWithBackend(backend) {
 }
 
 describe('Taskwarrior Web UI (component-style)', () => {
+    const originalTz = process.env.TZ;
+
+    beforeAll(() => {
+        // Ensure we run with a non-UTC timezone so Zulu timestamps
+        // are validated against local rendering.
+        process.env.TZ = 'Europe/Berlin';
+    });
+
+    afterAll(() => {
+        process.env.TZ = originalTz;
+    });
+
     beforeEach(() => {
         jest.useFakeTimers();
         document.documentElement.innerHTML = loadIndexHtml();
@@ -56,11 +68,20 @@ describe('Taskwarrior Web UI (component-style)', () => {
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5 });
 
         const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 5);
+        await flushPromises(vm, 6);
 
         expect(vm.tasks).toHaveLength(1);
         expect(Array.isArray(vm.taskGroups)).toBe(true);
         expect(document.body.textContent).toContain('Hello');
+    });
+
+    test('formats zulu timestamps in local timezone', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 3);
+
+        // Berlin winter time: 23:00Z is 00:00 next day.
+        expect(vm.formatDate('20251226T230000Z')).toBe('27.12.2025');
     });
 
     test('switches built-in view to All', async () => {
@@ -79,6 +100,22 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
         expect(vm.tasks.map((t) => t.uuid).sort()).toEqual(['uuid-1', 'uuid-2']);
         expect(document.body.textContent).toContain('Completed');
+    });
+
+    test('opens add task modal from topbar plus button', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+
+        await flushPromises(vm, 5);
+
+        const addBtn = document.querySelector('header.topbar button[aria-label="Add task"]');
+        expect(addBtn).toBeTruthy();
+
+        addBtn.click();
+        await flushPromises(vm, 2);
+
+        expect(vm.modal.open).toBe(true);
+        expect(vm.modal.type).toBe('add');
     });
 
     test('adds a task with attributes via modal submit', async () => {
@@ -189,12 +226,12 @@ describe('Taskwarrior Web UI (component-style)', () => {
         confirmSpy.mockRestore();
     });
 
-    test('reschedules a task and clears due date', async () => {
+    test('reschedules a task and clears reschedule field', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today' });
 
         const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 5);
+        await flushPromises(vm, 6);
 
         vm.toggleReschedule('uuid-1');
         expect(vm.reschedule.open).toBe(true);
@@ -205,9 +242,9 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(backend.state.tasks[0].due).toBe('tomorrow');
 
         vm.toggleReschedule('uuid-1');
-        await vm.clearTaskDue('uuid-1');
+        await vm.clearRescheduleField('uuid-1');
         await flushPromises(vm, 5);
-        expect(vm.toast.text).toContain('Cleared due date');
+        expect(vm.toast.text).toContain('Cleared due');
         expect(backend.state.tasks[0].due).toBeUndefined();
     });
 
@@ -600,12 +637,12 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(saveBtn.disabled).toBe(true);
     });
 
-    test('reschedule custom due and other presets', async () => {
+    test('reschedule custom date and other presets', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today' });
 
         const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 5);
+        await flushPromises(vm, 6);
 
         await vm.applyReschedulePreset('uuid-1', 'today');
         await flushPromises(vm, 4);
@@ -620,6 +657,100 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await vm.applyRescheduleCustom('uuid-1');
         await flushPromises(vm, 4);
         expect(backend.state.tasks[0].due).toBe('eom');
+    });
+
+    test('reschedule uses configured settings field', async () => {
+        const backend = createMockBackend();
+        backend.state.settings.reschedule_field = 'wait';
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Wait', status: 'pending', urgency: 1.5, due: 'today' });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        await vm.applyReschedulePreset('uuid-1', 'tomorrow');
+        await flushPromises(vm, 4);
+
+        expect(backend.state.tasks[0].wait).toBe('tomorrow');
+        expect(backend.state.tasks[0].due).toBe('today');
+
+        await vm.clearRescheduleField('uuid-1');
+        await flushPromises(vm, 4);
+
+        expect(backend.state.tasks[0].wait).toBeUndefined();
+    });
+
+    test('add/edit modal uses configured scheduling field', async () => {
+        const backend = createMockBackend();
+        backend.state.settings.reschedule_field = 'wait';
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.openAddTask();
+        await flushPromises(vm, 2);
+
+        vm.modal.description = 'Test';
+        vm.modal.due = 'tomorrow';
+        await vm.submitModal();
+        await flushPromises(vm, 5);
+
+        const created = backend.state.tasks.find((t) => t.description === 'Test');
+        expect(created).toBeTruthy();
+        expect(created.wait).toBe('tomorrow');
+        expect(created.due).toBeUndefined();
+
+        // Now edit the same task and clear the field.
+        vm.tasks = backend.state.tasks.slice();
+        await vm.editTask(created.uuid);
+        await flushPromises(vm, 3);
+
+        vm.modal.due = '';
+        await vm.submitModal();
+        await flushPromises(vm, 5);
+
+        const updated = backend.state.tasks.find((t) => t.uuid === created.uuid);
+        expect(updated.wait).toBeUndefined();
+    });
+
+    test('edit modal shows configured field from export', async () => {
+        const backend = createMockBackend();
+        backend.state.settings.reschedule_field = 'scheduled';
+
+        // Simulate a task list export that doesn't include `scheduled`.
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Scheduled', status: 'pending', urgency: 1 });
+
+        backend.state.beforeFetch = async ({ pathname, method, init }) => {
+            if (pathname !== '/api/task' || method !== 'POST') return null;
+
+            const body = init.body ? JSON.parse(String(init.body)) : {};
+            const args = String(body.args || '');
+            if (args.trim() !== 'uuid-1 export') return null;
+
+            return {
+                ok: true,
+                status: 200,
+                async json() {
+                    return {
+                        success: true,
+                        output: JSON.stringify([{ uuid: 'uuid-1', scheduled: 'tomorrow' }]),
+                        error: '',
+                    };
+                },
+                async text() {
+                    return JSON.stringify({ success: true });
+                },
+            };
+        };
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        await vm.editTask('uuid-1');
+        await flushPromises(vm, 4);
+
+        expect(vm.modal.open).toBe(true);
+        expect(vm.modal.type).toBe('edit');
+        expect(vm.modal.due).toBe('tomorrow');
     });
 
     test('completion panel keyboard flow applies suggestion', async () => {
@@ -740,9 +871,10 @@ describe('Taskwarrior Web UI (component-style)', () => {
         };
 
         const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 6);
+        await flushPromises(vm, 7);
 
         const checkbox = document.querySelector('input[type="checkbox"]');
+        expect(checkbox).toBeTruthy();
         checkbox.checked = true;
         await vm.toggleTaskDone(vm.tasks[0], { target: checkbox });
         await flushPromises(vm, 3);

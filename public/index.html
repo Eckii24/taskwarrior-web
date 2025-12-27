@@ -32,7 +32,16 @@
             <div class="topbar-title">
                 <div class="topbar-title-text">{{ currentTitle }}</div>
             </div>
-            <div class="topbar-spacer"></div>
+            <button
+                class="icon-btn add-task"
+                type="button"
+                aria-label="Add task"
+                @click="openAddTask"
+            >
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M19 13H13v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                </svg>
+            </button>
         </header>
 
         <!-- Drawer backdrop (mobile) -->
@@ -295,6 +304,26 @@
                     </div>
 
                     <div class="settings-section">
+                        <div class="settings-section-title">Reschedule</div>
+
+                        <div class="settings-row">
+                            <div class="settings-icon" aria-hidden="true"></div>
+                            <div class="settings-label">Attribute</div>
+                            <input
+                                type="text"
+                                class="text-input"
+                                v-model="settingsAppDraft.reschedule_field"
+                                placeholder="due"
+                            >
+                        </div>
+
+                        <div class="settings-actions">
+                            <button class="btn small" type="button" @click="resetAppSettingsDraft">Reset</button>
+                            <button class="btn small primary" type="button" @click="saveAppSettings">Save settings</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
                         <div class="settings-section-title settings-section-header">
                             <span>Taskrc</span>
                             <div class="settings-section-actions">
@@ -372,11 +401,15 @@
                                             <span class="tag-pill" v-for="tag in task.tags" :key="tag">{{ tag }}</span>
                                         </span>
 
+                                        <span v-if="task.priority" class="meta meta-priority" :class="`priority-${String(task.priority).toLowerCase()}`">
+                                            <span class="priority-icon" aria-hidden="true">{{ task.priority === 'H' ? '!!!' : task.priority === 'M' ? '!!' : '!' }}</span>
+                                        </span>
+
                                         <span v-if="task.due" class="meta meta-due">
                                             <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
                                                 <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
                                             </svg>
-                                            <span class="meta-text">{{ formatDate(task.due) }}</span>
+                                            <span class="meta-text">{{ formatDateTime(task.due) }}</span>
                                         </span>
 
                                         <span v-if="Array.isArray(task.annotations) && task.annotations.length" class="meta meta-annotations" title="Has annotations">
@@ -505,7 +538,7 @@
                                                         type="button"
                                                         title="Clear"
                                                         aria-label="Clear"
-                                                        @click="clearTaskDue(task.uuid)"
+                                                        @click="clearRescheduleField(task.uuid)"
                                                         :disabled="busyTaskUuids[task.uuid]"
                                                     >
                                                         <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -520,7 +553,7 @@
                                                         type="text"
                                                         class="text-input compact"
                                                         v-model="reschedule.custom"
-                                                        placeholder="due value (e.g. 2025-01-03, eom)"
+                                                        :placeholder="`${rescheduleFieldName()} value (e.g. 2025-01-03, eom)`"
                                                         autocomplete="off"
                                                         @keydown.enter.prevent="applyRescheduleCustom(task.uuid)"
                                                     >
@@ -580,11 +613,15 @@
                                         <span class="tag-pill" v-for="tag in task.tags" :key="tag">{{ tag }}</span>
                                     </span>
 
+                                    <span v-if="task.priority" class="meta meta-priority" :class="`priority-${String(task.priority).toLowerCase()}`">
+                                        <span class="priority-icon" aria-hidden="true">{{ task.priority === 'H' ? '!!!' : task.priority === 'M' ? '!!' : '!' }}</span>
+                                    </span>
+
                                     <span v-if="task.due" class="meta meta-due">
                                         <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
                                             <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
                                         </svg>
-                                        <span class="meta-text">{{ formatDate(task.due) }}</span>
+                                        <span class="meta-text">{{ formatDateTime(task.due) }}</span>
                                     </span>
 
                                     <span v-if="Array.isArray(task.annotations) && task.annotations.length" class="meta meta-annotations" title="Has annotations">
@@ -713,7 +750,7 @@
                                                     type="button"
                                                     title="Clear"
                                                     aria-label="Clear"
-                                                    @click="clearTaskDue(task.uuid)"
+                                                    @click="clearRescheduleField(task.uuid)"
                                                     :disabled="busyTaskUuids[task.uuid]"
                                                 >
                                                     <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -862,8 +899,8 @@
                             <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
                             </svg>
-                            <span>{{ modal.due || 'Due date' }}</span>
-                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')">
+                            <span>{{ modal.due ? formatTaskDateInput(modal.due) : `${rescheduleFieldLabel()} date` }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')" :aria-label="`Clear ${rescheduleFieldLabel()}`">
                                 <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
                             </svg>
                         </button>
@@ -990,8 +1027,8 @@
                             <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
                             </svg>
-                            <span>{{ modal.due || 'Due date' }}</span>
-                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')">
+                            <span>{{ modal.due ? formatTaskDateInput(modal.due) : `${rescheduleFieldLabel()} date` }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')" :aria-label="`Clear ${rescheduleFieldLabel()}`">
                                 <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
                             </svg>
                         </button>
