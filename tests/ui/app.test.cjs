@@ -468,6 +468,43 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.modal.open).toBe(false);
     });
 
+    test('Modal X button respects unsaved-changes safety (double-press)', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 5);
+
+        vm.openAddTask();
+        await flushPromises(vm, 2);
+
+        const closeBtn = document.querySelector('section.modal button[aria-label="Close"]');
+        expect(closeBtn).toBeTruthy();
+
+        // Clean modal closes immediately.
+        closeBtn.click();
+        await flushPromises(vm, 1);
+        expect(vm.modal.open).toBe(false);
+
+        // Dirty modal requires confirmation: first click shows hint.
+        vm.openAddTask();
+        await flushPromises(vm, 2);
+        vm.modal.description = 'Dirty';
+        await flushPromises(vm, 1);
+
+        const closeBtnDirty = document.querySelector('section.modal button[aria-label="Close"]');
+        expect(closeBtnDirty).toBeTruthy();
+
+        closeBtnDirty.click();
+        await flushPromises(vm, 1);
+        expect(vm.modal.open).toBe(true);
+        expect(vm.modalEscHintVisible).toBe(true);
+        expect(closeBtnDirty.classList.contains('danger')).toBe(true);
+
+        // Second click discards changes and closes.
+        closeBtnDirty.click();
+        await flushPromises(vm, 1);
+        expect(vm.modal.open).toBe(false);
+    });
+
     test('loads and saves taskrc in settings', async () => {
         const backend = createMockBackend();
         backend.state.taskrc = 'data.location=/tmp\n';

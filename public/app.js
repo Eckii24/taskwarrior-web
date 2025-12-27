@@ -733,7 +733,7 @@ function createTaskwarriorApp({
             return !value;
         },
 
-        showModalEscHint(durationMs = 2000) {
+        showModalEscHint(durationMs = 3000) {
             const ms = Math.max(250, Number(durationMs) || 2000);
             const until = Date.now() + ms;
 
@@ -765,17 +765,25 @@ function createTaskwarriorApp({
             }
         },
 
+        tryCloseModal() {
+            if (!this.modal?.open) return true;
+
+            const canClose = this.isModalUnchangedOrEmpty();
+            const now = Date.now();
+
+            if (canClose || (this.modalEscHintVisible && now <= this.modalEscForceCloseUntil)) {
+                this.closeModal();
+                return true;
+            }
+
+            this.showModalEscHint(3000);
+            return false;
+        },
+
         onGlobalKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.modal.open) {
-                    const canClose = this.isModalUnchangedOrEmpty();
-                    const now = Date.now();
-
-                    if (canClose || (this.modalEscHintVisible && now <= this.modalEscForceCloseUntil)) {
-                        this.closeModal();
-                    } else {
-                        this.showModalEscHint(2000);
-                    }
+                    this.tryCloseModal();
                 }
 
                 if (this.drawerOpen) this.toggleDrawer(false);

@@ -804,11 +804,11 @@
         </main>
 
         <!-- Command modal (Add/Show/Execute/Search) -->
-        <div class="modal-backdrop" v-if="modal.open" @click="closeModal"></div>
+        <div class="modal-backdrop" v-if="modal.open" @click="tryCloseModal"></div>
         <section class="modal" v-if="modal.open" role="dialog" aria-modal="true">
             <div class="modal-header">
                 <div class="modal-title">{{ modalTitle }}</div>
-                <button class="icon-btn" type="button" aria-label="Close" @click="closeModal">
+                <button class="icon-btn" :class="{ danger: modalEscHintVisible }" type="button" aria-label="Close" @click="tryCloseModal">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
                     </svg>
@@ -817,7 +817,7 @@
 
             <div class="modal-body">
                 <div v-if="modalEscHintVisible" class="modal-esc-hint" role="status">
-                    Press Esc again to close
+                    Unsaved changes. Press Esc or X again to discard and close.
                 </div>
                 <div v-if="modal.type === 'search'" class="field">
                     <label>Search</label>
@@ -1347,7 +1347,7 @@
                 >
                     Delete
                 </button>
-                <button class="btn" type="button" @click="closeModal">Cancel</button>
+                <button class="btn" type="button" @click="tryCloseModal">Cancel</button>
                 <button class="btn primary" type="button" @click="submitModal">OK</button>
             </div>
         </section>
