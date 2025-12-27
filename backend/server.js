@@ -146,6 +146,8 @@ function openSettingsDb(settingsDbPath) {
 
     // Lightweight migrations for existing installs.
     ensureSqliteColumnExists(db, 'filters', 'icon', 'icon TEXT');
+    ensureSqliteColumnExists(db, 'filters', 'group_by', 'group_by TEXT');
+    ensureSqliteColumnExists(db, 'builtin_filters', 'group_by', 'group_by TEXT');
 
     const now = new Date().toISOString();
     const seedBuiltin = db.prepare(`
@@ -415,7 +417,7 @@ function createApp({
     app.get('/api/filters', async (_req, res) => {
         try {
             const db = await ensureSettingsDb();
-            const filters = db.prepare('SELECT id, name, filter, icon, "order" AS "order" FROM filters ORDER BY "order" ASC, id ASC').all();
+            const filters = db.prepare('SELECT id, name, filter, icon, "order" AS "order", group_by FROM filters ORDER BY "order" ASC, id ASC').all();
             res.json({ success: true, filters });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
@@ -426,7 +428,7 @@ function createApp({
     app.get('/api/builtin-filters', async (_req, res) => {
         try {
             const db = await ensureSettingsDb();
-            const filters = db.prepare('SELECT key, name, filter, visible FROM builtin_filters ORDER BY key ASC').all();
+            const filters = db.prepare('SELECT key, name, filter, visible, group_by FROM builtin_filters ORDER BY key ASC').all();
             res.json({ success: true, filters });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
@@ -441,7 +443,7 @@ function createApp({
                 return res.status(400).json({ success: false, error: 'key is required' });
             }
 
-            const existing = db.prepare('SELECT key, name, filter, visible FROM builtin_filters WHERE key = ?').get(key);
+            const existing = db.prepare('SELECT key, name, filter, visible, group_by FROM builtin_filters WHERE key = ?').get(key);
             if (!existing) {
                 return res.status(404).json({ success: false, error: 'builtin filter not found' });
             }
@@ -449,9 +451,11 @@ function createApp({
             const hasName = typeof req.body?.name === 'string';
             const hasFilter = typeof req.body?.filter === 'string';
             const hasVisible = req.body?.visible !== undefined;
+            const hasGroupBy = typeof req.body?.group_by === 'string';
 
             const name = hasName ? String(req.body.name).trim() : existing.name;
             const filter = hasFilter ? String(req.body.filter).trim() : existing.filter;
+            const groupBy = hasGroupBy ? (String(req.body.group_by).trim() || null) : existing.group_by;
 
             let visible = existing.visible;
             if (hasVisible) {
@@ -467,10 +471,10 @@ function createApp({
             }
 
             const updatedAt = new Date().toISOString();
-            db.prepare('UPDATE builtin_filters SET name = ?, filter = ?, visible = ?, updated_at = ? WHERE key = ?')
-                .run(name, filter, visible, updatedAt, key);
+            db.prepare('UPDATE builtin_filters SET name = ?, filter = ?, visible = ?, group_by = ?, updated_at = ? WHERE key = ?')
+                .run(name, filter, visible, groupBy, updatedAt, key);
 
-            res.json({ success: true, filter: { key, name, filter, visible } });
+            res.json({ success: true, filter: { key, name, filter, visible, group_by: groupBy } });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -494,6 +498,8 @@ function createApp({
                 }
             }
 
+            const groupBy = typeof req.body?.group_by === 'string' ? (req.body.group_by.trim() || null) : null;
+
             if (!name) {
                 return res.status(400).json({ success: false, error: 'name is required' });
             }
@@ -505,10 +511,10 @@ function createApp({
             const nextOrder = Number(maxOrderRow?.maxOrder ?? -1) + 1;
 
             const createdAt = new Date().toISOString();
-            const stmt = db.prepare('INSERT INTO filters (name, filter, icon, "order", created_at) VALUES (?, ?, ?, ?, ?)');
-            const info = stmt.run(name, filter, icon, nextOrder, createdAt);
+            const stmt = db.prepare('INSERT INTO filters (name, filter, icon, "order", group_by, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+            const info = stmt.run(name, filter, icon, nextOrder, groupBy, createdAt);
 
-            res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, icon, order: nextOrder } });
+            res.json({ success: true, filter: { id: info.lastInsertRowid, name, filter, icon, order: nextOrder, group_by: groupBy } });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -575,7 +581,7 @@ function createApp({
                 return res.status(400).json({ success: false, error: 'order must be a number' });
             }
 
-            const existing = db.prepare('SELECT id, name, filter, icon, "order" AS "order" FROM filters WHERE id = ?').get(id);
+            const existing = db.prepare('SELECT id, name, filter, icon, "order" AS "order", group_by FROM filters WHERE id = ?').get(id);
             if (!existing) {
                 return res.status(404).json({ success: false, error: 'filter not found' });
             }
@@ -596,13 +602,16 @@ function createApp({
                 }
             }
 
+            const hasGroupBy = typeof req.body?.group_by === 'string';
+            const groupBy = hasGroupBy ? (req.body.group_by.trim() || null) : existing.group_by;
+
             const nextName = name || existing.name;
             const nextFilter = filter || existing.filter;
             const nextOrder = hasOrder ? parsedOrder : existing.order;
 
-            db.prepare('UPDATE filters SET name = ?, filter = ?, icon = ?, "order" = ? WHERE id = ?').run(nextName, nextFilter, icon, nextOrder, id);
+            db.prepare('UPDATE filters SET name = ?, filter = ?, icon = ?, "order" = ?, group_by = ? WHERE id = ?').run(nextName, nextFilter, icon, nextOrder, groupBy, id);
 
-            res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, icon, order: nextOrder } });
+            res.json({ success: true, filter: { id, name: nextName, filter: nextFilter, icon, order: nextOrder, group_by: groupBy } });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }

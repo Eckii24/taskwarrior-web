@@ -1239,3 +1239,97 @@ a:hover {
         padding: 6px 10px;
     }
 }
+
+/* Tasks heading row with controls */
+.tasks-heading-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 4px 2px 12px;
+    gap: 12px;
+}
+
+.tasks-controls {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    position: relative;
+    white-space: nowrap;
+}
+
+.control-btn:hover {
+    background: var(--hover);
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.control-btn.has-value {
+    background: var(--panel-2);
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.control-icon {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.group-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 160px;
+    z-index: 100;
+}
+
+/* Task Group Styles */
+.task-list-grouped {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.task-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.task-group-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    padding: 0.5rem 0;
+    border-bottom: 2px solid var(--line);
+    margin-bottom: 0.5rem;
+}
+
+@media (max-width: 768px) {
+    .tasks-heading-row {
+        flex-direction: row;
+        align-items: center;
+    }
+    
+    .control-btn {
+        font-size: 0.85rem;
+        padding: 6px 10px;
+    }
+}

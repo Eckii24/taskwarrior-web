@@ -59,6 +59,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await flushPromises(vm, 5);
 
         expect(vm.tasks).toHaveLength(1);
+        expect(Array.isArray(vm.taskGroups)).toBe(true);
         expect(document.body.textContent).toContain('Hello');
     });
 
@@ -409,11 +410,13 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.toggleDrawer(true);
         vm.toggleReschedule('uuid-1');
         vm.completion.visible = true;
+        vm.groupDropdownOpen = true;
 
         vm.onGlobalKeydown({ key: 'Escape' });
         expect(vm.drawerOpen).toBe(false);
         expect(vm.reschedule.open).toBe(false);
         expect(vm.completion.visible).toBe(false);
+        expect(vm.groupDropdownOpen).toBe(false);
 
         // Modal safety: first Esc shows hint, second closes.
         vm.openAddTask();
@@ -487,6 +490,44 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await flushPromises(vm, 4);
         expect(vm.currentTitle).toBe('My Today');
         expect(vm.tasks.map((t) => t.uuid)).toEqual(['uuid-2']);
+    });
+
+    test('groups tasks by project and persists per view', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'One', status: 'pending', urgency: 10, project: 'Home' });
+        backend.state.tasks.push({ uuid: 'uuid-2', description: 'Two', status: 'pending', urgency: 9, project: 'Work' });
+        backend.state.tasks.push({ uuid: 'uuid-3', description: 'No project', status: 'pending', urgency: 8 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        // Default view: Next
+        expect(vm.selectedView).toEqual({ type: 'builtin', key: 'next' });
+        expect(vm.currentGroupBy).toBe(null);
+
+        // Set Group by Project for Next
+        await vm.updateGroupBy('project');
+        await flushPromises(vm, 6);
+
+        expect(vm.currentGroupBy).toBe('project');
+        expect(backend.state.builtinFilters.next.group_by).toBe('project');
+        expect(vm.taskGroups.map((g) => g.name)).toEqual(['(No Project)', 'Home', 'Work']);
+        expect(document.body.textContent).toContain('Home');
+        expect(document.body.textContent).toContain('Work');
+
+        // Switch view, then back: grouping should restore from backend
+        vm.selectBuiltin('all');
+        await flushPromises(vm, 4);
+        expect(vm.currentGroupBy).toBe(null);
+
+        vm.selectBuiltin('next');
+        await flushPromises(vm, 5);
+        expect(vm.currentGroupBy).toBe('project');
+
+        await vm.resetGroupSettings();
+        await flushPromises(vm, 6);
+        expect(vm.currentGroupBy).toBe(null);
+        expect(backend.state.builtinFilters.next.group_by).toBe(null);
     });
 
     test('persists selected view to URL (builtin/filter/search)', async () => {
