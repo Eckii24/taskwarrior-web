@@ -150,6 +150,52 @@ class TaskApiClient {
 class TaskQueryService {
     constructor(apiClient) {
         this.apiClient = apiClient;
+        this.groupSortValueOrders = new Map();
+    }
+
+    async getTaskConfig(key) {
+        const configKey = String(key || '').trim();
+        if (!configKey) return null;
+
+        const result = await this.apiClient.execute(`rc.hooks=0 _get rc.${sanitizeTaskCommandArg(configKey)}`);
+        if (!result?.success) return null;
+
+        const output = String(result?.output || '').trim();
+        if (!output) return null;
+
+        // Taskwarrior may return quoted values.
+        return stripOuterQuotes(output);
+    }
+
+    async getGroupOrderForField(field) {
+        const groupBy = String(field || '').trim();
+        if (!groupBy) return null;
+
+        if (this.groupSortValueOrders.has(groupBy)) {
+            return this.groupSortValueOrders.get(groupBy);
+        }
+
+        const configKey = `uda.${groupBy}.values`;
+        let order = null;
+
+        try {
+            const raw = await this.getTaskConfig(configKey);
+            if (raw) {
+                const values = raw
+                    .split(',')
+                    .map((value) => String(value || '').trim())
+                    .filter(Boolean);
+
+                if (values.length > 0) {
+                    order = values;
+                }
+            }
+        } catch {
+            order = null;
+        }
+
+        this.groupSortValueOrders.set(groupBy, order);
+        return order;
     }
 
     sortByUrgency(tasks) {
@@ -167,7 +213,7 @@ class TaskQueryService {
         return list;
     }
 
-    groupTasks(tasks, groupBy) {
+    async groupTasks(tasks, groupBy) {
         if (!groupBy || groupBy === 'none') {
             return [{ key: null, name: null, tasks }];
         }
@@ -221,10 +267,26 @@ class TaskQueryService {
             });
         }
 
-        // Sort groups alphabetically by name
+        const groupOrder = await this.getGroupOrderForField(groupBy);
+        const indexFor = (name) => {
+            if (!Array.isArray(groupOrder)) return null;
+            const idx = groupOrder.findIndex((entry) => String(entry) === String(name));
+            return idx >= 0 ? idx : null;
+        };
+
+        // Sort groups by configured UDA order when available, otherwise alphabetically.
+        // Unknown keys fall back to alphabetical and are put after the known ones.
         result.sort((a, b) => {
             const aName = String(a.name || '');
             const bName = String(b.name || '');
+
+            const aIdx = indexFor(aName);
+            const bIdx = indexFor(bName);
+
+            if (aIdx !== null && bIdx !== null) return aIdx - bIdx;
+            if (aIdx !== null) return -1;
+            if (bIdx !== null) return 1;
+
             return aName.localeCompare(bName);
         });
 
@@ -257,7 +319,8 @@ class TaskQueryService {
         try {
             const tasks = JSON.parse(rawOutput);
             const sorted = this.sortByUrgency(tasks);
-            return { tasks: sorted, groups: this.groupTasks(sorted, groupBy) };
+            const groups = await this.groupTasks(sorted, groupBy);
+            return { tasks: sorted, groups };
         } catch (error) {
             throw new Error(`Failed to parse task export JSON: ${error.message}`);
         }
@@ -390,6 +453,18 @@ function sanitizeTaskCommandArg(value) {
     // Prefer single quotes; escape embedded single quotes in a shell-like way.
     // Taskwarrior parses quotes; our backend splits on whitespace, so wrapping is required.
     return `'${text.replace(/'/g, "\\'")}'`;
+}
+
+function stripOuterQuotes(text) {
+    const raw = String(text || '');
+    if (raw.length >= 2) {
+        const first = raw[0];
+        const last = raw[raw.length - 1];
+        if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+            return raw.slice(1, -1);
+        }
+    }
+    return raw;
 }
 
 function createTaskwarriorApp({

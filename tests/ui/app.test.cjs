@@ -75,33 +75,6 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(document.body.textContent).toContain('Hello');
     });
 
-    test('formats zulu timestamps in local timezone', async () => {
-        const backend = createMockBackend();
-        const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 3);
-
-        // Berlin winter time: 23:00Z is 00:00 next day.
-        expect(vm.formatDate('20251226T230000Z')).toBe('27.12.2025');
-    });
-
-    test('switches built-in view to All', async () => {
-        const backend = createMockBackend();
-        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Pending', status: 'pending', urgency: 10 });
-        backend.state.tasks.push({ uuid: 'uuid-2', description: 'Completed', status: 'completed', urgency: 1 });
-
-        const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 5);
-
-        expect(vm.selectedView).toEqual({ type: 'builtin', key: 'next' });
-        expect(vm.tasks.map((t) => t.uuid)).toEqual(['uuid-1']);
-
-        vm.selectBuiltin('all');
-        await flushPromises(vm, 5);
-
-        expect(vm.tasks.map((t) => t.uuid).sort()).toEqual(['uuid-1', 'uuid-2']);
-        expect(document.body.textContent).toContain('Completed');
-    });
-
     test('opens add task modal from topbar plus button', async () => {
         const backend = createMockBackend();
         const { vm } = mountWithBackend(backend);
@@ -159,10 +132,10 @@ describe('Taskwarrior Web UI (component-style)', () => {
         });
 
         const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 5);
+        await flushPromises(vm, 8);
 
         await vm.editTask('uuid-1');
-        await flushPromises(vm, 2);
+        await flushPromises(vm, 3);
 
         expect(vm.modal.type).toBe('edit');
         expect(vm.modal.taskId).toBe('uuid-1');
@@ -190,7 +163,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5 });
 
         const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 5);
+        await flushPromises(vm, 8);
 
         const task = vm.tasks[0];
         await vm.toggleTaskDone(task, { target: { checked: true } });

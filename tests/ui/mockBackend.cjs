@@ -228,6 +228,8 @@ function createMockBackend() {
         nextFilterId: 1,
         nextAnnotationId: 1,
 
+        taskConfig: {},
+
         // Optional test hooks.
         // If provided, it may return a Response-like object to short-circuit handling.
         beforeFetch: null,
@@ -414,14 +416,22 @@ function createMockBackend() {
             return jsonResponse({ success: true, token, suggestions, values: suggestions });
         }
 
-        if (pathname === '/api/task' && method === 'POST') {
-            const body = init.body ? JSON.parse(String(init.body)) : {};
-            const args = String(body.args || '').trim();
-            const tokens = parseShellLikeArgs(args);
+         if (pathname === '/api/task' && method === 'POST') {
+             const body = init.body ? JSON.parse(String(init.body)) : {};
+             const args = String(body.args || '').trim();
+             const tokens = parseShellLikeArgs(args);
 
-            if (!tokens.length) {
-                return jsonResponse({ success: false, output: '', error: 'Missing args' }, { status: 400 });
-            }
+             if (!tokens.length) {
+                 return jsonResponse({ success: false, output: '', error: 'Missing args' }, { status: 400 });
+             }
+
+             if (tokens[0] === 'rc.hooks=0' && tokens[1] === '_get' && tokens[2] && String(tokens[2]).startsWith('rc.')) {
+                 const key = String(tokens[2]).slice('rc.'.length);
+                 const valueRaw = state.taskConfig[key];
+                 const value = valueRaw === undefined ? '' : String(valueRaw);
+                 return jsonResponse({ success: true, output: `${value}\n`, error: '' });
+             }
+
 
             if (tokens[0] === 'sync') {
                 return jsonResponse({ success: true, output: 'Sync OK\n', error: '' });
