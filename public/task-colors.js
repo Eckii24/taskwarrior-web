@@ -266,7 +266,8 @@
         }
 
         // Priority: Most specific rules take precedence
-        // Order: status-specific > priority-specific > project-specific > tag-specific > general
+        // Order: tag-specific > project-specific > priority-specific > status-specific
+        // (Later assignments override earlier ones)
 
         const status = String(task?.status || 'pending').toLowerCase();
         const priority = String(task?.priority || '').toUpperCase();
