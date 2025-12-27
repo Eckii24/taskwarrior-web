@@ -114,26 +114,88 @@ class TaskApiClient {
         return await response.json();
     }
 
-    async getBuiltinFilters() {
-        this.requireFetch();
-        const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
-        return await response.json();
-    }
+     async getBuiltinFilters() {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
+         return await response.json();
+     }
 
-    async updateBuiltinFilter(key, payload) {
-        this.requireFetch();
-        const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters/${encodeURIComponent(String(key))}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        return await response.json();
-    }
-}
+     async updateBuiltinFilter(key, payload) {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters/${encodeURIComponent(String(key))}`, {
+             method: 'PUT',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(payload),
+         });
+         return await response.json();
+     }
+
+     async getSettings() {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/settings`);
+         return await response.json();
+     }
+
+     async updateSettings(payload) {
+         this.requireFetch();
+         const response = await this.fetchImpl(`${this.baseUrl}/settings`, {
+             method: 'PUT',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(payload),
+         });
+         return await response.json();
+     }
+ }
 
 class TaskQueryService {
     constructor(apiClient) {
         this.apiClient = apiClient;
+        this.groupSortValueOrders = new Map();
+    }
+
+    async getTaskConfig(key) {
+        const configKey = String(key || '').trim();
+        if (!configKey) return null;
+
+        const result = await this.apiClient.execute(`rc.hooks=0 _get rc.${sanitizeTaskCommandArg(configKey)}`);
+        if (!result?.success) return null;
+
+        const output = String(result?.output || '').trim();
+        if (!output) return null;
+
+        // Taskwarrior may return quoted values.
+        return stripOuterQuotes(output);
+    }
+
+    async getGroupOrderForField(field) {
+        const groupBy = String(field || '').trim();
+        if (!groupBy) return null;
+
+        if (this.groupSortValueOrders.has(groupBy)) {
+            return this.groupSortValueOrders.get(groupBy);
+        }
+
+        const configKey = `uda.${groupBy}.values`;
+        let order = null;
+
+        try {
+            const raw = await this.getTaskConfig(configKey);
+            if (raw) {
+                const values = raw
+                    .split(',')
+                    .map((value) => String(value || '').trim())
+                    .filter(Boolean);
+
+                if (values.length > 0) {
+                    order = values;
+                }
+            }
+        } catch {
+            order = null;
+        }
+
+        this.groupSortValueOrders.set(groupBy, order);
+        return order;
     }
 
     sortByUrgency(tasks) {
@@ -151,7 +213,7 @@ class TaskQueryService {
         return list;
     }
 
-    groupTasks(tasks, groupBy) {
+    async groupTasks(tasks, groupBy) {
         if (!groupBy || groupBy === 'none') {
             return [{ key: null, name: null, tasks }];
         }
@@ -205,10 +267,26 @@ class TaskQueryService {
             });
         }
 
-        // Sort groups alphabetically by name
+        const groupOrder = await this.getGroupOrderForField(groupBy);
+        const indexFor = (name) => {
+            if (!Array.isArray(groupOrder)) return null;
+            const idx = groupOrder.findIndex((entry) => String(entry) === String(name));
+            return idx >= 0 ? idx : null;
+        };
+
+        // Sort groups by configured UDA order when available, otherwise alphabetically.
+        // Unknown keys fall back to alphabetical and are put after the known ones.
         result.sort((a, b) => {
             const aName = String(a.name || '');
             const bName = String(b.name || '');
+
+            const aIdx = indexFor(aName);
+            const bIdx = indexFor(bName);
+
+            if (aIdx !== null && bIdx !== null) return aIdx - bIdx;
+            if (aIdx !== null) return -1;
+            if (bIdx !== null) return 1;
+
             return aName.localeCompare(bName);
         });
 
@@ -241,7 +319,8 @@ class TaskQueryService {
         try {
             const tasks = JSON.parse(rawOutput);
             const sorted = this.sortByUrgency(tasks);
-            return { tasks: sorted, groups: this.groupTasks(sorted, groupBy) };
+            const groups = await this.groupTasks(sorted, groupBy);
+            return { tasks: sorted, groups };
         } catch (error) {
             throw new Error(`Failed to parse task export JSON: ${error.message}`);
         }
@@ -326,6 +405,47 @@ function replaceRange(text, start, end, replacement) {
     return safeText.slice(0, s) + replacement + safeText.slice(e);
 }
 
+const DEFAULT_ATTR_ABBREV_MIN = 2;
+const DATE_VALUE_ATTRS = ['due', 'wait', 'until', 'scheduled', 'start', 'end'];
+
+function escapeRegExp(text) {
+    return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveAbbreviatedAttr(typedAttr, candidates = DATE_VALUE_ATTRS, minLen = DEFAULT_ATTR_ABBREV_MIN) {
+    const typed = String(typedAttr || '').trim();
+    if (!typed) return null;
+
+    const normalized = typed.toLowerCase();
+
+    const direct = candidates.find((value) => value === normalized);
+    if (direct) return direct;
+
+    if (normalized.length < minLen) return null;
+
+    const matches = candidates.filter((value) => value.startsWith(normalized));
+    if (matches.length === 1) return matches[0];
+
+    return null;
+}
+
+function resolveTaskFieldName(obj, typedField) {
+    if (!obj) return null;
+
+    const raw = String(typedField || '').trim();
+    if (!raw) return null;
+
+    if (Object.prototype.hasOwnProperty.call(obj, raw)) return raw;
+
+    const canonical = resolveAbbreviatedAttr(raw);
+    if (canonical && Object.prototype.hasOwnProperty.call(obj, canonical)) return canonical;
+
+    const matches = Object.keys(obj).filter((key) => key.startsWith(raw));
+    if (matches.length === 1) return matches[0];
+
+    return null;
+}
+
 function sanitizeTaskCommandArg(value) {
     const text = String(value ?? '').replace(/[\r\n\t]/g, ' ').trim();
     if (!text) return "''";
@@ -333,6 +453,18 @@ function sanitizeTaskCommandArg(value) {
     // Prefer single quotes; escape embedded single quotes in a shell-like way.
     // Taskwarrior parses quotes; our backend splits on whitespace, so wrapping is required.
     return `'${text.replace(/'/g, "\\'")}'`;
+}
+
+function stripOuterQuotes(text) {
+    const raw = String(text || '');
+    if (raw.length >= 2) {
+        const first = raw[0];
+        const last = raw[raw.length - 1];
+        if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+            return raw.slice(1, -1);
+        }
+    }
+    return raw;
 }
 
 function createTaskwarriorApp({
@@ -359,11 +491,19 @@ function createTaskwarriorApp({
                 next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
                 all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
             },
-            settingsBuiltinDraft: {
-                today: { name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
-                next: { name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
-                all: { name: 'All', filter: '', visible: true, group_by: null },
-            },
+             settingsBuiltinDraft: {
+                 today: { name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
+                 next: { name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
+                 all: { name: 'All', filter: '', visible: true, group_by: null },
+             },
+
+             settingsAppDraft: {
+                 reschedule_field: 'due',
+             },
+
+             settingsAppLoaded: {
+                 reschedule_field: 'due',
+             },
 
              filters: [],
              draggedFilterId: null,
@@ -521,6 +661,7 @@ function createTaskwarriorApp({
 
         await this.refreshBuiltinFilters();
         await this.refreshFilters();
+        await this.refreshAppSettings();
         this.applyRestoredSelectedView(restoredView);
 
         await this.loadTasksForSelection();
@@ -667,7 +808,7 @@ function createTaskwarriorApp({
             return !value;
         },
 
-        showModalEscHint(durationMs = 2000) {
+        showModalEscHint(durationMs = 3000) {
             const ms = Math.max(250, Number(durationMs) || 2000);
             const until = Date.now() + ms;
 
@@ -699,17 +840,25 @@ function createTaskwarriorApp({
             }
         },
 
+        tryCloseModal() {
+            if (!this.modal?.open) return true;
+
+            const canClose = this.isModalUnchangedOrEmpty();
+            const now = Date.now();
+
+            if (canClose || (this.modalEscHintVisible && now <= this.modalEscForceCloseUntil)) {
+                this.closeModal();
+                return true;
+            }
+
+            this.showModalEscHint(3000);
+            return false;
+        },
+
         onGlobalKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.modal.open) {
-                    const canClose = this.isModalUnchangedOrEmpty();
-                    const now = Date.now();
-
-                    if (canClose || (this.modalEscHintVisible && now <= this.modalEscForceCloseUntil)) {
-                        this.closeModal();
-                    } else {
-                        this.showModalEscHint(2000);
-                    }
+                    this.tryCloseModal();
                 }
 
                 if (this.drawerOpen) this.toggleDrawer(false);
@@ -732,6 +881,7 @@ function createTaskwarriorApp({
             this.toggleDrawer(false);
 
             this.refreshBuiltinFilters();
+            this.refreshAppSettings();
 
             if (this.taskrcText === '' && this.loadedTaskrcText === '') {
                 this.loadTaskrc();
@@ -776,13 +926,32 @@ function createTaskwarriorApp({
             this.reschedule = { open: true, taskUuid: uuid, custom: '' };
         },
 
-        async rescheduleTask(taskUuid, dueValue) {
+        rescheduleFieldName() {
+            return String(this.settingsAppLoaded?.reschedule_field || 'due').trim() || 'due';
+        },
+
+        rescheduleFieldLabel() {
+            const field = this.rescheduleFieldName();
+            return field ? `${field[0].toUpperCase()}${field.slice(1)}` : 'Due';
+        },
+
+        formatTaskDateInput(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+
+            const formatted = this.formatDate(raw);
+            return formatted || raw;
+        },
+
+        async rescheduleTask(taskUuid, dateValue) {
             const uuid = String(taskUuid || '').trim();
-            const due = String(dueValue || '').trim();
-            if (!uuid || !due) return;
+            const value = String(dateValue || '').trim();
+            if (!uuid || !value) return;
+
+            const field = this.rescheduleFieldName();
 
             await this.withBusyTask(uuid, async () => {
-                const result = await commandService.modifyTask(uuid, `due:${due}`);
+                const result = await commandService.modifyTask(uuid, `${field}:${value}`);
                 if (result.success) {
                     this.showToast('Rescheduled task', 'success');
                     this.closeReschedule();
@@ -793,18 +962,20 @@ function createTaskwarriorApp({
             });
         },
 
-        async clearTaskDue(taskUuid) {
+        async clearRescheduleField(taskUuid) {
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
 
+            const field = this.rescheduleFieldName();
+
             await this.withBusyTask(uuid, async () => {
-                const result = await commandService.modifyTask(uuid, 'due:');
+                const result = await commandService.modifyTask(uuid, `${field}:`);
                 if (result.success) {
-                    this.showToast('Cleared due date', 'success');
+                    this.showToast(`Cleared ${field}`, 'success');
                     this.closeReschedule();
                     await this.refreshCurrentPanel();
                 } else {
-                    this.showToast(result.error || 'Failed to clear due date', 'error');
+                    this.showToast(result.error || `Failed to clear ${field}`, 'error');
                 }
             });
         },
@@ -892,7 +1063,13 @@ function createTaskwarriorApp({
                 return { type: 'api', requestPrefix: '+', stripPrefix: /^\+/ };
             }
             if (field === 'modal.due') {
-                return { type: 'api', requestPrefix: 'due:', stripPrefix: /^due:/ };
+                const scheduleField = this.rescheduleFieldName();
+                const canonical = resolveAbbreviatedAttr(scheduleField) || scheduleField;
+                return {
+                    type: 'api',
+                    requestPrefix: `${scheduleField}:`,
+                    stripPrefix: new RegExp(`^${escapeRegExp(canonical)}:`),
+                };
             }
             if (field === 'modal.priority') {
                 return {
@@ -920,7 +1097,7 @@ function createTaskwarriorApp({
             };
         },
 
-        async updateCompletion(field, tokenInfo) {
+        async updateCompletion(field, tokenInfo, { autoTrigger = false } = {}) {
             const token = tokenInfo.token || '';
             const spec = this.getCompletionSpec(field);
 
@@ -946,7 +1123,7 @@ function createTaskwarriorApp({
                 return [];
             }
 
-            this.setCompletionState(field, tokenInfo, token, suggestions);
+            this.setCompletionState(field, tokenInfo, token, suggestions, { forceVisible: autoTrigger });
             return suggestions;
         },
 
@@ -1013,7 +1190,7 @@ function createTaskwarriorApp({
                 this.completion.end !== tokenInfo.end;
 
             if (tokenChanged || !isActive) {
-                await this.updateCompletion(field, tokenInfo);
+                await this.updateCompletion(field, tokenInfo, { autoTrigger: true });
             }
 
             if (this.completion.suggestions.length === 0) {
@@ -1061,11 +1238,19 @@ function createTaskwarriorApp({
                 return;
             }
 
+            const text = String(this.getFieldValue(field) || '');
+            const cursor = inputEl.selectionStart;
+            const tokenInfo = getTokenAtCursor(text, cursor);
+
+            // Auto-trigger completion when token has meaningful length (>= 2 chars)
+            const shouldAutoTrigger = tokenInfo.token && tokenInfo.token.length >= 2;
+            
             if (this.completion.visible && this.completion.field === field) {
-                const text = String(this.getFieldValue(field) || '');
-                const cursor = inputEl.selectionStart;
-                const tokenInfo = getTokenAtCursor(text, cursor);
                 await this.updateCompletion(field, tokenInfo);
+            } else if (shouldAutoTrigger) {
+                await this.updateCompletion(field, tokenInfo, { autoTrigger: true });
+            } else {
+                this.resetCompletion();
             }
         },
 
@@ -1133,6 +1318,46 @@ function createTaskwarriorApp({
                 }
             } catch {
                 // ignore
+            }
+        },
+
+        async refreshAppSettings() {
+            try {
+                const result = await apiClient.getSettings();
+                if (!result?.success) return;
+
+                const rescheduleField = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
+
+                this.settingsAppLoaded = {
+                    reschedule_field: rescheduleField,
+                };
+                this.settingsAppDraft = {
+                    reschedule_field: rescheduleField,
+                };
+            } catch {
+                // ignore
+            }
+        },
+
+        resetAppSettingsDraft() {
+            this.settingsAppDraft = { ...this.settingsAppLoaded };
+        },
+
+        async saveAppSettings() {
+            try {
+                const payload = {
+                    reschedule_field: String(this.settingsAppDraft?.reschedule_field || '').trim(),
+                };
+
+                const result = await apiClient.updateSettings(payload);
+                if (!result?.success) {
+                    throw new Error(result?.error || 'Failed to save settings');
+                }
+
+                await this.refreshAppSettings();
+                this.showToast('Saved app settings', 'success');
+            } catch (error) {
+                this.showToast(String(error?.message || error), 'error');
             }
         },
 
@@ -1426,8 +1651,25 @@ function createTaskwarriorApp({
             }
         },
 
-        openCommandModal(type) {
-            this.modal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '', filterIcon: '' };
+         openCommandModal(type) {
+             const baseModal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '', filterIcon: '' };
+
+             if (type === 'add') {
+                 baseModal.description = '';
+                 baseModal.project = '';
+                 baseModal.tags = '';
+                 baseModal.priority = '';
+                 baseModal.due = '';
+                 baseModal.originalDescription = '';
+                 baseModal.originalProject = '';
+                 baseModal.originalTags = '';
+                 baseModal.originalPriority = '';
+                 baseModal.originalDue = '';
+                 baseModal.activeAttributeDropdown = null;
+                 baseModal.attributeInputValue = '';
+             }
+
+             this.modal = baseModal;
             if (type === 'exec') this.showTaskrc = false;
             this.resetCompletion();
             this.$nextTick(() => {
@@ -1502,15 +1744,17 @@ function createTaskwarriorApp({
             }
         },
 
-        getAttributePlaceholder(attributeName) {
-            const placeholders = {
-                due: 'e.g., tomorrow, eom, 2024-12-31',
-                priority: 'H, M, L',
-                project: 'Select or type project name',
-                tags: 'Add tags (comma separated)'
-            };
-            return placeholders[attributeName] || '';
-        },
+         getAttributePlaceholder(attributeName) {
+             const scheduleField = this.rescheduleFieldName();
+
+             const placeholders = {
+                 due: `e.g., tomorrow, eom, 2024-12-31 (sets ${scheduleField})`,
+                 priority: 'H, M, L',
+                 project: 'Select or type project name',
+                 tags: 'Add tags (comma separated)',
+             };
+             return placeholders[attributeName] || '';
+         },
 
         async handleAttributeKeydown(event) {
             const inputEl = event.target;
@@ -1787,9 +2031,10 @@ function createTaskwarriorApp({
                     taskCommand += ` priority:${this.modal.priority}`;
                 }
                 
-                if (this.modal.due) {
-                    taskCommand += ` due:${this.modal.due}`;
-                }
+                 const scheduleField = this.rescheduleFieldName();
+                 if (this.modal.due) {
+                     taskCommand += ` ${scheduleField}:${this.modal.due}`;
+                 }
                 
                 const result = await commandService.addTask(taskCommand);
                 if (result.success) {
@@ -1832,13 +2077,14 @@ function createTaskwarriorApp({
                     }
                 }
                 
-                if (this.modal.due !== this.modal.originalDue) {
-                    if (this.modal.due) {
-                        parts.push(`due:${this.modal.due}`);
-                    } else {
-                        parts.push('due:');
-                    }
-                }
+                 if (this.modal.due !== this.modal.originalDue) {
+                     const scheduleField = this.rescheduleFieldName();
+                     if (this.modal.due) {
+                         parts.push(`${scheduleField}:${this.modal.due}`);
+                     } else {
+                         parts.push(`${scheduleField}:`);
+                     }
+                 }
                 
                 if (this.modal.tags !== this.modal.originalTags) {
                     // Remove old tags and add new ones
@@ -1960,23 +2206,49 @@ function createTaskwarriorApp({
         },
 
         async editTask(taskUuid) {
-            const task = this.tasks.find((t) => String(t.uuid) === String(taskUuid));
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            const task = this.tasks.find((t) => String(t.uuid) === uuid);
             const currentDescription = task?.description ? String(task.description) : '';
             const currentProject = task?.project ? String(task.project) : '';
             const currentTags = Array.isArray(task?.tags) ? task.tags.join(', ') : '';
             const currentPriority = task?.priority ? String(task.priority) : '';
-            const currentDue = task?.due ? String(task.due) : '';
-            
+
+            const scheduleFieldRaw = this.rescheduleFieldName();
+
+            let currentDue = '';
+            const resolvedFromList = resolveTaskFieldName(task, scheduleFieldRaw);
+            if (resolvedFromList) {
+                currentDue = task[resolvedFromList] ? String(task[resolvedFromList]) : '';
+            } else {
+                try {
+                    const exportResult = await commandService.exportTask(uuid);
+                    if (exportResult.success) {
+                        const payload = String(exportResult.output || '').trim();
+                        const parsed = payload ? JSON.parse(payload) : [];
+                        const exportedTask = Array.isArray(parsed) ? parsed[0] : parsed;
+
+                        const resolvedFromExport = resolveTaskFieldName(exportedTask, scheduleFieldRaw);
+                        if (resolvedFromExport) {
+                            currentDue = exportedTask[resolvedFromExport] ? String(exportedTask[resolvedFromExport]) : '';
+                        }
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+
             // Fetch full task details for the collapsible section
             let taskDetailsOutput = '';
             try {
-                const result = await commandService.showTask(taskUuid);
+                const result = await commandService.showTask(uuid);
                 if (result.success) {
                     const output = (result.output || '').trim();
                     const err = (result.error || '').trim();
                     taskDetailsOutput = [output, err].filter(Boolean).join('\n') || 'No details available';
                 }
-            } catch (error) {
+            } catch {
                 taskDetailsOutput = 'Failed to load task details';
             }
 
@@ -1987,7 +2259,7 @@ function createTaskwarriorApp({
                  type: 'edit',
                  value: currentDescription,
                  output: '',
-                 taskId: taskUuid,
+                 taskId: uuid,
                 filterId: null,
                 filterName: '',
                 filterValue: '',
@@ -2148,30 +2420,72 @@ function createTaskwarriorApp({
             return normalized;
         },
 
-        formatDate(dateStr) {
-            const normalized = this.normalizeTaskDate(dateStr);
-            if (!normalized) return '';
+        parseNormalizedDateParts(normalized) {
+            const value = String(normalized || '').trim();
+            if (!value) return null;
 
-            const date = new Date(normalized);
-            if (Number.isNaN(date.getTime())) return '';
+            // `normalized` is either YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS[Z]
+            const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(Z)?)?$/);
+            if (!match) return null;
 
-            return date.toLocaleDateString();
+            const [, yearText, monthText, dayText, hourText, minuteText, _secondText, zuluMarker] = match;
+            const hasTime = hourText !== undefined && minuteText !== undefined;
+            const isZulu = Boolean(zuluMarker);
+
+            // Treat date-only values and local timestamps as local wall-clock times.
+            // Only convert when Taskwarrior exported a UTC timestamp (with trailing 'Z').
+            if (!hasTime || !isZulu) {
+                return {
+                    year: Number(yearText),
+                    month: Number(monthText),
+                    day: Number(dayText),
+                    hour: hasTime ? Number(hourText) : null,
+                    minute: hasTime ? Number(minuteText) : null,
+                    hasTime,
+                };
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return null;
+
+            return {
+                year: date.getFullYear(),
+                month: date.getMonth() + 1,
+                day: date.getDate(),
+                hour: date.getHours(),
+                minute: date.getMinutes(),
+                hasTime,
+            };
         },
 
-        formatDateTime(dateStr) {
+        pad2(value) {
+            return String(value).padStart(2, '0');
+        },
+
+        formatDate(dateStr) {
             const normalized = this.normalizeTaskDate(dateStr);
-            if (!normalized) return '';
+            const parts = this.parseNormalizedDateParts(normalized);
+            if (!parts) return '';
 
-            const date = new Date(normalized);
-            if (Number.isNaN(date.getTime())) return '';
+            const dateText = `${this.pad2(parts.day)}.${this.pad2(parts.month)}.${parts.year}`;
 
-            return date.toLocaleString(undefined, {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-            });
+            if (!parts.hasTime) return dateText;
+
+            const hour = parts.hour ?? 0;
+            const minute = parts.minute ?? 0;
+
+            // Hide time when it is a placeholder (00:00 or 23:59), but only if time exists.
+            if ((hour === 0 && minute === 0) || (hour === 23 && minute === 59)) {
+                return dateText;
+            }
+
+            return `${dateText} ${this.pad2(hour)}:${this.pad2(minute)}`;
+        },
+
+        // Keep for compatibility with templates that expect a date+time formatter.
+        // With deterministic formatting, it's the same as `formatDate`.
+        formatDateTime(dateStr) {
+            return this.formatDate(dateStr);
         },
 
         formatUrgency(value) {

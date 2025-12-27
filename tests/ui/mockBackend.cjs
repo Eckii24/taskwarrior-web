@@ -77,11 +77,7 @@ function looksLikeAttributeToken(token) {
     const t = String(token || '');
     if (!t) return false;
     if (t.startsWith('+') || t.startsWith('-')) return true;
-    if (t.startsWith('project:')) return true;
-    if (t.startsWith('priority:')) return true;
-    if (t.startsWith('due:')) return true;
-    if (t.startsWith('status:')) return true;
-    if (t.startsWith('limit:')) return true;
+    if (t.includes(':')) return true;
     return false;
 }
 
@@ -104,31 +100,35 @@ function applyTaskModifications(task, tokens) {
     };
 
     for (; i < list.length; i++) {
-        const token = list[i];
-        if (token.startsWith('project:')) {
-            const value = token.slice('project:'.length);
-            if (value) task.project = value;
-            else delete task.project;
-        } else if (token.startsWith('priority:')) {
-            const value = token.slice('priority:'.length);
-            if (value) task.priority = value;
-            else delete task.priority;
-        } else if (token.startsWith('due:')) {
-            const valueRaw = token.slice('due:'.length);
-            const value = String(valueRaw || '').trim();
-            if (value) task.due = value;
-            else delete task.due;
-        } else if (token.startsWith('+')) {
+        const token = String(list[i] || '');
+        if (token.startsWith('+')) {
             const tag = token.slice(1);
             if (!tag) continue;
             ensureTags();
             if (!task.tags.includes(tag)) task.tags.push(tag);
-        } else if (token.startsWith('-')) {
+            continue;
+        }
+
+        if (token.startsWith('-')) {
             const tag = token.slice(1);
             if (!tag) continue;
             ensureTags();
             task.tags = task.tags.filter((t) => t !== tag);
+            continue;
         }
+
+        const attrMatch = token.match(/^([^:]+):(.*)$/);
+        if (!attrMatch) continue;
+
+        const attr = attrMatch[1];
+        const value = String(attrMatch[2] || '').trim();
+
+        if (!value) {
+            delete task[attr];
+            continue;
+        }
+
+        task[attr] = value;
     }
 
     return task;
@@ -220,10 +220,15 @@ function createMockBackend() {
             next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
             all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
         },
+        settings: {
+            reschedule_field: 'due',
+        },
         taskrc: '# taskrc\n',
         nextTaskId: 1,
         nextFilterId: 1,
         nextAnnotationId: 1,
+
+        taskConfig: {},
 
         // Optional test hooks.
         // If provided, it may return a Response-like object to short-circuit handling.
@@ -239,6 +244,19 @@ function createMockBackend() {
         if (typeof state.beforeFetch === 'function') {
             const override = await state.beforeFetch({ href, parsed, pathname, method, init });
             if (override) return override;
+        }
+
+        if (pathname === '/api/settings' && method === 'GET') {
+            return jsonResponse({ success: true, settings: { ...state.settings } });
+        }
+
+        if (pathname === '/api/settings' && method === 'PUT') {
+            const body = init.body ? JSON.parse(String(init.body)) : {};
+            if (typeof body.reschedule_field !== 'string' || !String(body.reschedule_field).trim()) {
+                return jsonResponse({ success: false, error: 'reschedule_field must not be empty' }, { status: 400 });
+            }
+            state.settings.reschedule_field = String(body.reschedule_field).trim();
+            return jsonResponse({ success: true, settings: { ...state.settings } });
         }
 
         if (pathname === '/api/builtin-filters' && method === 'GET') {
@@ -398,14 +416,22 @@ function createMockBackend() {
             return jsonResponse({ success: true, token, suggestions, values: suggestions });
         }
 
-        if (pathname === '/api/task' && method === 'POST') {
-            const body = init.body ? JSON.parse(String(init.body)) : {};
-            const args = String(body.args || '').trim();
-            const tokens = parseShellLikeArgs(args);
+         if (pathname === '/api/task' && method === 'POST') {
+             const body = init.body ? JSON.parse(String(init.body)) : {};
+             const args = String(body.args || '').trim();
+             const tokens = parseShellLikeArgs(args);
 
-            if (!tokens.length) {
-                return jsonResponse({ success: false, output: '', error: 'Missing args' }, { status: 400 });
-            }
+             if (!tokens.length) {
+                 return jsonResponse({ success: false, output: '', error: 'Missing args' }, { status: 400 });
+             }
+
+             if (tokens[0] === 'rc.hooks=0' && tokens[1] === '_get' && tokens[2] && String(tokens[2]).startsWith('rc.')) {
+                 const key = String(tokens[2]).slice('rc.'.length);
+                 const valueRaw = state.taskConfig[key];
+                 const value = valueRaw === undefined ? '' : String(valueRaw);
+                 return jsonResponse({ success: true, output: `${value}\n`, error: '' });
+             }
+
 
             if (tokens[0] === 'sync') {
                 return jsonResponse({ success: true, output: 'Sync OK\n', error: '' });

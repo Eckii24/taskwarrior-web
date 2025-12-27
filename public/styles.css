@@ -49,7 +49,7 @@
     --shadow: 0 16px 40px rgba(17, 17, 27, 0.55);
     --radius: 14px;
     --sidebar-w: 280px;
-    --topbar-h: 52px;
+    --topbar-h: calc(52px + env(safe-area-inset-top, 0px));
 }
 
 * {
@@ -98,7 +98,8 @@ a:hover {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 0 12px;
+    padding: env(safe-area-inset-top, 0px) 12px 0;
+    height: var(--topbar-h);
     background: var(--panel);
     border-bottom: 1px solid var(--line);
 }
@@ -116,8 +117,14 @@ a:hover {
     text-overflow: ellipsis;
 }
 
-.topbar-spacer {
-    width: 28px;
+.topbar .icon-btn.add-task {
+    border-color: rgba(203, 166, 247, 0.45);
+    background: rgba(203, 166, 247, 0.15);
+    color: var(--accent);
+}
+
+.topbar .icon-btn.add-task:hover {
+    background: rgba(203, 166, 247, 0.22);
 }
 
 .icon-btn {
@@ -306,6 +313,10 @@ a:hover {
     background: rgba(203, 166, 247, 0.15);
 }
 
+.nav-item.add-task:hover {
+    background: rgba(203, 166, 247, 0.22);
+}
+
 .nav-item.add-task .nav-icon {
     color: var(--accent);
 }
@@ -438,6 +449,15 @@ a:hover {
     margin-bottom: 8px;
 }
 
+.settings-icon {
+    width: 30px;
+}
+
+.settings-label {
+    color: var(--muted);
+    font-weight: 600;
+}
+
 .settings-row .text-input {
     font-family: inherit;
 }
@@ -544,6 +564,28 @@ a:hover {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.meta-priority {
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.meta-priority.priority-h {
+    color: var(--danger);
+}
+
+.meta-priority.priority-m {
+    color: var(--ctp-peach);
+}
+
+.meta-priority.priority-l {
+    color: var(--ctp-sky);
+}
+
+.priority-icon {
+    font-size: 0.95rem;
+    line-height: 1;
 }
 
 .tag-pill {
