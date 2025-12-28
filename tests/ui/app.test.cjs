@@ -125,6 +125,80 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(styles).toMatch(/@media \(max-width: 768px\)[\s\S]*?\.urgency\s*\{[\s\S]*?display:\s*none;/);
     });
 
+    test('opens drawer on left edge swipe', async () => {
+        const backend = createMockBackend();
+
+        // Force touch device detection.
+        window.ontouchstart = () => {};
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        expect(vm.drawerOpen).toBe(false);
+
+        const main = document.querySelector('main.main');
+        expect(main).toBeTruthy();
+
+        const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+        touchStart.touches = [{ clientX: 5, clientY: 40, identifier: 1 }];
+        main.dispatchEvent(touchStart);
+
+        const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+        touchMove.touches = [{ clientX: 90, clientY: 45, identifier: 1 }];
+        touchMove.preventDefault = jest.fn();
+        main.dispatchEvent(touchMove);
+
+        await flushPromises(vm, 1);
+        expect(vm.drawerOpen).toBe(true);
+    });
+
+    test('pulls down at top to sync and refresh', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Before', status: 'pending', urgency: 1.5 });
+
+        // Force touch device detection.
+        window.ontouchstart = () => {};
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 8);
+
+        // Slow down sync so we can observe the visual state.
+        const runSyncSpy = jest.spyOn(vm, 'runSync').mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 50)));
+        const refreshSpy = jest.spyOn(vm, 'refreshCurrentPanel');
+
+        const main = document.querySelector('main.main');
+        expect(main).toBeTruthy();
+
+        // Ensure scroller is at top.
+        main.scrollTop = 0;
+
+        const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+        touchStart.touches = [{ clientX: 100, clientY: 10, identifier: 1 }];
+        main.dispatchEvent(touchStart);
+
+        const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+        touchMove.touches = [{ clientX: 100, clientY: 120, identifier: 1 }];
+        touchMove.preventDefault = jest.fn();
+        main.dispatchEvent(touchMove);
+
+        const touchEnd = new Event('touchend', { bubbles: true, cancelable: true });
+        touchEnd.changedTouches = [{ clientX: 100, clientY: 120, identifier: 1 }];
+        main.dispatchEvent(touchEnd);
+
+        await flushPromises(vm, 2);
+
+        const indicator = document.querySelector('.pull-refresh-indicator');
+        expect(indicator).toBeTruthy();
+        expect(indicator.classList.contains('spinning')).toBe(true);
+
+        jest.advanceTimersByTime(60);
+        await flushPromises(vm, 6);
+
+        expect(runSyncSpy).toHaveBeenCalled();
+        expect(refreshSpy).toHaveBeenCalled();
+        expect(indicator.classList.contains('spinning')).toBe(false);
+    });
+
     test('opens add task modal from topbar plus button', async () => {
         const backend = createMockBackend();
         const { vm } = mountWithBackend(backend);

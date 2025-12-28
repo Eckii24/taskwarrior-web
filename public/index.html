@@ -236,8 +236,16 @@
             </div>
         </aside>
 
-        <main class="main">
-            <section class="main-content">
+        <main class="main" ref="mainScroller">
+            <div
+                class="pull-refresh-indicator"
+                :class="{ spinning: pullRefreshUi.refreshing, armed: pullRefreshUi.armed }"
+                :style="pullRefreshIndicatorStyle"
+                aria-hidden="true"
+            >
+                <div class="pull-refresh-spinner"></div>
+            </div>
+            <section class="main-content" :class="{ 'pull-refresh-snapping': pullRefreshSnapping }" :style="pullRefreshContentStyle">
                 <div v-if="showTaskrc" class="settings-view">
                     <div class="tasks-heading">{{ currentTitle }}</div>
 

@@ -474,12 +474,66 @@ a:hover {
     height: calc(100vh - var(--topbar-h));
     height: calc(100svh - var(--topbar-h));
     overflow: auto;
+    position: relative;
+    overscroll-behavior-y: contain;
+}
+
+.pull-refresh-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    will-change: transform;
+}
+
+.pull-refresh-indicator.show {
+    opacity: 1;
+}
+
+.pull-refresh-spinner {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    border: 2px solid rgba(186, 194, 222, 0.35);
+    border-top-color: rgba(203, 166, 247, 0.95);
+    transform: rotate(0deg);
+    will-change: transform;
+}
+
+.pull-refresh-indicator.spinning .pull-refresh-spinner {
+    animation: pullRefreshSpin 0.9s linear infinite;
+}
+
+@keyframes pullRefreshSpin {
+    to { transform: rotate(360deg); }
 }
 
 .main-content {
     padding: 14px;
     max-width: 980px;
     margin: 0 auto;
+}
+
+.main-content.pull-refresh-snapping {
+    transition: transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .main-content.pull-refresh-snapping {
+        transition: none;
+    }
+
+    .pull-refresh-indicator.spinning .pull-refresh-spinner {
+        animation: none;
+    }
 }
 
 .tasks-heading {

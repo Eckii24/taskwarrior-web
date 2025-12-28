@@ -481,8 +481,30 @@ function createTaskwarriorApp({
     const app = createApp({
     data() {
         return {
-            drawerOpen: false,
-            showTaskrc: false,
+             drawerOpen: false,
+             showTaskrc: false,
+
+             gestures: {
+                 edgeSwipe: {
+                     active: false,
+                     startX: 0,
+                     startY: 0,
+                     pointerId: null,
+                 },
+                 pullToRefresh: {
+                     active: false,
+                     startY: 0,
+                     startScrollTop: 0,
+                     pulled: 0,
+                 },
+             },
+
+             pullRefreshUi: {
+                 offset: 0,
+                 dragging: false,
+                 armed: false,
+                 refreshing: false,
+             },
             taskrcText: '',
             loadedTaskrcText: '',
             
@@ -606,8 +628,26 @@ function createTaskwarriorApp({
             ],
         };
     },
-    computed: {
-        modalFilterIconLabel() {
+     computed: {
+         pullRefreshIndicatorStyle() {
+             const indicatorHeight = 54;
+             const offset = Number(this.pullRefreshUi?.offset) || 0;
+             return {
+                 transform: `translateY(${offset - indicatorHeight}px)`,
+                 opacity: offset > 0 || this.pullRefreshUi?.refreshing ? 1 : 0,
+             };
+         },
+         pullRefreshContentStyle() {
+             const offset = Number(this.pullRefreshUi?.offset) || 0;
+             if (offset <= 0) return {};
+             return {
+                 transform: `translateY(${offset}px)`,
+             };
+         },
+         pullRefreshSnapping() {
+             return !this.pullRefreshUi?.dragging;
+         },
+         modalFilterIconLabel() {
             if (this.modal?.type !== 'filter') return '';
             const raw = String(this.modal?.filterIcon || '').trim();
             return raw || 'None';
@@ -656,28 +696,201 @@ function createTaskwarriorApp({
              return list;
          },
     },
-        async mounted() {
-        window.addEventListener('keydown', this.onGlobalKeydown);
-        window.addEventListener('click', this.onGlobalClick);
+         async mounted() {
+         window.addEventListener('keydown', this.onGlobalKeydown);
+         window.addEventListener('click', this.onGlobalClick);
 
-        const restoredView = this.readPersistedSelectedView();
+         this.installGestureListeners();
 
-        await this.refreshBuiltinFilters();
-        await this.refreshFilters();
-        await this.refreshAppSettings();
-        this.applyRestoredSelectedView(restoredView);
+         const restoredView = this.readPersistedSelectedView();
 
-        await this.loadTasksForSelection();
-    },
-    beforeUnmount() {
-        window.removeEventListener('keydown', this.onGlobalKeydown);
-        window.removeEventListener('click', this.onGlobalClick);
-    },
-    methods: {
-        persistSelectedView(view) {
-            try {
-                const safeView = view && typeof view === 'object' ? view : { type: 'builtin', key: 'next' };
-                const url = new URL(window.location.href);
+         await this.refreshBuiltinFilters();
+         await this.refreshFilters();
+         await this.refreshAppSettings();
+         this.applyRestoredSelectedView(restoredView);
+
+         await this.loadTasksForSelection();
+     },
+     beforeUnmount() {
+         window.removeEventListener('keydown', this.onGlobalKeydown);
+         window.removeEventListener('click', this.onGlobalClick);
+
+         this.removeGestureListeners();
+     },
+     methods: {
+         installGestureListeners() {
+             const isTouchDevice = typeof window !== 'undefined' && (
+                 typeof window.ontouchstart !== 'undefined' ||
+                 (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+             );
+             if (!isTouchDevice) return;
+
+             const main = this.$refs.mainScroller;
+             if (!main || typeof main.addEventListener !== 'function') return;
+
+             if (!this._gestureHandlers) {
+                 this._gestureHandlers = {
+                     touchStart: (event) => this.onTouchStart(event),
+                     touchMove: (event) => this.onTouchMove(event),
+                     touchEnd: (event) => this.onTouchEnd(event),
+                 };
+             }
+
+             main.addEventListener('touchstart', this._gestureHandlers.touchStart, { passive: true });
+             main.addEventListener('touchmove', this._gestureHandlers.touchMove, { passive: false });
+             main.addEventListener('touchend', this._gestureHandlers.touchEnd, { passive: true });
+             main.addEventListener('touchcancel', this._gestureHandlers.touchEnd, { passive: true });
+         },
+
+         removeGestureListeners() {
+             const main = this.$refs.mainScroller;
+             if (!main || !this._gestureHandlers) return;
+
+             main.removeEventListener('touchstart', this._gestureHandlers.touchStart);
+             main.removeEventListener('touchmove', this._gestureHandlers.touchMove);
+             main.removeEventListener('touchend', this._gestureHandlers.touchEnd);
+             main.removeEventListener('touchcancel', this._gestureHandlers.touchEnd);
+         },
+
+         getTouchPoint(event) {
+             const touch = event?.touches?.[0] || event?.changedTouches?.[0];
+             if (!touch) return null;
+             return {
+                 x: Number(touch.clientX) || 0,
+                 y: Number(touch.clientY) || 0,
+             };
+         },
+
+         onTouchStart(event) {
+             const point = this.getTouchPoint(event);
+             if (!point) return;
+             if (this.pullRefreshUi.refreshing) return;
+
+             // Edge swipe to open drawer.
+             this.gestures.edgeSwipe = {
+                 active: !this.drawerOpen && point.x <= 24,
+                 startX: point.x,
+                 startY: point.y,
+                 pointerId: event?.touches?.[0]?.identifier ?? null,
+             };
+
+             this.pullRefreshUi.offset = 0;
+             this.pullRefreshUi.dragging = false;
+             this.pullRefreshUi.armed = false;
+
+             // Pull to refresh (only when we're at top).
+             const main = this.$refs.mainScroller;
+             const startScrollTop = main && typeof main.scrollTop === 'number' ? main.scrollTop : 0;
+             this.gestures.pullToRefresh = {
+                 active: startScrollTop <= 0,
+                 startY: point.y,
+                 startScrollTop,
+                 pulled: 0,
+             };
+         },
+
+         onTouchMove(event) {
+             const point = this.getTouchPoint(event);
+             if (!point) return;
+             if (this.pullRefreshUi.refreshing) return;
+
+             // If drawer is open, let swipe/pull behave naturally.
+             if (this.drawerOpen) return;
+
+             const edge = this.gestures.edgeSwipe;
+             if (edge.active) {
+                 const dx = point.x - edge.startX;
+                 const dy = Math.abs(point.y - edge.startY);
+
+                 // Only treat as swipe if mostly horizontal.
+                 if (dx > 55 && dy < 40) {
+                     this.toggleDrawer(true);
+                     this.gestures.edgeSwipe.active = false;
+                 }
+                 return;
+             }
+
+             const pull = this.gestures.pullToRefresh;
+             if (!pull.active) return;
+
+             const main = this.$refs.mainScroller;
+             const scrollTop = main && typeof main.scrollTop === 'number' ? main.scrollTop : 0;
+             if (scrollTop > 0) {
+                 pull.active = false;
+                 pull.pulled = 0;
+                 this.pullRefreshUi.offset = 0;
+                 this.pullRefreshUi.dragging = false;
+                 this.pullRefreshUi.armed = false;
+                 return;
+             }
+
+             const dy = point.y - pull.startY;
+             if (dy <= 0) return;
+
+             const threshold = 70;
+             const maxPull = 90;
+             const offset = Math.min(Math.round(dy), maxPull);
+
+             pull.pulled = dy;
+             this.pullRefreshUi.dragging = true;
+             this.pullRefreshUi.offset = offset;
+             this.pullRefreshUi.armed = offset >= threshold;
+
+             // Prevent the rubber-band scroll from taking over.
+             if (typeof event.preventDefault === 'function') {
+                 event.preventDefault();
+             }
+         },
+
+         async onTouchEnd() {
+             const pull = this.gestures.pullToRefresh;
+             const pulled = Number(pull?.pulled) || 0;
+             const threshold = 70;
+             const stickyOffset = 54;
+
+             this.gestures.edgeSwipe.active = false;
+             this.gestures.pullToRefresh.active = false;
+             this.gestures.pullToRefresh.pulled = 0;
+
+             if (this.drawerOpen) {
+                 this.pullRefreshUi.offset = 0;
+                 this.pullRefreshUi.dragging = false;
+                 this.pullRefreshUi.armed = false;
+                 return;
+             }
+
+             if (this.pullRefreshUi.refreshing) return;
+
+             this.pullRefreshUi.dragging = false;
+
+             if (pulled < threshold) {
+                 this.pullRefreshUi.offset = 0;
+                 this.pullRefreshUi.armed = false;
+                 return;
+             }
+
+             this.pullRefreshUi.refreshing = true;
+             this.pullRefreshUi.armed = false;
+             this.pullRefreshUi.offset = stickyOffset;
+
+             try {
+                 await this.syncAndRefresh();
+             } finally {
+                 this.pullRefreshUi.refreshing = false;
+                 this.pullRefreshUi.offset = 0;
+             }
+         },
+
+         async syncAndRefresh() {
+             // Use existing UI sync action, then reload tasks.
+             await this.runSync();
+             await this.refreshCurrentPanel();
+         },
+
+         persistSelectedView(view) {
+             try {
+                 const safeView = view && typeof view === 'object' ? view : { type: 'builtin', key: 'next' };
+                 const url = new URL(window.location.href);
 
                 url.searchParams.delete('viewType');
                 url.searchParams.delete('viewKey');
