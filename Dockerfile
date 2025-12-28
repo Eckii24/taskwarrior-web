@@ -29,6 +29,7 @@ FROM node:18-bookworm-slim
 
 # Taskwarrior runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    cron \
     libuuid1 \
     python3 \
     make \
