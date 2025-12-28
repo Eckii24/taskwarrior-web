@@ -1128,7 +1128,15 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
         expect(tabEvent.preventDefault).toHaveBeenCalled();
         expect(vm.completion.visible).toBe(true);
-        expect(vm.completion.suggestions).toEqual(['status:pending', 'status:completed']);
+        expect(vm.completion.suggestions).toEqual(['status:', 'status:pending', 'status:completed']);
+
+        const enterEvent = dispatchKey(input, 'Enter');
+        await vm.handleCompletionKeydown(enterEvent, 'modal.value', 'submitModal');
+        await flushPromises(vm, 4);
+
+        expect(vm.modal.value).toBe('status:');
+        expect(vm.completion.visible).toBe(true);
+        expect(vm.completion.suggestions).toEqual(['pending', 'completed', 'deleted', 'waiting']);
 
         const arrowEvent = dispatchKey(input, 'ArrowDown');
         await vm.handleCompletionKeydown(arrowEvent, 'modal.value', 'submitModal');
@@ -1136,13 +1144,44 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
         expect(vm.completion.selectedIndex).toBe(1);
 
-        const enterEvent = dispatchKey(input, 'Enter');
-        await vm.handleCompletionKeydown(enterEvent, 'modal.value', 'submitModal');
+        const enterEvent2 = dispatchKey(input, 'Enter');
+        await vm.handleCompletionKeydown(enterEvent2, 'modal.value', 'submitModal');
         await flushPromises(vm, 3);
 
         expect(vm.modal.value).toBe('status:completed');
         expect(vm.completion.visible).toBe(false);
         expect(vm.completion.suggestions).toEqual([]);
+    });
+
+    test('modal completion click selection retriggers nested suggestions', async () => {
+        const backend = createMockBackend();
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 5);
+
+        vm.openCommandModal('search');
+        await flushPromises(vm, 2);
+
+        const input = vm.$refs.modalInput;
+        expect(input).toBeTruthy();
+
+        vm.modal.value = 'st';
+        input.value = 'st';
+        input.selectionStart = 2;
+        input.selectionEnd = 2;
+
+        const tabEvent = dispatchKey(input, 'Tab');
+        await vm.handleCompletionKeydown(tabEvent, 'modal.value', 'submitModal');
+        await flushPromises(vm, 3);
+
+        expect(vm.completion.suggestions[0]).toBe('status:');
+
+        await vm.applyModalCompletion('modal.value', 'status:');
+        await flushPromises(vm, 5);
+
+        expect(vm.modal.value).toBe('status:');
+        expect(vm.completion.visible).toBe(true);
+        expect(vm.completion.suggestions).toEqual(['pending', 'completed', 'deleted', 'waiting']);
     });
 
     test('error paths: checkbox rollback + filter reorder refresh', async () => {

@@ -402,6 +402,12 @@ function createMockBackend() {
                 suggestions = dueKeywords
                     .filter((k) => k.toLowerCase().startsWith(String(prefix).toLowerCase()))
                     .map((k) => `due:${k}`);
+            } else if (normalized.startsWith('status:')) {
+                const prefix = token.slice('status:'.length);
+                const statuses = ['pending', 'completed', 'deleted', 'waiting'];
+                suggestions = statuses
+                    .filter((value) => value.toLowerCase().startsWith(String(prefix).toLowerCase()))
+                    .map((value) => `status:${value}`);
             } else if (token.startsWith('+')) {
                 const prefix = token.slice(1);
                 suggestions = tags
@@ -409,7 +415,7 @@ function createMockBackend() {
                     .map((t) => `+${t}`);
             } else {
                 // A few generic field suggestions.
-                const generic = ['project:', 'due:', 'status:pending', 'status:completed', '+'];
+                const generic = ['project:', 'due:', 'status:', 'status:pending', 'status:completed', '+'];
                 suggestions = generic.filter((g) => g.toLowerCase().startsWith(normalized));
             }
 

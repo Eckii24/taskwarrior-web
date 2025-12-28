@@ -1360,12 +1360,43 @@ function createTaskwarriorApp({
             });
         },
 
-        applyModalCompletion(field, suggestion) {
+        async applyCompletionSuggestionAndMaybeRetrigger(inputEl, field, suggestion) {
+            const current = String(this.getFieldValue(field) || '');
+            const { start, end } = this.completion;
+            const nextValue = replaceRange(current, start, end, suggestion);
+            const cursor = start + suggestion.length;
+
+            this.setFieldValue(field, nextValue);
+
+            this.$nextTick(() => {
+                try {
+                    inputEl.setSelectionRange(cursor, cursor);
+                } catch {
+                    // ignore
+                }
+            });
+
+            this.resetCompletion();
+
+            const normalizedSuggestion = String(suggestion || '').trim();
+            if (!normalizedSuggestion.endsWith(':')) return;
+
+            const requestPrefix = normalizedSuggestion;
+            const raw = await this.fetchCompletionSuggestions(requestPrefix);
+            const stripPrefix = new RegExp(`^${escapeRegExp(requestPrefix)}`);
+            const suggestions = this.stripPrefixFromSuggestions(raw, stripPrefix);
+
+            if (suggestions.length === 0) return;
+
+            const tokenInfo = { token: '', start: cursor, end: cursor };
+            this.setCompletionState(field, tokenInfo, '', suggestions, { forceVisible: true });
+        },
+
+        async applyModalCompletion(field, suggestion) {
             const inputEl = this.$refs.modalInput;
             if (!inputEl) return;
 
-            this.applyCompletionSuggestion(inputEl, field, suggestion);
-            this.resetCompletion();
+            await this.applyCompletionSuggestionAndMaybeRetrigger(inputEl, field, suggestion);
             this.$nextTick(() => inputEl.focus());
         },
 
@@ -1422,8 +1453,7 @@ function createTaskwarriorApp({
 
 
             if (this.completion.suggestions.length === 1 && event.key === 'Tab') {
-                this.applyCompletionSuggestion(inputEl, field, this.completion.suggestions[0]);
-                this.resetCompletion();
+                await this.applyCompletionSuggestionAndMaybeRetrigger(inputEl, field, this.completion.suggestions[0]);
                 return;
             }
 
@@ -1445,8 +1475,7 @@ function createTaskwarriorApp({
                 const suggestion = this.completion.suggestions[this.completion.selectedIndex];
                 if (suggestion) {
                     event.preventDefault();
-                    this.applyCompletionSuggestion(inputEl, field, suggestion);
-                    this.resetCompletion();
+                    await this.applyCompletionSuggestionAndMaybeRetrigger(inputEl, field, suggestion);
                 }
             }
         },
