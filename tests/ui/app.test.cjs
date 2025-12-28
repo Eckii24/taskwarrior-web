@@ -525,6 +525,10 @@ describe('Taskwarrior Web UI (component-style)', () => {
         // may silently fall back to UTC.
         expect(vm.formatDate('20250102T003000Z')).toBe(formatExpectedZulu('20250102T003000Z'));
 
+        // Midnight Zulu timestamps are often used as date-only placeholders.
+        // These should stay date-only regardless of the runtime TZ.
+        expect(vm.formatDate('20251231T000000Z')).toBe('31.12.2025');
+
         // Placeholder times are hidden even after conversion.
         expect(vm.formatDate('20250102T225900Z')).toBe(formatExpectedZulu('20250102T225900Z'));
     });

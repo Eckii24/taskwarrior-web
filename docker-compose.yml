@@ -23,6 +23,7 @@ services:
       - PORT=3000
       - TASKDATA=/root/.task
       - TASKRC=/root/.task/taskrc
+      - TZ=${TZ:-Etc/UTC}
     depends_on:
       - taskchampion-sync
     restart: unless-stopped

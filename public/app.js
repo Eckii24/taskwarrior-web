@@ -2431,7 +2431,7 @@ function createTaskwarriorApp({
             const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?(Z)?)?$/);
             if (!match) return null;
 
-            const [, yearText, monthText, dayText, hourText, minuteText, _secondText, zuluMarker] = match;
+            const [, yearText, monthText, dayText, hourText, minuteText, secondText, zuluMarker] = match;
             const hasTime = hourText !== undefined && minuteText !== undefined;
             const isZulu = Boolean(zuluMarker);
 
@@ -2445,6 +2445,29 @@ function createTaskwarriorApp({
                     hour: hasTime ? Number(hourText) : null,
                     minute: hasTime ? Number(minuteText) : null,
                     hasTime,
+                };
+            }
+
+            const rawHour = Number(hourText);
+            const rawMinute = Number(minuteText);
+            const rawSecond = secondText !== undefined ? Number(secondText) : 0;
+
+            // Taskwarrior often represents "date-only" values as UTC timestamps at 00:00:00Z
+            // (and sometimes 23:59:59Z). If we convert those to local time, the UI can show
+            // spurious times like "01:00" (and even a different calendar day) depending on TZ.
+            // For these placeholders, keep the literal date and hide the time.
+            const isZuluPlaceholder =
+                (rawHour === 0 && rawMinute === 0 && rawSecond === 0)
+                || (rawHour === 23 && rawMinute === 59 && rawSecond >= 0);
+
+            if (isZuluPlaceholder) {
+                return {
+                    year: Number(yearText),
+                    month: Number(monthText),
+                    day: Number(dayText),
+                    hour: null,
+                    minute: null,
+                    hasTime: false,
                 };
             }
 

@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
+    tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=taskwarrior-builder /tmp/taskwarrior-install/ /
@@ -62,4 +63,12 @@ EXPOSE 3000
 # Set environment variable for port
 ENV PORT=3000
 
+# Ensure Taskwarrior and Node share a consistent timezone.
+# Override at runtime with `-e TZ=Europe/Berlin` (or similar).
+ENV TZ=Etc/UTC
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["npm", "start"]
