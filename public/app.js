@@ -881,11 +881,15 @@ function createTaskwarriorApp({
              }
          },
 
-         async syncAndRefresh() {
-             // Use existing UI sync action, then reload tasks.
-             await this.runSync();
-             await this.refreshCurrentPanel();
-         },
+        async syncAndRefresh() {
+            await this.runSync();
+
+            // Only reload tasks when the task list is currently visible.
+            if (this.showTaskrc) return;
+            if (this.mainMode !== 'tasks') return;
+
+            await this.refreshCurrentPanel();
+        },
 
          persistSelectedView(view) {
              try {

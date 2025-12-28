@@ -516,6 +516,49 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.toast.text).toContain('Sync OK');
     });
 
+    test('sidebar sync refreshes tasks when task list visible', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        expect(vm.mainMode).toBe('tasks');
+        expect(vm.showTaskrc).toBe(false);
+
+        const runSyncSpy = jest.spyOn(vm, 'runSync').mockResolvedValue();
+        const refreshSpy = jest.spyOn(vm, 'refreshCurrentPanel').mockResolvedValue();
+
+        const syncButton = document.querySelector('button[aria-label="Sync"]');
+        expect(syncButton).toBeTruthy();
+
+        syncButton.click();
+        await flushPromises(vm, 3);
+
+        expect(runSyncSpy).toHaveBeenCalled();
+        expect(refreshSpy).toHaveBeenCalled();
+    });
+
+    test('sidebar sync does not refresh when output visible', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.mainMode = 'output';
+        vm.mainOutput = 'Hello';
+        await flushPromises(vm, 1);
+
+        const runSyncSpy = jest.spyOn(vm, 'runSync').mockResolvedValue();
+        const refreshSpy = jest.spyOn(vm, 'refreshCurrentPanel').mockResolvedValue();
+
+        const syncButton = document.querySelector('button[aria-label="Sync"]');
+        expect(syncButton).toBeTruthy();
+
+        syncButton.click();
+        await flushPromises(vm, 3);
+
+        expect(runSyncSpy).toHaveBeenCalled();
+        expect(refreshSpy).not.toHaveBeenCalled();
+    });
+
     test('completions return suggestions (project/due/tags)', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5, project: 'Home', tags: ['groceries'] });
