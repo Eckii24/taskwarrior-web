@@ -708,7 +708,11 @@ function createTaskwarriorApp({
          await this.refreshFilters();
          await this.refreshAppSettings();
          this.applyRestoredSelectedView(restoredView);
-
+ 
+         // Load taskrc early so task color rules can be applied.
+         // Do not block initial task load on this request.
+         this.loadTaskrc();
+ 
          await this.loadTasksForSelection();
      },
      beforeUnmount() {

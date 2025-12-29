@@ -109,6 +109,58 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(waitEl.textContent).toContain('05.01.2025');
     });
 
+    test('applies taskrc colors to due/scheduled tasks', async () => {
+        // This test relies on Taskwarrior-style color rules like `color.due.today`.
+        // With Jest fake timers, we must set the system time so "today" is stable.
+        jest.setSystemTime(new Date('2025-01-03T12:00:00Z'));
+
+        const backend = createMockBackend();
+        backend.state.taskrc = [
+            '# taskrc',
+            'color.pending=white',
+            'color.due.today=bold red',
+            'color.scheduled.today=yellow on blue',
+            '',
+        ].join('\n');
+
+        backend.state.tasks.push({
+            uuid: 'uuid-1',
+            description: 'Due task',
+            status: 'pending',
+            urgency: 1.5,
+            due: '20250103T000000Z',
+        });
+
+        backend.state.tasks.push({
+            uuid: 'uuid-2',
+            description: 'Scheduled task',
+            status: 'pending',
+            urgency: 1.5,
+            scheduled: '20250103T000000Z',
+        });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 8);
+
+        const cards = Array.from(document.querySelectorAll('.task-card'));
+        expect(cards).toHaveLength(2);
+
+        const dueText = cards.find((card) => card.textContent.includes('Due task'));
+        expect(dueText).toBeTruthy();
+
+        const dueDesc = dueText.querySelector('.task-desc-text');
+        expect(dueDesc).toBeTruthy();
+        expect(dueDesc.style.color).toBe('rgb(255, 0, 0)');
+        expect(dueDesc.style.fontWeight).toBe('bold');
+
+        const scheduledCard = cards.find((card) => card.textContent.includes('Scheduled task'));
+        expect(scheduledCard).toBeTruthy();
+        expect(scheduledCard.style.backgroundColor).toBe('rgb(0, 0, 255)');
+
+        const scheduledDesc = scheduledCard.querySelector('.task-desc-text');
+        expect(scheduledDesc.style.color).toBe('rgb(255, 255, 0)');
+    });
+
     test('hides urgency chip on mobile widths', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5 });

@@ -254,13 +254,103 @@
         return colorRules;
     }
 
+    function parseTaskwarriorDateForComparison(value) {
+        const text = typeof value === 'string' ? value.trim() : '';
+        if (!text) return null;
+
+        const toLocalMidnight = (year, month, day) => {
+            const localMidnight = new Date(year, month - 1, day, 0, 0, 0, 0);
+            return Number.isNaN(localMidnight.getTime()) ? null : localMidnight;
+        };
+
+        // Taskwarrior often represents "date-only" values as UTC timestamps at 00:00:00Z
+        // (and sometimes 23:59:59Z). When comparing dates, treat these placeholders as
+        // local dates to avoid timezone shifts.
+        const zuluMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/);
+        if (zuluMatch) {
+            const year = Number(zuluMatch[1]);
+            const month = Number(zuluMatch[2]);
+            const day = Number(zuluMatch[3]);
+            const hour = Number(zuluMatch[4]);
+            const minute = Number(zuluMatch[5]);
+            const second = Number(zuluMatch[6]);
+
+            const isZuluPlaceholder =
+                (hour === 0 && minute === 0 && second === 0)
+                || (hour === 23 && minute === 59 && second >= 0);
+
+            if (isZuluPlaceholder) {
+                return toLocalMidnight(year, month, day);
+            }
+        }
+
+        // Taskwarrior exports timestamps in basic ISO format: YYYYMMDDTHHMMSSZ
+        // Example: 20251229T000000Z
+        const basicZuluMatch = text.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+        if (basicZuluMatch) {
+            const year = Number(basicZuluMatch[1]);
+            const month = Number(basicZuluMatch[2]);
+            const day = Number(basicZuluMatch[3]);
+            const hour = Number(basicZuluMatch[4]);
+            const minute = Number(basicZuluMatch[5]);
+            const second = Number(basicZuluMatch[6]);
+
+            const isZuluPlaceholder =
+                (hour === 0 && minute === 0 && second === 0)
+                || (hour === 23 && minute === 59 && second >= 0);
+
+            if (isZuluPlaceholder) {
+                return toLocalMidnight(year, month, day);
+            }
+
+            const utc = new Date(Date.UTC(year, month - 1, day, hour, minute, second, 0));
+            return Number.isNaN(utc.getTime()) ? null : utc;
+        }
+
+        const dateOnlyMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (dateOnlyMatch) {
+            const year = Number(dateOnlyMatch[1]);
+            const month = Number(dateOnlyMatch[2]);
+            const day = Number(dateOnlyMatch[3]);
+            return toLocalMidnight(year, month, day);
+        }
+
+        const date = new Date(text);
+        return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function isDateLike(value) {
+        return Boolean(value
+            && typeof value.getTime === 'function'
+            && typeof value.getFullYear === 'function'
+            && typeof value.getMonth === 'function'
+            && typeof value.getDate === 'function');
+    }
+
+    function localDateKey(value) {
+        if (!value) return '';
+        const date = isDateLike(value) ? value : parseTaskwarriorDateForComparison(value);
+        if (!date) return '';
+
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function startOfLocalDay(value) {
+        const dt = isDateLike(value) ? value : new Date(value);
+        if (!dt || Number.isNaN(dt.getTime())) return null;
+        return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0);
+    }
+
     /**
      * Get color style for a task based on its attributes and taskrc color rules
      * @param {Object} task - Task object
      * @param {Object} colorRules - Parsed color rules from parseTaskrcColors
      * @returns {Object} - CSS style object
      */
-    function getTaskColorStyle(task, colorRules) {
+    function getTaskColorStyle(task, colorRules, options = {}) {
         if (!task || !colorRules || Object.keys(colorRules).length === 0) {
             return {};
         }
@@ -289,23 +379,67 @@
             matchedRule = colorRules['active'];
         }
 
-        // color.due - task has a due date
-        if (task?.due && colorRules['due']) {
-            matchedRule = colorRules['due'];
+        const now = isDateLike(options?.now) ? options.now : new Date();
+        const todayStart = startOfLocalDay(now);
+
+        const matchSpecificDateRule = (prefix, dateValue) => {
+            if (!prefix) return null;
+            if (!dateValue) return null;
+
+            const date = parseTaskwarriorDateForComparison(dateValue);
+            if (!date) return null;
+
+            const key = localDateKey(date);
+            if (!key) return null;
+
+            // Support Taskwarrior patterns like:
+            // - color.due.today
+            // - color.due.2025-12-29
+            // (We only implement exact YYYY-MM-DD, plus a couple of common keywords.)
+            const exactRule = colorRules[`${prefix}.${key}`];
+            if (exactRule) return exactRule;
+
+            if (todayStart) {
+                const dateStart = startOfLocalDay(date);
+                if (dateStart && dateStart.getTime() === todayStart.getTime()) {
+                    const todayRule = colorRules[`${prefix}.today`];
+                    if (todayRule) return todayRule;
+                }
+            }
+
+            return null;
+        };
+
+        // color.due / color.due.<when>
+        if (task?.due) {
+            const specific = matchSpecificDateRule('due', task.due);
+            if (specific) {
+                matchedRule = specific;
+            } else if (colorRules['due']) {
+                matchedRule = colorRules['due'];
+            }
         }
 
-        // color.overdue - task is overdue (due date in the past, task not completed/deleted)
+        // color.overdue - due date before today (date-based), task not completed/deleted
         if (task?.due && colorRules['overdue']) {
-            const now = new Date();
-            const dueDate = new Date(task.due);
-            if (dueDate < now && status !== 'completed' && status !== 'deleted') {
+            const dueDate = parseTaskwarriorDateForComparison(task.due);
+            const dueStart = startOfLocalDay(dueDate);
+            if (dueStart && todayStart && dueStart < todayStart && status !== 'completed' && status !== 'deleted') {
                 matchedRule = colorRules['overdue'];
             }
         }
 
-        // color.scheduled - task has a scheduled date
-        if (task?.scheduled && colorRules['scheduled']) {
-            matchedRule = colorRules['scheduled'];
+        // color.scheduled / color.scheduled.<when>
+        if (task?.scheduled) {
+            const specific = matchSpecificDateRule('scheduled', task.scheduled);
+            if (specific) {
+                matchedRule = specific;
+            } else if (colorRules['scheduled']) {
+                const scheduledDate = parseTaskwarriorDateForComparison(task.scheduled);
+                if (scheduledDate && scheduledDate <= now && status !== 'completed' && status !== 'deleted') {
+                    matchedRule = colorRules['scheduled'];
+                }
+            }
         }
 
         // color.until - task has an until date
