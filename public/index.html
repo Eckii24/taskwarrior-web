@@ -352,6 +352,18 @@
                             <button 
                                 type="button"
                                 class="control-btn"
+                                :class="{ active: multiSelectMode }"
+                                @click="toggleMultiSelectMode"
+                                title="Multi-select mode"
+                            >
+                                <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                </svg>
+                            </button>
+
+                            <button 
+                                type="button"
+                                class="control-btn"
                                 :class="{ 'has-value': currentGroupBy && currentGroupBy !== 'none' }"
                                 @click="toggleGroupDropdown"
                             >
@@ -377,17 +389,211 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Multi-select toolbar -->
+                    <div v-if="multiSelectMode" class="multi-select-toolbar">
+                        <div class="multi-select-info">
+                            {{ selectedTaskUuids.size }} selected
+                        </div>
+                        <div class="multi-select-actions">
+                            <button 
+                                type="button"
+                                class="btn small"
+                                @click="selectAllTasks"
+                            >
+                                Select all
+                            </button>
+                            <button 
+                                type="button"
+                                class="btn small"
+                                @click="deselectAllTasks"
+                                :disabled="selectedTaskUuids.size === 0"
+                            >
+                                Deselect all
+                            </button>
+                            <button 
+                                type="button"
+                                class="btn small"
+                                @click="cancelMultiSelect"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                type="button"
+                                class="btn small primary"
+                                @click="rescheduleManyTasks"
+                                :disabled="selectedTaskUuids.size === 0"
+                            >
+                                Reschedule
+                            </button>
+                            <button 
+                                type="button"
+                                class="btn small primary"
+                                @click="editManyTasks"
+                                :disabled="selectedTaskUuids.size === 0"
+                            >
+                                Edit
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Multi-select reschedule popup -->
+                    <div v-if="multiSelectMode && reschedule.open && reschedule.multiSelect" class="multi-reschedule-container" @click.stop>
+                        <div class="reschedule-pop multi-reschedule-pop">
+                            <div class="reschedule-title">Reschedule {{ selectedTaskUuids.size }} tasks</div>
+
+                            <div class="reschedule-toolbar">
+                                <button
+                                    class="schedule-btn"
+                                    type="button"
+                                    title="Today"
+                                    aria-label="Today"
+                                    @click="applyMultiReschedulePreset('today')"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <circle cx="12" cy="12" r="4"></circle>
+                                        <path d="M12 2v2"></path>
+                                        <path d="M12 20v2"></path>
+                                        <path d="M4.93 4.93l1.41 1.41"></path>
+                                        <path d="M17.66 17.66l1.41 1.41"></path>
+                                        <path d="M2 12h2"></path>
+                                        <path d="M20 12h2"></path>
+                                        <path d="M4.93 19.07l1.41-1.41"></path>
+                                        <path d="M17.66 6.34l1.41-1.41"></path>
+                                    </svg>
+                                </button>
+
+                                <button
+                                    class="schedule-btn"
+                                    type="button"
+                                    title="Tomorrow"
+                                    aria-label="Tomorrow"
+                                    @click="applyMultiReschedulePreset('tomorrow')"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M3 18h18"></path>
+                                        <path d="M7 18a5 5 0 0 1 10 0"></path>
+                                        <path d="M12 8v-2"></path>
+                                        <path d="M7.5 9.5l-1.5-1.5"></path>
+                                        <path d="M16.5 9.5l1.5-1.5"></path>
+                                        <path d="M9 6h6"></path>
+                                    </svg>
+                                </button>
+
+                                <button
+                                    class="schedule-btn"
+                                    type="button"
+                                    title="Next week"
+                                    aria-label="Next week"
+                                    @click="applyMultiReschedulePreset('sonw')"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M7 3v2"></path>
+                                        <path d="M17 3v2"></path>
+                                        <path d="M4 7h16"></path>
+                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                                        <path d="M14 11h4"></path>
+                                        <path d="M14 11v4"></path>
+                                    </svg>
+                                </button>
+
+                                <label
+                                    class="schedule-btn schedule-date-btn"
+                                    title="Calendar"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M7 3v2"></path>
+                                        <path d="M17 3v2"></path>
+                                        <path d="M4 7h16"></path>
+                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                                        <path d="M8 11h.01"></path>
+                                        <path d="M12 11h.01"></path>
+                                        <path d="M16 11h.01"></path>
+                                        <path d="M8 15h.01"></path>
+                                        <path d="M12 15h.01"></path>
+                                        <path d="M16 15h.01"></path>
+                                    </svg>
+                                    <input
+                                        type="date"
+                                        class="reschedule-calendar-input"
+                                        aria-label="Calendar"
+                                        @change="onMultiRescheduleCalendarChange($event)"
+                                    >
+                                </label>
+
+                                <button
+                                    class="schedule-btn danger"
+                                    type="button"
+                                    title="Clear"
+                                    aria-label="Clear"
+                                    @click="clearMultiRescheduleField()"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M18 6L6 18"></path>
+                                        <path d="M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+
+                                <button
+                                    class="schedule-btn"
+                                    type="button"
+                                    title="Close"
+                                    aria-label="Close"
+                                    @click="closeReschedule()"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div class="reschedule-custom">
+                                <input
+                                    type="text"
+                                    class="text-input compact"
+                                    v-model="reschedule.custom"
+                                    :placeholder="`${rescheduleFieldName()} value (e.g. 2025-01-03, eom)`"
+                                    autocomplete="off"
+                                    @keydown.enter.prevent="applyMultiRescheduleCustom()"
+                                >
+
+                                <button
+                                    class="schedule-btn primary"
+                                    type="button"
+                                    title="Set"
+                                    aria-label="Set"
+                                    @click="applyMultiRescheduleCustom()"
+                                    :disabled="!reschedule.custom"
+                                >
+                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M20 6L9 17l-5-5"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
                     <div v-else-if="currentGroupBy && currentGroupBy !== 'none'" class="task-list-grouped" @click="closeReschedule">
                         <div v-for="group in taskGroups" :key="group.key" class="task-group">
                             <div class="task-group-header">{{ group.name }}</div>
-                            <div class="task-card" v-for="task in group.tasks" :key="task.uuid" :style="getTaskCardStyle(task)">
+                            <div class="task-card" 
+                                v-for="task in group.tasks" 
+                                :key="task.uuid" 
+                                :style="getTaskCardStyle(task)"
+                                :class="{ 'task-selected': multiSelectMode && isTaskSelected(task.uuid) }"
+                                @click="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                            >
+                                <div v-if="multiSelectMode" class="task-select-indicator">
+                                    <svg v-if="isTaskSelected(task.uuid)" class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                    </svg>
+                                </div>
                                 <div class="task-check">
                                     <input
                                         type="checkbox"
                                         :checked="task.status === 'completed'"
-                                        :disabled="busyTaskUuids[task.uuid]"
+                                        :disabled="busyTaskUuids[task.uuid] || multiSelectMode"
                                         :aria-label="task.status === 'completed' ? 'Mark pending' : 'Mark done'"
                                         @change="toggleTaskDone(task, $event)"
                                     >
@@ -608,12 +814,23 @@
                         </div>
                     </div>
                         <div v-else class="task-list" @click="closeReschedule">
-                        <div class="task-card" v-for="task in tasks" :key="task.uuid" :style="getTaskCardStyle(task)">
+                        <div class="task-card" 
+                            v-for="task in tasks" 
+                            :key="task.uuid" 
+                            :style="getTaskCardStyle(task)"
+                            :class="{ 'task-selected': multiSelectMode && isTaskSelected(task.uuid) }"
+                            @click="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                        >
+                            <div v-if="multiSelectMode" class="task-select-indicator">
+                                <svg v-if="isTaskSelected(task.uuid)" class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                </svg>
+                            </div>
                             <div class="task-check">
                                 <input
                                     type="checkbox"
                                     :checked="task.status === 'completed'"
-                                    :disabled="busyTaskUuids[task.uuid]"
+                                    :disabled="busyTaskUuids[task.uuid] || multiSelectMode"
                                     :aria-label="task.status === 'completed' ? 'Mark pending' : 'Mark done'"
                                     @change="toggleTaskDone(task, $event)"
                                 >
@@ -1251,6 +1468,106 @@
                         </button>
                         <div v-if="modal.showTaskDetails" class="collapsible-content">
                             <pre class="command-output">{{ modal.taskDetailsOutput }}</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else-if="modal.type === 'edit-multi'" class="modal-form">
+                    <div class="field">
+                        <p class="multi-edit-info">Set attributes for {{ modal.taskIds?.length || 0 }} selected tasks. Only filled fields will be applied.</p>
+                    </div>
+
+                    <div class="task-attributes">
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.due }"
+                            @click="toggleAttributeDropdown('due')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                            </svg>
+                            <span>{{ modal.due ? formatTaskDateInput(modal.due) : `${rescheduleFieldLabel()} date` }}</span>
+                            <svg v-if="modal.due" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('due')" :aria-label="`Clear ${rescheduleFieldLabel()}`">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.priority }"
+                            @click="toggleAttributeDropdown('priority')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.02 10.02 0 0 0 12 2zm1 14.59L9.41 13 8 14.41 13 19.41l8-8L19.59 10z"/>
+                            </svg>
+                            <span>{{ modal.priority || 'Priority' }}</span>
+                            <svg v-if="modal.priority" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('priority')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.project }"
+                            @click="toggleAttributeDropdown('project')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                            </svg>
+                            <span>{{ modal.project || 'Project' }}</span>
+                            <svg v-if="modal.project" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('project')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="attribute-btn"
+                            :class="{ 'has-value': modal.tags }"
+                            @click="toggleAttributeDropdown('tags')"
+                        >
+                            <svg class="attribute-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M20.59 13.41 11 3.83V2h-2v2.59l9.59 9.58-6.18 6.18L3.83 11H2v2h1.83l8.58 8.59a2 2 0 0 0 2.83 0l5.35-5.35a2 2 0 0 0 0-2.82zM14.41 20.17 6.24 12l4.17-4.17 8.17 8.17-4.17 4.17z"/>
+                            </svg>
+                            <span>{{ modal.tags || 'Tags' }}</span>
+                            <svg v-if="modal.tags" class="clear-icon" viewBox="0 0 24 24" @click.stop="clearAttribute('tags')">
+                                <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div v-if="modal.activeAttributeDropdown" class="attribute-dropdown">
+                        <input
+                            ref="attributeInput"
+                            type="text"
+                            v-model="modal.attributeInputValue"
+                            class="text-input"
+                            :placeholder="getAttributePlaceholder(modal.activeAttributeDropdown)"
+                            autocomplete="off"
+                            @keydown="handleAttributeKeydown($event)"
+                            @input="handleAttributeInput($event)"
+                            @blur="handleAttributeBlur"
+                        >
+                        <div
+                            v-if="completion.visible && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="selectAttributeSuggestion(suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
                         </div>
                     </div>
                 </div>
