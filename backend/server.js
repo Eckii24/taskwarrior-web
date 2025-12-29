@@ -225,6 +225,7 @@ function createApp({
         try {
             await ensureTaskrcExists(taskrcPath, taskdataPath);
             const content = await fs.readFile(taskrcPath, { encoding: 'utf8' });
+            res.set('Cache-Control', 'no-store');
             res.type('text/plain').send(content);
         } catch (error) {
             res.status(500).type('text/plain').send(error.message);

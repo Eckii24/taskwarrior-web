@@ -607,7 +607,7 @@
                             </div>
                         </div>
                     </div>
-                    <div v-else class="task-list" @click="closeReschedule">
+                        <div v-else class="task-list" @click="closeReschedule">
                         <div class="task-card" v-for="task in tasks" :key="task.uuid" :style="getTaskCardStyle(task)">
                             <div class="task-check">
                                 <input
@@ -620,7 +620,8 @@
                             </div>
                             <div class="task-main">
                                 <div class="task-desc">
-                                    <span class="task-desc-text" :style="getTaskColorStyle(task)">{{ task.description }}</span>
+                                    <span class="task-desc-text" :style="getTaskTextStyle(task)">{{ task.description }}</span>
+
 
                                     <span v-if="task.project" class="meta meta-project">
                                         <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">

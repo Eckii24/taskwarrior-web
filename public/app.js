@@ -507,9 +507,12 @@ function createTaskwarriorApp({
              },
             taskrcText: '',
             loadedTaskrcText: '',
-            
+
             // TaskWarrior color rules
             taskrcColorRules: {},
+            taskrcLoaded: false,
+            taskrcLoading: false,
+            taskrcLoadPromise: null,
 
             builtinFilters: {
                 today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
@@ -708,11 +711,11 @@ function createTaskwarriorApp({
          await this.refreshFilters();
          await this.refreshAppSettings();
          this.applyRestoredSelectedView(restoredView);
- 
+
          // Load taskrc early so task color rules can be applied.
-         // Do not block initial task load on this request.
-         this.loadTaskrc();
- 
+         // Do not block initial task load; when the rules arrive, Vue will re-render.
+         this.ensureTaskrcLoaded();
+
          await this.loadTasksForSelection();
      },
      beforeUnmount() {
@@ -1096,21 +1099,20 @@ function createTaskwarriorApp({
             this.drawerOpen = Boolean(open);
         },
 
-        openSettings() {
-            this.showTaskrc = true;
-            this.persistSelectedView({ type: 'builtin', key: 'next' });
-            this.mainMode = 'tasks';
-            this.mainOutput = '';
-            this.resetCompletion();
-            this.toggleDrawer(false);
+         openSettings() {
+             this.showTaskrc = true;
+             this.persistSelectedView({ type: 'builtin', key: 'next' });
+             this.mainMode = 'tasks';
+             this.mainOutput = '';
+             this.resetCompletion();
+             this.toggleDrawer(false);
 
-            this.refreshBuiltinFilters();
-            this.refreshAppSettings();
+             this.refreshBuiltinFilters();
+             this.refreshAppSettings();
 
-            if (this.taskrcText === '' && this.loadedTaskrcText === '') {
-                this.loadTaskrc();
-            }
-        },
+             // Always load taskrc when opening settings to avoid stale color rules.
+             this.loadTaskrc();
+         },
 
         showToast(text, type = 'success', durationMs = 2500) {
             if (this.toastTimeoutId) clearTimeout(this.toastTimeoutId);
@@ -1656,6 +1658,9 @@ function createTaskwarriorApp({
             this.mainMode = 'tasks';
             this.mainOutput = '';
 
+            // Kick off taskrc loading so colors can be applied.
+            this.ensureTaskrcLoaded();
+
             try {
                 if (this.selectedView.type === 'search') {
                     this.tasks = [];
@@ -1700,6 +1705,9 @@ function createTaskwarriorApp({
 
         async refreshCurrentPanel() {
             if (this.showTaskrc) return;
+
+            // Ensure taskrc loading is in progress so refreshes/coloring stay consistent.
+            this.ensureTaskrcLoaded();
 
             if (this.selectedView.type === 'search') {
                 const term = String(this.lastSearch.term || '').trim();
@@ -2779,17 +2787,62 @@ function createTaskwarriorApp({
         },
 
 
+        async ensureTaskrcLoaded() {
+            if (this.taskrcLoaded) return true;
+            if (this.taskrcLoadPromise) return await this.taskrcLoadPromise;
+
+            this.taskrcLoadPromise = (async () => {
+                try {
+                    this.taskrcLoading = true;
+                    await this.loadTaskrc();
+                    return this.taskrcLoaded;
+                } finally {
+                    this.taskrcLoading = false;
+                    this.taskrcLoadPromise = null;
+                }
+            })();
+
+            return await this.taskrcLoadPromise;
+        },
+
         async loadTaskrc() {
             try {
-                const response = await fetchFn('/api/taskrc');
+                const response = await fetchFn('/api/taskrc', {
+                    method: 'GET',
+                    cache: 'no-store',
+                });
+
+                // Express may send a 304 when ETags are enabled. In that case we keep
+                // the previously loaded taskrc so colors don't disappear.
+                if (response.status === 304) {
+                    const cached = this.loadedTaskrcText || this.taskrcText;
+                    if (cached) {
+                        this.taskrcText = cached;
+                        this.loadedTaskrcText = cached;
+                        this.parseTaskrcColors(cached);
+                        this.taskrcLoaded = true;
+                        return;
+                    }
+
+                    throw new Error('taskrc not modified (no cached copy available)');
+                }
+
                 if (!response.ok) throw new Error(await response.text());
                 const text = await response.text();
                 this.taskrcText = text;
                 this.loadedTaskrcText = text;
-                
+
                 // Parse color rules from taskrc
                 this.parseTaskrcColors(text);
+                this.taskrcLoaded = true;
             } catch (error) {
+                // Keep the last known-good rules so colors don't disappear due to
+                // transient issues (e.g., offline or backend hiccups).
+                const hasCached = Boolean(this.loadedTaskrcText || this.taskrcText);
+                if (!hasCached) {
+                    this.taskrcColorRules = {};
+                }
+                this.taskrcLoaded = hasCached;
                 this.showToast(`Error loading taskrc: ${error.message}`, 'error');
             }
         },
@@ -2803,10 +2856,11 @@ function createTaskwarriorApp({
                 });
                 if (!response.ok) throw new Error(await response.text());
                 this.loadedTaskrcText = this.taskrcText;
-                
+
                 // Re-parse color rules after saving
                 this.parseTaskrcColors(this.taskrcText);
-                
+                this.taskrcLoaded = true;
+
                 this.showToast('Saved taskrc', 'success');
             } catch (error) {
                 this.showToast(`Error saving taskrc: ${error.message}`, 'error');
@@ -2816,8 +2870,12 @@ function createTaskwarriorApp({
         parseTaskrcColors(taskrcContent) {
             // Use TaskColors module if available
             if (typeof TaskColors !== 'undefined' && TaskColors.parseTaskrcColors) {
-                this.taskrcColorRules = TaskColors.parseTaskrcColors(taskrcContent);
+                const parsed = TaskColors.parseTaskrcColors(taskrcContent);
+                this.taskrcColorRules = parsed && typeof parsed === 'object' ? parsed : {};
+                return;
             }
+
+            this.taskrcColorRules = {};
         },
         
         getTaskTextStyle(task) {

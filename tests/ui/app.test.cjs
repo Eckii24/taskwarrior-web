@@ -161,6 +161,91 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(scheduledDesc.style.color).toBe('rgb(255, 255, 0)');
     });
 
+    test('keeps taskrc-based colors after refresh with updated task data', async () => {
+        jest.setSystemTime(new Date('2025-01-03T12:00:00Z'));
+
+        const backend = createMockBackend();
+        backend.state.taskrc = [
+            '# taskrc',
+            'color.pending=white',
+            'color.due.today=bold red',
+            'color.scheduled.today=yellow on blue',
+            '',
+        ].join('\n');
+
+        backend.state.tasks.push({
+            uuid: 'uuid-1',
+            description: 'Becomes due today',
+            status: 'pending',
+            urgency: 1.5,
+        });
+
+        backend.state.tasks.push({
+            uuid: 'uuid-2',
+            description: 'Scheduled today stays colored',
+            status: 'pending',
+            urgency: 1.5,
+            scheduled: '20250103T000000Z',
+        });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 10);
+
+        const scheduledCardBefore = Array.from(document.querySelectorAll('.task-card'))
+            .find((card) => card.textContent.includes('Scheduled today stays colored'));
+        expect(scheduledCardBefore).toBeTruthy();
+        expect(scheduledCardBefore.style.backgroundColor).toBe('rgb(0, 0, 255)');
+
+        // Simulate that the backend now exports the task with a due date set to today.
+        const updated = backend.state.tasks.find((task) => task.uuid === 'uuid-1');
+        updated.due = '20250103T000000Z';
+
+        await vm.refreshCurrentPanel();
+        await flushPromises(vm, 8);
+
+        const becomesDueCard = Array.from(document.querySelectorAll('.task-card'))
+            .find((card) => card.textContent.includes('Becomes due today'));
+        expect(becomesDueCard).toBeTruthy();
+        const becomesDueDesc = becomesDueCard.querySelector('.task-desc-text');
+        expect(becomesDueDesc.style.color).toBe('rgb(255, 0, 0)');
+        expect(becomesDueDesc.style.fontWeight).toBe('bold');
+
+        const scheduledCardAfter = Array.from(document.querySelectorAll('.task-card'))
+            .find((card) => card.textContent.includes('Scheduled today stays colored'));
+        expect(scheduledCardAfter).toBeTruthy();
+        expect(scheduledCardAfter.style.backgroundColor).toBe('rgb(0, 0, 255)');
+    });
+
+    test('does not drop taskrc colors on 304 taskrc responses', async () => {
+        const backend = createMockBackend();
+        backend.state.taskrc = 'color.pending=red\n';
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        await vm.loadTaskrc();
+        await flushPromises(vm, 2);
+        expect(vm.taskrcColorRules.pending).toBeDefined();
+
+        backend.state.beforeFetch = async ({ pathname }) => {
+            if (pathname === '/api/taskrc') {
+                return {
+                    ok: true,
+                    status: 304,
+                    async text() {
+                        return '';
+                    },
+                };
+            }
+            return null;
+        };
+
+        await vm.loadTaskrc();
+        await flushPromises(vm, 2);
+        expect(vm.taskrcColorRules.pending).toBeDefined();
+        expect(vm.taskrcColorRules.pending.color).toBe('#ff0000');
+    });
+
     test('hides urgency chip on mobile widths', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Hello', status: 'pending', urgency: 1.5 });
