@@ -1253,13 +1253,14 @@ function createTaskwarriorApp({
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
 
-            const newSet = new Set(this.selectedTaskUuids);
-            if (newSet.has(uuid)) {
-                newSet.delete(uuid);
+            // Directly modify the Set for better performance
+            if (this.selectedTaskUuids.has(uuid)) {
+                this.selectedTaskUuids.delete(uuid);
             } else {
-                newSet.add(uuid);
+                this.selectedTaskUuids.add(uuid);
             }
-            this.selectedTaskUuids = newSet;
+            // Force reactivity update
+            this.selectedTaskUuids = new Set(this.selectedTaskUuids);
         },
 
         isTaskSelected(taskUuid) {
@@ -1268,6 +1269,7 @@ function createTaskwarriorApp({
 
         selectAllTasks() {
             const newSet = new Set();
+            // Only select pending tasks (non-completed, non-deleted)
             for (const task of this.tasks) {
                 if (task?.uuid && task.status === 'pending') {
                     newSet.add(String(task.uuid));
