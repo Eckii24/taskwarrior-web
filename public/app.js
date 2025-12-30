@@ -340,6 +340,20 @@ class TaskCommandService {
         return await this.apiClient.execute(`${taskUuid} modify ${modifications}`);
     }
 
+    async modifyTasks(taskUuids, modifications) {
+        const uuids = Array.isArray(taskUuids) ? taskUuids.map((uuid) => String(uuid || '').trim()).filter(Boolean) : [];
+        if (uuids.length === 0) {
+            return { success: false, output: '', error: 'No task IDs provided' };
+        }
+
+        const mods = String(modifications || '').trim();
+        if (!mods) {
+            return { success: false, output: '', error: 'No modifications provided' };
+        }
+
+        return await this.apiClient.execute(`${uuids.join(' ')} mod ${mods}`);
+    }
+
     async completeTask(taskUuid) {
         return await this.apiClient.execute(`${taskUuid} done`);
     }
@@ -629,6 +643,9 @@ function createTaskwarriorApp({
                 { value: 'tags', label: 'Tags' },
                 { value: 'status', label: 'Status' },
             ],
+
+            multiSelectMode: false,
+            selectedTaskUuids: new Set(),
         };
     },
      computed: {
@@ -677,6 +694,7 @@ function createTaskwarriorApp({
              const map = {
                  add: 'Add Task',
                  edit: 'Edit Task',
+                 'edit-multi': `Edit ${this.modal?.taskIds?.length || 0} Tasks`,
                  show: 'Task',
  
                  exec: 'Execute',
@@ -1235,6 +1253,171 @@ function createTaskwarriorApp({
             }
 
             await this.rescheduleTask(uuid, value);
+        },
+
+        toggleMultiSelectMode() {
+            this.multiSelectMode = !this.multiSelectMode;
+            if (!this.multiSelectMode) {
+                this.selectedTaskUuids = new Set();
+            }
+            this.closeReschedule();
+        },
+
+        toggleTaskSelection(taskUuid) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            // Directly modify the Set for better performance
+            if (this.selectedTaskUuids.has(uuid)) {
+                this.selectedTaskUuids.delete(uuid);
+            } else {
+                this.selectedTaskUuids.add(uuid);
+            }
+            // Force reactivity update
+            this.selectedTaskUuids = new Set(this.selectedTaskUuids);
+        },
+
+        isTaskSelected(taskUuid) {
+            return this.selectedTaskUuids.has(String(taskUuid || '').trim());
+        },
+
+        selectAllTasks() {
+            const newSet = new Set();
+            // Only select pending tasks (non-completed, non-deleted)
+            for (const task of this.tasks) {
+                if (task?.uuid && task.status === 'pending') {
+                    newSet.add(String(task.uuid));
+                }
+            }
+            this.selectedTaskUuids = newSet;
+        },
+
+        deselectAllTasks() {
+            this.selectedTaskUuids = new Set();
+        },
+
+        cancelMultiSelect() {
+            this.multiSelectMode = false;
+            this.selectedTaskUuids = new Set();
+        },
+
+        async rescheduleManyTasks() {
+            if (this.selectedTaskUuids.size === 0) {
+                this.showToast('No tasks selected', 'error');
+                return;
+            }
+
+            // Open reschedule for the first selected task to get the UI
+            // But we'll apply to all selected tasks
+            const firstUuid = Array.from(this.selectedTaskUuids)[0];
+            this.reschedule = { open: true, taskUuid: firstUuid, custom: '', multiSelect: true };
+        },
+
+        async applyMultiReschedulePreset(preset) {
+            const uuids = Array.from(this.selectedTaskUuids);
+            if (uuids.length === 0) return;
+
+            const key = String(preset || '').trim();
+            let value = '';
+            if (key === 'today') value = 'today';
+            else if (key === 'tomorrow') value = 'tomorrow';
+            else if (key === 'sonw') value = 'sonw';
+            else return;
+
+            await this.rescheduleMultipleTasks(uuids, value);
+        },
+
+        async applyMultiRescheduleCustom() {
+            const uuids = Array.from(this.selectedTaskUuids);
+            const value = String(this.reschedule.custom || '').trim();
+            if (!value || uuids.length === 0) return;
+
+            await this.rescheduleMultipleTasks(uuids, value);
+        },
+
+        async clearMultiRescheduleField() {
+            const uuids = Array.from(this.selectedTaskUuids);
+            if (uuids.length === 0) return;
+
+            const field = this.rescheduleFieldName();
+            let successCount = 0;
+
+            for (const uuid of uuids) {
+                const result = await commandService.modifyTask(uuid, `${field}:`);
+                if (result.success) successCount++;
+            }
+
+            this.showToast(`Cleared ${field} for ${successCount}/${uuids.length} tasks`, 'success');
+            this.closeReschedule();
+            await this.refreshCurrentPanel();
+        },
+
+        async onMultiRescheduleCalendarChange(event) {
+            const uuids = Array.from(this.selectedTaskUuids);
+            const value = String(event?.target?.value || '').trim();
+            if (!value || uuids.length === 0) return;
+
+            // Clear the date input so choosing the same date again still triggers change.
+            try {
+                event.target.value = '';
+            } catch {
+                // ignore
+            }
+
+            await this.rescheduleMultipleTasks(uuids, value);
+        },
+
+        async rescheduleMultipleTasks(uuids, dateValue) {
+            const field = this.rescheduleFieldName();
+            let successCount = 0;
+
+            for (const uuid of uuids) {
+                const result = await commandService.modifyTask(uuid, `${field}:${dateValue}`);
+                if (result.success) successCount++;
+            }
+
+            this.showToast(`Rescheduled ${successCount}/${uuids.length} tasks`, 'success');
+            this.closeReschedule();
+            await this.refreshCurrentPanel();
+        },
+
+        editManyTasks() {
+            if (this.selectedTaskUuids.size === 0) {
+                this.showToast('No tasks selected', 'error');
+                return;
+            }
+
+            this.modal = {
+                open: true,
+                type: 'edit-multi',
+                taskIds: Array.from(this.selectedTaskUuids),
+                value: '',
+            };
+
+            this.$nextTick(() => {
+                const input = this.$refs.modalInput;
+                if (input && typeof input.focus === 'function') input.focus();
+            });
+        },
+
+        async submitMultiEdit() {
+            const uuids = Array.isArray(this.modal.taskIds) ? this.modal.taskIds : [];
+            if (uuids.length === 0) return;
+
+            const input = String(this.modal.value || '').trim();
+            if (!input) {
+                this.showToast('No modifications specified', 'error');
+                return;
+            }
+
+            const result = await commandService.modifyTasks(uuids, input);
+            if (result.success) {
+                this.showToast(`Modified ${uuids.length} tasks`, 'success');
+                this.closeModal();
+                await this.refreshCurrentPanel();
+            } else {
+                this.showToast(result.error || 'Failed to modify tasks', 'error');
+            }
         },
 
         getFieldValue(field) {
@@ -2305,6 +2488,11 @@ function createTaskwarriorApp({
                 } else {
                     this.showToast(result.error || 'Failed to add', 'error');
                 }
+                return;
+            }
+
+            if (type === 'edit-multi') {
+                await this.submitMultiEdit();
                 return;
             }
 
