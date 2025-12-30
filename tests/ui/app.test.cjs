@@ -352,6 +352,107 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.modal.type).toBe('add');
     });
 
+    test('multi-select: toggle shows X, uses icon buttons, and no selection circles', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
+        backend.state.tasks.push({ uuid: 'uuid-2', description: 'Second', status: 'pending', urgency: 1.2 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 10);
+
+        expect(vm.multiSelectMode).toBe(false);
+
+        const toggleBtn = document.querySelector('.tasks-controls .control-btn[aria-label="Enable multi-select mode"]');
+        expect(toggleBtn).toBeTruthy();
+
+        toggleBtn.click();
+        await flushPromises(vm, 2);
+
+        expect(vm.multiSelectMode).toBe(true);
+
+        const toggleBtnCancel = document.querySelector('.tasks-controls .control-btn[aria-label="Cancel multi-select mode"]');
+        expect(toggleBtnCancel).toBeTruthy();
+
+        const toolbar = document.querySelector('.multi-select-toolbar');
+        expect(toolbar).toBeTruthy();
+
+        const selectAllBtn = document.querySelector('.multi-select-actions button[aria-label="Select all pending tasks"]');
+        expect(selectAllBtn).toBeTruthy();
+        expect(selectAllBtn.classList.contains('icon-btn')).toBe(true);
+
+        const deselectAllBtn = document.querySelector('.multi-select-actions button[aria-label="Deselect all"]');
+        expect(deselectAllBtn).toBeTruthy();
+        expect(deselectAllBtn.classList.contains('icon-btn')).toBe(true);
+
+        const rescheduleBtn = document.querySelector('.multi-select-actions button[aria-label="Reschedule selected"]');
+        expect(rescheduleBtn).toBeTruthy();
+        expect(rescheduleBtn.classList.contains('icon-btn')).toBe(true);
+
+        const editBtn = document.querySelector('.multi-select-actions button[aria-label="Edit selected"]');
+        expect(editBtn).toBeTruthy();
+        expect(editBtn.classList.contains('icon-btn')).toBe(true);
+
+        expect(document.querySelector('.multi-select-actions button[aria-label="Cancel"]')).toBeFalsy();
+        expect(document.querySelector('.task-select-indicator')).toBeFalsy();
+
+        // Task completion checkbox is hidden while multi-select is enabled.
+        expect(document.querySelector('.task-check input[type="checkbox"]')).toBeFalsy();
+
+        // Clicking a task selects it via task card styling.
+        document.querySelectorAll('.task-card')[0].click();
+        await flushPromises(vm, 2);
+
+        expect(vm.selectedTaskUuids.has('uuid-1')).toBe(true);
+        const selectedCard = document.querySelectorAll('.task-card')[0];
+        expect(selectedCard.classList.contains('task-selected')).toBe(true);
+
+        // Toggle off multi-select clears selections.
+        toggleBtnCancel.click();
+        await flushPromises(vm, 2);
+
+        expect(vm.multiSelectMode).toBe(false);
+        expect(vm.selectedTaskUuids.size).toBe(0);
+    });
+
+    test('multi-edit modal includes input and runs task <uuids> mod <input>', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
+        backend.state.tasks.push({ uuid: 'uuid-2', description: 'Second', status: 'pending', urgency: 1.2 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 10);
+
+        document.querySelector('.tasks-controls .control-btn[aria-label="Enable multi-select mode"]').click();
+        await flushPromises(vm, 2);
+
+        // Select both tasks.
+        const cards = document.querySelectorAll('.task-card');
+        cards[0].click();
+        cards[1].click();
+        await flushPromises(vm, 2);
+
+        expect(vm.selectedTaskUuids.size).toBe(2);
+
+        // Open bulk edit modal.
+        document.querySelector('.multi-select-actions button[aria-label="Edit selected"]').click();
+        await flushPromises(vm, 2);
+
+        expect(vm.modal.open).toBe(true);
+        expect(vm.modal.type).toBe('edit-multi');
+
+        const modalInput = document.querySelector('.modal-form input.text-input');
+        expect(modalInput).toBeTruthy();
+
+        vm.modal.value = 'project:Bulk';
+        await vm.submitModal();
+        await flushPromises(vm, 8);
+
+        const t1 = vm.tasks.find((t) => t.uuid === 'uuid-1');
+        const t2 = vm.tasks.find((t) => t.uuid === 'uuid-2');
+        expect(t1.project).toBe('Bulk');
+        expect(t2.project).toBe('Bulk');
+    });
+
     test('adds a task with attributes via modal submit', async () => {
         const backend = createMockBackend();
         const { vm } = mountWithBackend(backend);

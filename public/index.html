@@ -349,15 +349,17 @@
                     <div class="tasks-heading-row">
                         <div class="tasks-heading">{{ currentTitle }}</div>
                         <div v-if="!showTaskrc && selectedView.type !== 'search'" class="tasks-controls">
-                            <button 
+                            <button
                                 type="button"
                                 class="control-btn"
                                 :class="{ active: multiSelectMode }"
                                 @click="toggleMultiSelectMode"
-                                title="Multi-select mode"
+                                :title="multiSelectMode ? 'Cancel multi-select mode' : 'Multi-select mode'"
+                                :aria-label="multiSelectMode ? 'Cancel multi-select mode' : 'Enable multi-select mode'"
                             >
                                 <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                    <path v-if="!multiSelectMode" fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                    <path v-else fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
                                 </svg>
                             </button>
 
@@ -391,52 +393,61 @@
                     </div>
 
                     <!-- Multi-select toolbar -->
-                    <div v-if="multiSelectMode" class="multi-select-toolbar">
-                        <div class="multi-select-info">
-                            {{ selectedTaskUuids.size }} selected
+                        <div v-if="multiSelectMode" class="multi-select-toolbar">
+                            <div class="multi-select-info">
+                                {{ selectedTaskUuids.size }} selected
+                            </div>
+                            <div class="multi-select-actions">
+                                <button
+                                    type="button"
+                                    class="icon-btn small"
+                                    @click="selectAllTasks"
+                                    title="Select all pending tasks"
+                                    aria-label="Select all pending tasks"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="icon-btn small"
+                                    @click="deselectAllTasks"
+                                    :disabled="selectedTaskUuids.size === 0"
+                                    title="Deselect all"
+                                    aria-label="Deselect all"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                                    </svg>
+                                </button>
+
+                                <button
+                                    type="button"
+                                    class="icon-btn small"
+                                    @click="rescheduleManyTasks"
+                                    :disabled="selectedTaskUuids.size === 0"
+                                    title="Reschedule selected"
+                                    aria-label="Reschedule selected"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                                    </svg>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="icon-btn small"
+                                    @click="editManyTasks"
+                                    :disabled="selectedTaskUuids.size === 0"
+                                    title="Edit selected"
+                                    aria-label="Edit selected"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                        <div class="multi-select-actions">
-                            <button 
-                                type="button"
-                                class="btn small"
-                                @click="selectAllTasks"
-                                title="Select all pending tasks"
-                            >
-                                Select all
-                            </button>
-                            <button 
-                                type="button"
-                                class="btn small"
-                                @click="deselectAllTasks"
-                                :disabled="selectedTaskUuids.size === 0"
-                            >
-                                Deselect all
-                            </button>
-                            <button 
-                                type="button"
-                                class="btn small"
-                                @click="cancelMultiSelect"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                type="button"
-                                class="btn small primary"
-                                @click="rescheduleManyTasks"
-                                :disabled="selectedTaskUuids.size === 0"
-                            >
-                                Reschedule
-                            </button>
-                            <button 
-                                type="button"
-                                class="btn small primary"
-                                @click="editManyTasks"
-                                :disabled="selectedTaskUuids.size === 0"
-                            >
-                                Edit
-                            </button>
-                        </div>
-                    </div>
 
                     <!-- Multi-select reschedule popup -->
                     <div v-if="multiSelectMode && reschedule.open && reschedule.multiSelect" class="multi-reschedule-container" @click.stop>
@@ -585,16 +596,11 @@
                                 :class="{ 'task-selected': multiSelectMode && isTaskSelected(task.uuid) }"
                                 @click="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
                             >
-                                <div v-if="multiSelectMode" class="task-select-indicator">
-                                    <svg v-if="isTaskSelected(task.uuid)" class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                                    </svg>
-                                </div>
-                                <div class="task-check">
+                            <div v-if="!multiSelectMode" class="task-check">
                                     <input
                                         type="checkbox"
                                         :checked="task.status === 'completed'"
-                                        :disabled="busyTaskUuids[task.uuid] || multiSelectMode"
+                                        :disabled="busyTaskUuids[task.uuid]"
                                         :aria-label="task.status === 'completed' ? 'Mark pending' : 'Mark done'"
                                         @change="toggleTaskDone(task, $event)"
                                     >
@@ -822,16 +828,11 @@
                             :class="{ 'task-selected': multiSelectMode && isTaskSelected(task.uuid) }"
                             @click="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
                         >
-                            <div v-if="multiSelectMode" class="task-select-indicator">
-                                <svg v-if="isTaskSelected(task.uuid)" class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
-                                </svg>
-                            </div>
-                            <div class="task-check">
+                        <div v-if="!multiSelectMode" class="task-check">
                                 <input
                                     type="checkbox"
                                     :checked="task.status === 'completed'"
-                                    :disabled="busyTaskUuids[task.uuid] || multiSelectMode"
+                                    :disabled="busyTaskUuids[task.uuid]"
                                     :aria-label="task.status === 'completed' ? 'Mark pending' : 'Mark done'"
                                     @change="toggleTaskDone(task, $event)"
                                 >
@@ -1476,6 +1477,38 @@
                 <div v-else-if="modal.type === 'edit-multi'" class="modal-form">
                     <div class="field">
                         <p class="multi-edit-info">Set attributes for {{ modal.taskIds?.length || 0 }} selected tasks. Only filled fields will be applied.</p>
+                    </div>
+
+                    <div class="field">
+                        <input
+                            ref="modalInput"
+                            type="text"
+                            v-model="modal.value"
+                            class="text-input"
+                            placeholder="project:Work +tag priority:H due:tomorrow"
+                            autocomplete="off"
+                            @keydown="handleCompletionKeydown($event, 'modal.value', 'submitModal')"
+                            @input="handleCompletionInput($event, 'modal.value')"
+                            @blur="handleCompletionBlur('modal.value')"
+                        >
+                        <div
+                            v-if="completion.visible && completion.field === 'modal.value' && completion.suggestions.length > 0"
+                            class="completion-panel"
+                            role="listbox"
+                            aria-label="Completions"
+                        >
+                            <div
+                                v-for="(suggestion, idx) in completion.suggestions"
+                                :key="idx"
+                                class="completion-item"
+                                :class="{ active: idx === completion.selectedIndex }"
+                                role="option"
+                                :aria-selected="idx === completion.selectedIndex"
+                                @mousedown.prevent="applyModalCompletion('modal.value', suggestion)"
+                            >
+                                {{ suggestion }}
+                            </div>
+                        </div>
                     </div>
 
                     <div class="task-attributes">

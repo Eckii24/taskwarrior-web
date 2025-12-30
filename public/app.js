@@ -340,6 +340,20 @@ class TaskCommandService {
         return await this.apiClient.execute(`${taskUuid} modify ${modifications}`);
     }
 
+    async modifyTasks(taskUuids, modifications) {
+        const uuids = Array.isArray(taskUuids) ? taskUuids.map((uuid) => String(uuid || '').trim()).filter(Boolean) : [];
+        if (uuids.length === 0) {
+            return { success: false, output: '', error: 'No task IDs provided' };
+        }
+
+        const mods = String(modifications || '').trim();
+        if (!mods) {
+            return { success: false, output: '', error: 'No modifications provided' };
+        }
+
+        return await this.apiClient.execute(`${uuids.join(' ')} mod ${mods}`);
+    }
+
     async completeTask(taskUuid) {
         return await this.apiClient.execute(`${taskUuid} done`);
     }
@@ -1373,18 +1387,11 @@ function createTaskwarriorApp({
                 return;
             }
 
-            // For batch edit, we'll open a simpler modal that only allows setting common attributes
             this.modal = {
                 open: true,
                 type: 'edit-multi',
                 taskIds: Array.from(this.selectedTaskUuids),
-                description: '',
-                project: '',
-                tags: '',
-                priority: '',
-                due: '',
-                activeAttributeDropdown: null,
-                attributeInputValue: '',
+                value: '',
             };
 
             this.$nextTick(() => {
@@ -1394,41 +1401,23 @@ function createTaskwarriorApp({
         },
 
         async submitMultiEdit() {
-            const uuids = this.modal.taskIds || [];
+            const uuids = Array.isArray(this.modal.taskIds) ? this.modal.taskIds : [];
             if (uuids.length === 0) return;
 
-            const modifications = [];
-            
-            if (this.modal.project) {
-                modifications.push(`project:${sanitizeTaskCommandArg(this.modal.project)}`);
-            }
-            if (this.modal.tags) {
-                const tags = String(this.modal.tags).split(',').map((t) => t.trim()).filter(Boolean);
-                for (const tag of tags) {
-                    modifications.push(`+${sanitizeTaskCommandArg(tag)}`);
-                }
-            }
-            if (this.modal.priority) {
-                modifications.push(`priority:${sanitizeTaskCommandArg(this.modal.priority)}`);
-            }
-            if (this.modal.due) {
-                modifications.push(`${this.rescheduleFieldName()}:${sanitizeTaskCommandArg(this.modal.due)}`);
-            }
-
-            if (modifications.length === 0) {
+            const input = String(this.modal.value || '').trim();
+            if (!input) {
                 this.showToast('No modifications specified', 'error');
                 return;
             }
 
-            let successCount = 0;
-            for (const uuid of uuids) {
-                const result = await commandService.modifyTask(uuid, modifications.join(' '));
-                if (result.success) successCount++;
+            const result = await commandService.modifyTasks(uuids, input);
+            if (result.success) {
+                this.showToast(`Modified ${uuids.length} tasks`, 'success');
+                this.closeModal();
+                await this.refreshCurrentPanel();
+            } else {
+                this.showToast(result.error || 'Failed to modify tasks', 'error');
             }
-
-            this.showToast(`Modified ${successCount}/${uuids.length} tasks`, 'success');
-            this.closeModal();
-            await this.refreshCurrentPanel();
         },
 
         getFieldValue(field) {

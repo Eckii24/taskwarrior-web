@@ -1467,6 +1467,7 @@ a:hover {
     background: var(--panel);
     border-bottom: 1px solid var(--line);
     flex-wrap: wrap;
+    margin-bottom: 12px;
 }
 
 .multi-select-info {
@@ -1491,25 +1492,7 @@ a:hover {
     border-left: 3px solid var(--accent);
 }
 
-.task-select-indicator {
-    position: absolute;
-    left: -8px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 24px;
-    height: 24px;
-    background: var(--accent);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--panel);
-}
 
-.task-select-indicator .svg-icon {
-    width: 16px;
-    height: 16px;
-}
 
 .multi-edit-info {
     font-size: 0.9rem;

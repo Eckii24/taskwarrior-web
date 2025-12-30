@@ -479,8 +479,30 @@ function createMockBackend() {
                 return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
             }
 
-            // Everything else is either "uuid <cmd> ..." or a raw exec command.
+            // Everything else is either "<uuid> <cmd> ...", "<uuids> mod ...", or a raw exec command.
             const first = tokens[0];
+
+            // Support Taskwarrior's "<uuid...> mod ..." multi-task modifier.
+            // Our UI uses this via TaskCommandService.modifyTasks().
+            const modIndex = tokens.findIndex((value) => value === 'mod');
+            if (modIndex > 0) {
+                const uuids = tokens.slice(0, modIndex);
+                const rest = tokens.slice(modIndex + 1);
+
+                let modifiedCount = 0;
+                for (const uuid of uuids) {
+                    const idx = state.tasks.findIndex((t) => t.uuid === uuid);
+                    if (idx === -1) continue;
+
+                    const task = { ...state.tasks[idx] };
+                    applyTaskModifications(task, rest);
+                    state.tasks[idx] = task;
+                    modifiedCount++;
+                }
+
+                return jsonResponse({ success: true, output: `Modified ${modifiedCount}\n`, error: '' });
+            }
+
             const taskIdx = state.tasks.findIndex((t) => t.uuid === first);
             if (taskIdx === -1) {
                 // Unknown command path: allow tests to validate output view.
