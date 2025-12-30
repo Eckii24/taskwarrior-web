@@ -406,27 +406,57 @@
                                     aria-label="Select all pending tasks"
                                 >
                                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+                                        <path fill="currentColor" d="M3 6h2v2H3V6zm4 0h14v2H7V6zm-4 5h2v2H3v-2zm4 0h14v2H7v-2zm-4 5h2v2H3v-2zm4 0h14v2H7v-2z"/>
+                                        <path fill="currentColor" d="M4.2 6.8 3.5 6.1 2.8 6.8l1.4 1.4 2.8-2.8-.7-.7-2.1 2.1zm0 5L3.5 11.1 2.8 11.8l1.4 1.4 2.8-2.8-.7-.7-2.1 2.1zm0 5-0.7-0.7-0.7 0.7 1.4 1.4 2.8-2.8-.7-.7-2.1 2.1z"/>
                                     </svg>
                                 </button>
                                 <button
+                                    v-if="selectedTaskUuids.size > 0"
                                     type="button"
                                     class="icon-btn small"
                                     @click="deselectAllTasks"
-                                    :disabled="selectedTaskUuids.size === 0"
                                     title="Deselect all"
                                     aria-label="Deselect all"
                                 >
                                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
+                                        <path fill="currentColor" d="M3 6h2v2H3V6zm4 0h14v2H7V6zm-4 5h2v2H3v-2zm4 0h14v2H7v-2zm-4 5h2v2H3v-2zm4 0h14v2H7v-2z"/>
+                                        <path fill="currentColor" d="M4.2 6.8 3.5 6.1 2.8 6.8l1.4 1.4 2.8-2.8-.7-.7-2.1 2.1zm0 5L3.5 11.1 2.8 11.8l1.4 1.4 2.8-2.8-.7-.7-2.1 2.1zm0 5-0.7-0.7-0.7 0.7 1.4 1.4 2.8-2.8-.7-.7-2.1 2.1z"/>
+                                        <path d="M2 2l20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                                     </svg>
                                 </button>
 
                                 <button
+                                    v-if="selectedTaskUuids.size > 0"
+                                    type="button"
+                                    class="icon-btn small"
+                                    @click="completeSelectedTasks"
+                                    :disabled="isAnySelectedTaskBusy()"
+                                    title="Complete selected tasks"
+                                    aria-label="Complete selected tasks"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                </button>
+                                <button
+                                    v-if="selectedTaskUuids.size > 0"
+                                    type="button"
+                                    class="icon-btn small danger"
+                                    @click="deleteSelectedTasks"
+                                    :disabled="isAnySelectedTaskBusy()"
+                                    title="Delete selected tasks"
+                                    aria-label="Delete selected tasks"
+                                >
+                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+
+                                <button
+                                    v-if="selectedTaskUuids.size > 0"
                                     type="button"
                                     class="icon-btn small"
                                     @click="rescheduleManyTasks"
-                                    :disabled="selectedTaskUuids.size === 0"
                                     title="Reschedule selected"
                                     aria-label="Reschedule selected"
                                 >
@@ -435,10 +465,10 @@
                                     </svg>
                                 </button>
                                 <button
+                                    v-if="selectedTaskUuids.size > 0"
                                     type="button"
                                     class="icon-btn small"
                                     @click="editManyTasks"
-                                    :disabled="selectedTaskUuids.size === 0"
                                     title="Edit selected"
                                     aria-label="Edit selected"
                                 >

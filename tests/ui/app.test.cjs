@@ -381,16 +381,19 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(selectAllBtn.classList.contains('icon-btn')).toBe(true);
 
         const deselectAllBtn = document.querySelector('.multi-select-actions button[aria-label="Deselect all"]');
-        expect(deselectAllBtn).toBeTruthy();
-        expect(deselectAllBtn.classList.contains('icon-btn')).toBe(true);
+        expect(deselectAllBtn).toBeFalsy();
+
+        const completeSelectedBtn = document.querySelector('.multi-select-actions button[aria-label="Complete selected tasks"]');
+        expect(completeSelectedBtn).toBeFalsy();
+
+        const deleteSelectedBtn = document.querySelector('.multi-select-actions button[aria-label="Delete selected tasks"]');
+        expect(deleteSelectedBtn).toBeFalsy();
 
         const rescheduleBtn = document.querySelector('.multi-select-actions button[aria-label="Reschedule selected"]');
-        expect(rescheduleBtn).toBeTruthy();
-        expect(rescheduleBtn.classList.contains('icon-btn')).toBe(true);
+        expect(rescheduleBtn).toBeFalsy();
 
         const editBtn = document.querySelector('.multi-select-actions button[aria-label="Edit selected"]');
-        expect(editBtn).toBeTruthy();
-        expect(editBtn.classList.contains('icon-btn')).toBe(true);
+        expect(editBtn).toBeFalsy();
 
         expect(document.querySelector('.multi-select-actions button[aria-label="Cancel"]')).toBeFalsy();
         expect(document.querySelector('.task-select-indicator')).toBeFalsy();
@@ -401,6 +404,26 @@ describe('Taskwarrior Web UI (component-style)', () => {
         // Clicking a task selects it via task card styling.
         document.querySelectorAll('.task-card')[0].click();
         await flushPromises(vm, 2);
+
+        const deselectAllBtnAfterSelect = document.querySelector('.multi-select-actions button[aria-label="Deselect all"]');
+        expect(deselectAllBtnAfterSelect).toBeTruthy();
+        expect(deselectAllBtnAfterSelect.classList.contains('icon-btn')).toBe(true);
+
+        const completeSelectedAfterSelect = document.querySelector('.multi-select-actions button[aria-label="Complete selected tasks"]');
+        expect(completeSelectedAfterSelect).toBeTruthy();
+        expect(completeSelectedAfterSelect.classList.contains('icon-btn')).toBe(true);
+
+        const deleteSelectedAfterSelect = document.querySelector('.multi-select-actions button[aria-label="Delete selected tasks"]');
+        expect(deleteSelectedAfterSelect).toBeTruthy();
+        expect(deleteSelectedAfterSelect.classList.contains('icon-btn')).toBe(true);
+
+        const rescheduleAfterSelect = document.querySelector('.multi-select-actions button[aria-label="Reschedule selected"]');
+        expect(rescheduleAfterSelect).toBeTruthy();
+        expect(rescheduleAfterSelect.classList.contains('icon-btn')).toBe(true);
+
+        const editAfterSelect = document.querySelector('.multi-select-actions button[aria-label="Edit selected"]');
+        expect(editAfterSelect).toBeTruthy();
+        expect(editAfterSelect.classList.contains('icon-btn')).toBe(true);
 
         expect(vm.selectedTaskUuids.has('uuid-1')).toBe(true);
         const selectedCard = document.querySelectorAll('.task-card')[0];
@@ -451,6 +474,48 @@ describe('Taskwarrior Web UI (component-style)', () => {
         const t2 = vm.tasks.find((t) => t.uuid === 'uuid-2');
         expect(t1.project).toBe('Bulk');
         expect(t2.project).toBe('Bulk');
+    });
+
+    test('multi-select toolbar applies complete and delete to all selected tasks', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
+        backend.state.tasks.push({ uuid: 'uuid-2', description: 'Second', status: 'pending', urgency: 1.2 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 10);
+
+        // Enable multi select and select both tasks.
+        document.querySelector('.tasks-controls .control-btn[aria-label="Enable multi-select mode"]').click();
+        await flushPromises(vm, 2);
+
+        const cards = document.querySelectorAll('.task-card');
+        cards[0].click();
+        cards[1].click();
+        await flushPromises(vm, 2);
+
+        const completeBtn = document.querySelector('.multi-select-actions button[aria-label="Complete selected tasks"]');
+        expect(completeBtn).toBeTruthy();
+
+        completeBtn.click();
+        await flushPromises(vm, 10);
+
+        expect(backend.state.tasks.find((t) => t.uuid === 'uuid-1').status).toBe('completed');
+        expect(backend.state.tasks.find((t) => t.uuid === 'uuid-2').status).toBe('completed');
+
+        // Delete the same tasks (even though they might not be visible in the default view).
+        vm.selectedTaskUuids = new Set(['uuid-1', 'uuid-2']);
+        await flushPromises(vm, 2);
+
+        global.confirm = jest.fn(() => true);
+
+        const deleteBtn = document.querySelector('.multi-select-actions button[aria-label="Delete selected tasks"]');
+        expect(deleteBtn).toBeTruthy();
+
+        deleteBtn.click();
+        await flushPromises(vm, 10);
+
+        expect(backend.state.tasks).toHaveLength(0);
+        expect(global.confirm).toHaveBeenCalled();
     });
 
     test('adds a task with attributes via modal submit', async () => {

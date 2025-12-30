@@ -1420,6 +1420,53 @@ function createTaskwarriorApp({
             }
         },
 
+        isAnySelectedTaskBusy() {
+            const uuids = Array.from(this.selectedTaskUuids || []);
+            return uuids.some((uuid) => Boolean(this.busyTaskUuids?.[uuid]));
+        },
+
+        async completeSelectedTasks() {
+            const uuids = Array.from(this.selectedTaskUuids || []);
+            if (uuids.length === 0) {
+                this.showToast('No tasks selected', 'error');
+                return;
+            }
+
+            let successCount = 0;
+            for (const uuid of uuids) {
+                await this.withBusyTask(uuid, async () => {
+                    const result = await commandService.completeTask(uuid);
+                    if (result.success) successCount++;
+                });
+            }
+
+            this.showToast(`Completed ${successCount}/${uuids.length} tasks`, successCount ? 'success' : 'error');
+            this.selectedTaskUuids = new Set();
+            await this.refreshCurrentPanel();
+        },
+
+        async deleteSelectedTasks() {
+            const uuids = Array.from(this.selectedTaskUuids || []);
+            if (uuids.length === 0) {
+                this.showToast('No tasks selected', 'error');
+                return;
+            }
+
+            if (!confirm(`Delete ${uuids.length} tasks?`)) return;
+
+            let successCount = 0;
+            for (const uuid of uuids) {
+                await this.withBusyTask(uuid, async () => {
+                    const result = await commandService.deleteTask(uuid);
+                    if (result.success) successCount++;
+                });
+            }
+
+            this.showToast(`Deleted ${successCount}/${uuids.length} tasks`, successCount ? 'success' : 'error');
+            this.selectedTaskUuids = new Set();
+            await this.refreshCurrentPanel();
+        },
+
         getFieldValue(field) {
             const parts = String(field).split('.');
             let obj = this;
