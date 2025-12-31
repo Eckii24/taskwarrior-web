@@ -711,9 +711,19 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(Number.isFinite(workFilterId)).toBe(true);
         expect(homeFilterId).not.toBe(workFilterId);
 
-        // Reorder: drag Work above Home (pass a minimal target object)
-        vm.draggedFilterId = workFilterId;
-        await vm.onFilterDrop({ id: homeFilterId });
+        const dataTransfer = {
+            _data: {},
+            setData: jest.fn(function (type, value) {
+                this._data[type] = value;
+            }),
+            getData: jest.fn(function (type) {
+                return this._data[type] || '';
+            }),
+        };
+
+        // Reorder: drag Work above Home
+        vm.onFilterDragStart({ id: workFilterId }, { dataTransfer });
+        await vm.onFilterDrop({ id: homeFilterId }, { dataTransfer });
         await flushPromises(vm, 3);
 
         // Ensure reorder endpoint was called
@@ -721,6 +731,15 @@ describe('Taskwarrior Web UI (component-style)', () => {
             '/api/filters/reorder',
             expect.objectContaining({ method: 'PUT' }),
         );
+
+        // Ensure drag handles exist in DOM
+        const dragHandles = Array.from(document.querySelectorAll('.filter-row .drag-handle'));
+        expect(dragHandles).toHaveLength(2);
+        expect(dragHandles[0].getAttribute('draggable')).toBe('true');
+        expect(dragHandles[0].tagName).toBe('SPAN');
+
+        const startDropZone = document.querySelector('.filters .filter-drop-zone.start');
+        expect(startDropZone).toBeTruthy();
 
         // Ensure order persists after refresh
         await vm.refreshFilters();

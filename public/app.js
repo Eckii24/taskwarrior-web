@@ -549,6 +549,7 @@ function createTaskwarriorApp({
 
              filters: [],
              draggedFilterId: null,
+             insertionTarget: null,
 
              emojiPicker: {
                  filterIcons: ['⭐️', '🏠', '💼', '📌', '🧠', '🛒', '📅', '✅', '🔥', '🧹', '💡', '🧾', '📚', '🔁', '🎯', '🧰', '🔒', '🌱', '💤', '🧪'],
@@ -2111,26 +2112,78 @@ function createTaskwarriorApp({
             }
         },
 
-        onFilterDragStart(filter) {
-            this.draggedFilterId = filter.id;
+        getDraggedFilterId(event) {
+            const stateId = Number(this.draggedFilterId);
+            if (Number.isFinite(stateId) && stateId > 0) return stateId;
+
+            const dt = event?.dataTransfer;
+            if (!dt || typeof dt.getData !== 'function') return null;
+
+            const raw = dt.getData('text/plain');
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed <= 0) return null;
+            return parsed;
         },
 
-        async onFilterDrop(targetFilter) {
-            if (!this.draggedFilterId || this.draggedFilterId === targetFilter.id) return;
+        onFilterDragStart(filter, event) {
+            const id = Number(filter?.id);
+            if (!Number.isFinite(id) || id <= 0) return;
 
-            const current = this.filters.slice();
-            const fromIndex = current.findIndex((f) => f.id === this.draggedFilterId);
-            const toIndex = current.findIndex((f) => f.id === targetFilter.id);
-            if (fromIndex === -1 || toIndex === -1) return;
+            this.draggedFilterId = id;
 
-            const [moved] = current.splice(fromIndex, 1);
-            current.splice(toIndex, 0, moved);
-
-            this.filters = current;
-            this.draggedFilterId = null;
+            const dt = event?.dataTransfer;
+            if (!dt) return;
 
             try {
-                const ids = current.map((f) => f.id);
+                dt.effectAllowed = 'move';
+                // Firefox needs explicit data to enable drag.
+                if (typeof dt.setData === 'function') {
+                    dt.setData('text/plain', String(id));
+                }
+            } catch {
+                // ignore
+            }
+        },
+
+        onFilterDragOver(filter, position) {
+            if (!this.draggedFilterId) return;
+
+            if (position === 'before') {
+                const id = Number(filter?.id);
+                if (!Number.isFinite(id) || id <= 0) return;
+                this.insertionTarget = { type: 'before', id };
+                return;
+            }
+
+            if (position === 'start') {
+                this.insertionTarget = { type: 'start' };
+                return;
+            }
+
+            if (position === 'end') {
+                this.insertionTarget = { type: 'end' };
+            }
+        },
+
+        onFiltersDragLeave(event) {
+            if (event?.relatedTarget && typeof event.relatedTarget.closest === 'function') {
+                const stillInside = event.relatedTarget.closest('.filters');
+                if (stillInside) return;
+            }
+            this.insertionTarget = null;
+        },
+
+        onFilterDragEnd() {
+            this.draggedFilterId = null;
+            this.insertionTarget = null;
+        },
+
+        async persistFilterReorder(nextFilters) {
+            const list = Array.isArray(nextFilters) ? nextFilters : [];
+            if (list.length === 0) return;
+
+            try {
+                const ids = list.map((f) => f.id);
                 const result = await apiClient.reorderFilters(ids);
                 if (!result.success) {
                     this.showToast(result.error || 'Failed to reorder', 'error');
@@ -2139,7 +2192,53 @@ function createTaskwarriorApp({
             } catch (error) {
                 this.showToast(String(error?.message || error), 'error');
                 await this.refreshFilters();
+            } finally {
+                this.onFilterDragEnd();
             }
+        },
+
+        async onFilterDrop(targetFilter, event) {
+            const draggedId = this.getDraggedFilterId(event);
+            const targetId = Number(targetFilter?.id);
+            if (!draggedId || !Number.isFinite(targetId) || draggedId === targetId) return;
+
+            const current = this.filters.slice();
+            const fromIndex = current.findIndex((f) => f.id === draggedId);
+            const toIndex = current.findIndex((f) => f.id === targetId);
+            if (fromIndex === -1 || toIndex === -1) return;
+
+            // Drop on a filter means insert before it.
+            const [moved] = current.splice(fromIndex, 1);
+            const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+            current.splice(adjustedIndex, 0, moved);
+
+            this.filters = current;
+            await this.persistFilterReorder(current);
+        },
+
+        async onFiltersDrop(event, position = 'end') {
+            const draggedId = this.getDraggedFilterId(event);
+            if (!draggedId) return;
+
+            const normalized = position === 'start' ? 'start' : 'end';
+            const current = this.filters.slice();
+            const fromIndex = current.findIndex((f) => f.id === draggedId);
+            if (fromIndex === -1) return;
+
+            const toIndex = normalized === 'start' ? 0 : current.length;
+            const isNoop = (normalized === 'start' && fromIndex === 0)
+                || (normalized === 'end' && fromIndex === current.length - 1);
+            if (isNoop) {
+                this.onFilterDragEnd();
+                return;
+            }
+
+            const [moved] = current.splice(fromIndex, 1);
+            const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
+            current.splice(adjustedIndex, 0, moved);
+
+            this.filters = current;
+            await this.persistFilterReorder(current);
         },
 
          openCommandModal(type) {

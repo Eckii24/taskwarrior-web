@@ -155,42 +155,74 @@
                 <div class="nav-section">
                     <div class="nav-section-title">Filters</div>
 
-                    <div class="filters" @dragover.prevent>
+                    <div class="filters" @dragover.prevent @drop.prevent="onFiltersDrop" @dragleave="onFiltersDragLeave">
                         <div
-                            class="filter-row"
+                            class="filter-drop-zone start"
+                            :class="{ active: insertionTarget && insertionTarget.type === 'start' }"
+                            @dragover.prevent="onFilterDragOver(null, 'start', $event)"
+                            @drop.prevent.stop="onFiltersDrop($event, 'start')"
+                        ></div>
+                        <div
+                            class="filter-entry"
                             v-for="filter in filters"
                             :key="filter.id"
-                            draggable="true"
-                            @dragstart="onFilterDragStart(filter)"
-                            @drop="onFilterDrop(filter)"
                         >
-                            <button
-                                class="nav-item filter-item"
-                                :class="{ active: !showTaskrc && selectedView.type === 'filter' && selectedView.id === filter.id }"
-                                type="button"
-                                @click="selectCustomFilter(filter)"
-                            >
-                                <span class="nav-icon">
-                                    <span v-if="filter.icon" class="emoji-icon" aria-hidden="true">{{ filter.icon }}</span>
-                                    <svg v-else class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M10 18h4v-2h-4v2zm-7-14v2h18V4H3zm3 7h12V9H6v2z"/>
-                                    </svg>
-                                </span>
-                                <span class="nav-label">{{ filter.name }}</span>
-                            </button>
-                            <div class="filter-actions">
-                                <button
-                                    class="icon-btn small"
-                                    type="button"
-                                    aria-label="Edit filter"
-                                    @click.stop="openEditFilter(filter)"
+                            <div
+                                class="filter-drop-zone"
+                                :class="{ active: insertionTarget && insertionTarget.type === 'before' && insertionTarget.id === filter.id }"
+                                @dragenter.prevent="onFilterDragOver(filter, 'before', $event)"
+                                @dragover.prevent="onFilterDragOver(filter, 'before', $event)"
+                                @drop.prevent.stop="onFilterDrop(filter, $event)"
+                            ></div>
+                            <div class="filter-row">
+                                <span
+                                    class="drag-handle"
+                                    role="button"
+                                    tabindex="0"
+                                    aria-label="Reorder filter"
+                                    draggable="true"
+                                    @click.stop
+                                    @dragstart="onFilterDragStart(filter, $event)"
+                                    @dragend="onFilterDragEnd"
                                 >
                                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
+                                        <path fill="currentColor" d="M4 10h16v2H4v-2zm0 4h16v2H4v-2z"/>
                                     </svg>
+                                </span>
+                                <button
+                                    class="nav-item filter-item"
+                                    :class="{ active: !showTaskrc && selectedView.type === 'filter' && selectedView.id === filter.id }"
+                                    type="button"
+                                    @click="selectCustomFilter(filter)"
+                                >
+                                    <span class="nav-icon">
+                                        <span v-if="filter.icon" class="emoji-icon" aria-hidden="true">{{ filter.icon }}</span>
+                                        <svg v-else class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path fill="currentColor" d="M10 18h4v-2h-4v2zm-7-14v2h18V4H3zm3 7h12V9H6v2z"/>
+                                        </svg>
+                                    </span>
+                                    <span class="nav-label">{{ filter.name }}</span>
                                 </button>
+                                <div class="filter-actions">
+                                    <button
+                                        class="icon-btn small"
+                                        type="button"
+                                        aria-label="Edit filter"
+                                        @click.stop="openEditFilter(filter)"
+                                    >
+                                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                         </div>
+                        <div
+                            class="filter-drop-zone end"
+                            :class="{ active: insertionTarget && insertionTarget.type === 'end' }"
+                            @dragover.prevent="onFilterDragOver(null, 'end', $event)"
+                            @drop.prevent.stop="onFiltersDrop($event, 'end')"
+                        ></div>
                     </div>
 
                     <button class="nav-item add-filter" type="button" @click="openAddFilter">
@@ -840,8 +872,15 @@
                                                             <path d="M20 6L9 17l-5-5"></path>
                                                         </svg>
                                                     </button>
-                                                </div>
-                                            </div>
+                        </div>
+                        <div
+                            class="filter-drop-zone end"
+                            :class="{ active: insertionTarget && insertionTarget.type === 'end' }"
+                            @dragover.prevent="onFilterDragOver(null, 'end', $event)"
+                            @drop.prevent="onFiltersDrop"
+                        ></div>
+                    </div>
+
                                         </div>
 
                                         <button v-if="task.status === 'pending'" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
