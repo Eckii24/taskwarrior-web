@@ -437,6 +437,40 @@ describe('Backend API (supertest)', () => {
         expect(generic.body.suggestions.some((s) => s.startsWith('rc.'))).toBe(true);
     });
 
+    test('/api/reports returns report names from _config output', async () => {
+        const dir = tmpPath('reports');
+        const dbPath = path.join(dir, 'settings.sqlite');
+        const taskrcPath = path.join(dir, 'taskrc');
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async (args) => {
+                const str = args.join(' ');
+                if (str.includes('_config')) {
+                    return {
+                        stdout: [
+                            'report.next.description=Next tasks',
+                            'report.next.filter=status:pending',
+                            'report.today.filter=due:today status:pending',
+                            'report.all.filter=',
+                            'color.due.today=red',
+                            '',
+                        ].join('\n'),
+                        stderr: '',
+                    };
+                }
+                return { stdout: '', stderr: '' };
+            },
+        });
+
+        const res = await request(app).get('/api/reports');
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(res.body.reports).toEqual(['all', 'next', 'today']);
+    });
+
     test('/api/complete respects limit and returns 500 on exec error', async () => {
         const dir = tmpPath('complete-invalid');
         const dbPath = path.join(dir, 'settings.sqlite');

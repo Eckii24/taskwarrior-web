@@ -176,6 +176,13 @@ function taskMatchesTokens(task, tokens) {
         if (token.startsWith('limit:')) {
             continue;
         }
+
+        // Built-in views (today/next/all) are treated as Taskwarrior reports.
+        // When exported they should not affect filtering here.
+        if (token === 'today' || token === 'next' || token === 'all') {
+            continue;
+        }
+
         terms.push(token);
     }
 
@@ -217,9 +224,10 @@ function createMockBackend() {
         filters: [],
         builtinFilters: {
             today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
-            next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
+            next: { key: 'next', name: 'Next', filter: '', visible: true, group_by: null },
             all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
         },
+         reports: ['next', 'today', 'all'],
         settings: {
             reschedule_field: 'due',
         },
@@ -292,9 +300,15 @@ function createMockBackend() {
             return jsonResponse({ success: true, filter: { ...next, visible: next.visible ? 1 : 0 } });
         }
 
-        if (pathname === '/api/filters' && method === 'GET') {
-            return jsonResponse({ success: true, filters: state.filters.slice() });
-        }
+            if (pathname === '/api/filters' && method === 'GET') {
+                const filters = state.filters.slice().map((filter, idx) => ({
+                    ...filter,
+                    // Ensure reorder/edit tests get a stable order field.
+                    order: filter.order ?? idx,
+                }));
+                return jsonResponse({ success: true, filters });
+            }
+
 
         if (pathname === '/api/filters' && method === 'POST') {
             const body = init.body ? JSON.parse(String(init.body)) : {};
@@ -380,6 +394,13 @@ function createMockBackend() {
             };
         }
 
+        if (pathname === '/api/reports' && method === 'GET') {
+            return jsonResponse({
+                success: true,
+                reports: Array.isArray(state.reports) ? state.reports.slice() : [],
+            });
+        }
+
         if (pathname === '/api/complete' && method === 'GET') {
             const token = String(parsed.searchParams.get('token') || '');
             const normalized = token.toLowerCase();
@@ -422,22 +443,41 @@ function createMockBackend() {
             return jsonResponse({ success: true, token, suggestions, values: suggestions });
         }
 
-         if (pathname === '/api/task' && method === 'POST') {
-             const body = init.body ? JSON.parse(String(init.body)) : {};
-             const args = String(body.args || '').trim();
-             const tokens = parseShellLikeArgs(args);
+        if (pathname === '/api/task' && method === 'POST') {
+            const body = init.body ? JSON.parse(String(init.body)) : {};
 
-             if (!tokens.length) {
-                 return jsonResponse({ success: false, output: '', error: 'Missing args' }, { status: 400 });
-             }
+            const { args, tokens } = (() => {
+                if (Array.isArray(body.args)) {
+                    const rawTokens = body.args.map((value) => String(value));
+                    return { args: rawTokens.join(' '), tokens: rawTokens };
+                }
 
-             if (tokens[0] === 'rc.hooks=0' && tokens[1] === '_get' && tokens[2] && String(tokens[2]).startsWith('rc.')) {
-                 const key = String(tokens[2]).slice('rc.'.length);
-                 const valueRaw = state.taskConfig[key];
-                 const value = valueRaw === undefined ? '' : String(valueRaw);
-                 return jsonResponse({ success: true, output: `${value}\n`, error: '' });
-             }
+                const argsText = String(body.args || '').trim();
 
+                // Support args that are already tokenized by tests.
+                // Some jsdom environments stringify arrays as "a,b".
+                if (argsText.includes(',') && !argsText.includes(' ')) {
+                    const maybeTokens = argsText.split(',').map((value) => value.trim()).filter(Boolean);
+                    if (maybeTokens.length > 1) {
+                        return { args: maybeTokens.join(' '), tokens: maybeTokens };
+                    }
+                }
+
+                return { args: argsText, tokens: parseShellLikeArgs(argsText) };
+            })();
+
+            if (!tokens.length) {
+                // Treat empty args like a plain "task" invocation.
+                // The UI sometimes sends an empty string when it wants to do just "export".
+                tokens.push('export');
+            }
+
+            if (tokens[0] === 'rc.hooks=0' && tokens[1] === '_get' && tokens[2] && String(tokens[2]).startsWith('rc.')) {
+                const key = String(tokens[2]).slice('rc.'.length);
+                const valueRaw = state.taskConfig[key];
+                const value = valueRaw === undefined ? '' : String(valueRaw);
+                return jsonResponse({ success: true, output: `${value}\n`, error: '' });
+            }
 
             if (tokens[0] === 'sync') {
                 return jsonResponse({ success: true, output: 'Sync OK\n', error: '' });
@@ -463,6 +503,11 @@ function createMockBackend() {
                 return jsonResponse({ success: true, output: `Created task ${uuid}.\n`, error: '' });
             }
 
+            if (tokens.length === 1 && tokens[0] === 'export') {
+                const matching = state.tasks.filter((t) => taskMatchesTokens(t, []));
+                return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
+            }
+
             if (tokens[tokens.length - 1] === 'export') {
                 // Special-case "<uuid> export" used for annotations refresh.
                 if (tokens.length === 2) {
@@ -476,6 +521,35 @@ function createMockBackend() {
                 // Filtered export (best-effort) used by UI.
                 const filterTokens = tokens.slice(0, -1);
                 const matching = state.tasks.filter((t) => taskMatchesTokens(t, filterTokens));
+                return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
+            }
+
+            if (tokens.length === 2 && tokens[0] === 'export') {
+                // "export <report>" (no filters) emitted by report mode.
+                const matching = state.tasks.filter((t) => taskMatchesTokens(t, []));
+                return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
+            }
+
+            if (tokens[0] === 'export' && tokens.length >= 2) {
+                const filterTokens = tokens.slice(1, -1);
+
+                // Reports are used for output formatting in real Taskwarrior.
+                // For tests, we behave like a filtered export regardless of report token.
+                const matching = state.tasks.filter((t) => taskMatchesTokens(t, filterTokens));
+                return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
+            }
+
+            if (tokens.length >= 3 && tokens.includes('export')) {
+                const exportIndex = tokens.indexOf('export');
+                const filterTokens = tokens.slice(0, exportIndex);
+
+                const matching = state.tasks.filter((t) => taskMatchesTokens(t, filterTokens));
+                return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
+            }
+
+            // Support "export <report>" (no filters) emitted by report mode.
+            if (tokens.length === 2 && tokens[0] === 'export') {
+                const matching = state.tasks.filter((t) => taskMatchesTokens(t, []));
                 return jsonResponse({ success: true, output: JSON.stringify(matching), error: '' });
             }
 
@@ -513,80 +587,56 @@ function createMockBackend() {
 
             if (!cmd) {
                 const task = state.tasks[taskIdx];
-                const lines = [
-                    `UUID: ${task.uuid}`,
-                    `Description: ${task.description || ''}`,
-                    `Status: ${task.status || ''}`,
-                ];
-                if (task.project) lines.push(`Project: ${task.project}`);
-                if (task.priority) lines.push(`Priority: ${task.priority}`);
-                if (task.due) lines.push(`Due: ${task.due}`);
-                if (Array.isArray(task.tags) && task.tags.length) lines.push(`Tags: ${task.tags.join(',')}`);
-                return jsonResponse({ success: true, output: `${lines.join('\n')}\n`, error: '' });
+                return jsonResponse({ success: true, output: `UUID: ${task.uuid}\n`, error: '' });
             }
 
             if (cmd === 'done') {
                 state.tasks[taskIdx] = { ...state.tasks[taskIdx], status: 'completed' };
-                return jsonResponse({ success: true, output: 'Completed\n', error: '' });
+                return jsonResponse({ success: true, output: 'Completed 1\n', error: '' });
             }
 
             if (cmd === 'delete') {
+                // Simulate delete confirmations.
                 state.tasks.splice(taskIdx, 1);
-                return jsonResponse({ success: true, output: 'Deleted\n', error: '' });
-            }
-
-            if (cmd === 'modify') {
-                const modifications = tokens.slice(2);
-                const task = { ...state.tasks[taskIdx] };
-                applyTaskModifications(task, modifications);
-                state.tasks[taskIdx] = task;
-                return jsonResponse({ success: true, output: 'Modified\n', error: '' });
-            }
-
-            if (cmd === 'mod') {
-                const rest = tokens.slice(2);
-                if (rest.some((t) => t.toLowerCase() === 'status:pending')) {
-                    state.tasks[taskIdx] = { ...state.tasks[taskIdx], status: 'pending' };
-                    return jsonResponse({ success: true, output: 'Modified\n', error: '' });
-                }
-                return jsonResponse({ success: true, output: 'OK\n', error: '' });
+                return jsonResponse({ success: true, output: 'Deleted 1\n', error: '' });
             }
 
             if (cmd === 'annotate') {
-                const text = stripOuterQuotes(tokens.slice(2).join(' ')).trim();
-                if (!text) return jsonResponse({ success: false, output: '', error: 'Missing annotation' }, { status: 400 });
-
+                const annotation = tokens.slice(2).join(' ').trim();
                 const task = { ...state.tasks[taskIdx] };
-                const annotations = Array.isArray(task.annotations) ? task.annotations.slice() : [];
-                annotations.push({ entry: `anno-${state.nextAnnotationId++}`, description: text });
-                task.annotations = annotations;
+                const entry = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}-${state.nextAnnotationId++}`;
+
+                if (!Array.isArray(task.annotations)) task.annotations = [];
+                task.annotations = task.annotations.concat([{ entry, description: annotation }]);
                 state.tasks[taskIdx] = task;
                 return jsonResponse({ success: true, output: 'Annotated\n', error: '' });
             }
 
             if (cmd === 'denotate') {
-                const pattern = stripOuterQuotes(tokens.slice(2).join(' ')).trim();
+                const description = tokens.slice(2).join(' ').trim();
                 const task = { ...state.tasks[taskIdx] };
-                const annotations = Array.isArray(task.annotations) ? task.annotations.slice() : [];
-                task.annotations = annotations.filter((a) => String(a.description) !== pattern);
+                if (Array.isArray(task.annotations)) {
+                    task.annotations = task.annotations.filter((a) => a.description !== description);
+                }
                 state.tasks[taskIdx] = task;
                 return jsonResponse({ success: true, output: 'Denotated\n', error: '' });
             }
 
-            if (cmd === 'export') {
-                const task = state.tasks[taskIdx];
-                return jsonResponse({ success: true, output: JSON.stringify([task]), error: '' });
+            if (cmd === 'mod' || cmd === 'modify') {
+                const rest = tokens.slice(2);
+                const task = { ...state.tasks[taskIdx] };
+                applyTaskModifications(task, rest);
+                state.tasks[taskIdx] = task;
+                return jsonResponse({ success: true, output: 'Modified 1\n', error: '' });
             }
 
-            return jsonResponse({ success: true, output: `OK: ${args}\n`, error: '' });
+            return jsonResponse({ success: true, output: `Executed: ${args}\n`, error: '' });
         }
 
-        return jsonResponse({ success: false, error: `Unhandled ${method} ${pathname}` }, { status: 500 });
+        return jsonResponse({ success: false, error: 'not found' }, { status: 404 });
     };
 
     return { state, fetchImpl };
 }
 
-module.exports = {
-    createMockBackend,
-};
+module.exports = { createMockBackend, parseShellLikeArgs, stripOuterQuotes, tokenizeFilterExpression };

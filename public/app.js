@@ -115,10 +115,17 @@ class TaskApiClient {
     }
 
      async getBuiltinFilters() {
-         this.requireFetch();
-         const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
-         return await response.json();
-     }
+          this.requireFetch();
+          const response = await this.fetchImpl(`${this.baseUrl}/builtin-filters`);
+          return await response.json();
+      }
+
+      async getReports() {
+          this.requireFetch();
+          const response = await this.fetchImpl(`${this.baseUrl}/reports`);
+          return await response.json();
+      }
+
 
      async updateBuiltinFilter(key, payload) {
          this.requireFetch();
@@ -147,11 +154,36 @@ class TaskApiClient {
      }
  }
 
-class TaskQueryService {
-    constructor(apiClient) {
-        this.apiClient = apiClient;
-        this.groupSortValueOrders = new Map();
-    }
+ class TaskQueryService {
+     constructor(apiClient) {
+         this.apiClient = apiClient;
+         this.groupSortValueOrders = new Map();
+
+         this.reportCache = {
+             value: null,
+             expiresAt: 0,
+         };
+     }
+
+      async getReportNamesCached(ttlMs = 15000) {
+          const now = Date.now();
+          if (this.reportCache.value && this.reportCache.expiresAt > now) {
+              return this.reportCache.value;
+          }
+
+          const result = await this.apiClient.getReports();
+          const reports = result?.success && Array.isArray(result.reports) ? result.reports : [];
+
+          const set = new Set(reports.map((value) => String(value || '').trim()).filter(Boolean));
+
+          this.reportCache = {
+              value: set,
+              expiresAt: now + ttlMs,
+          };
+
+          return set;
+      }
+
 
     async getTaskConfig(key) {
         const configKey = String(key || '').trim();
@@ -293,25 +325,47 @@ class TaskQueryService {
         return result;
     }
 
-    async getTasks(filterOrReport, groupBy = null) {
-        const reportMap = {
-            list: 'status:pending',
-            pending: 'status:pending',
-            all: '',
-            completed: 'status:completed',
-            next: 'status:pending limit:page',
-        };
+     async getTasks(filterOrReport, groupBy = null) {
+         // Preserve "" as a valid filter expression (meaning "export all").
+         // Only default to "next" when no argument was provided.
+          const normalized = filterOrReport === undefined ? 'next' : String(filterOrReport || '').trim();
 
-        // Preserve "" as a valid filter expression (meaning "export all").
-        // Only default to "next" when no argument was provided.
-        const normalized = filterOrReport === undefined ? 'next' : String(filterOrReport || '').trim();
-        const actualFilter = reportMap[normalized] !== undefined ? reportMap[normalized] : normalized;
-        const args = actualFilter ? `${actualFilter} export` : 'export';
+          const reportLookupEnabled = this.reportCache.value !== null;
 
-        const result = await this.apiClient.execute(args);
+         const tokens = normalized ? normalized.split(/\s+/).filter(Boolean) : [];
+
+          const reportNames = normalized && tokens.length > 0
+              ? await this.getReportNamesCached()
+              : new Set();
+
+          const reportCandidates = [];
+          void reportCandidates;
+
+
+         let args;
+
+         // If the last token is a report name, treat it as a report invocation.
+         // Example: "project:Home newest" => "project:Home export newest".
+          if (tokens.length > 0) {
+              const maybeReport = tokens[tokens.length - 1];
+              if (reportNames.has(maybeReport)) {
+                 const report = maybeReport;
+                 const filterTokens = tokens.slice(0, -1);
+                 const filterPart = filterTokens.length > 0 ? `${filterTokens.join(' ')} ` : '';
+                 args = `${filterPart}export ${report}`;
+             }
+         }
+
+         if (!args) {
+             args = normalized ? `${normalized} export` : 'export';
+         }
+
+         const result = await this.apiClient.execute(args);
+
         if (!result?.success) {
             throw new Error(result?.error || 'Failed to load tasks');
         }
+
 
         const rawOutput = String(result?.output || '');
         if (!rawOutput.trim()) return { tasks: [], groups: [] };
@@ -489,6 +543,9 @@ function createTaskwarriorApp({
     const fetchFn = apiClient.fetchImpl;
     const queryService = new TaskQueryService(apiClient);
     const commandService = new TaskCommandService(apiClient);
+
+    // Prime report cache early so initial loads/restores can use it.
+    queryService.getReportNamesCached().catch(() => {});
 
     const { createApp } = Vue;
 
@@ -676,17 +733,17 @@ function createTaskwarriorApp({
         taskrcDirty() {
             return this.taskrcText !== this.loadedTaskrcText;
         },
-        currentTitle() {
-            if (this.showTaskrc) return 'Settings';
-            if (this.selectedView.type === 'search') return 'Search';
-            if (this.selectedView.type === 'builtin') {
-                const key = String(this.selectedView.key || '').trim();
-                const builtin = this.builtinFilters[key];
-                if (builtin?.name) return builtin.name;
-                return key === 'next' ? 'Next' : key === 'today' ? 'Today' : 'All';
-            }
-            if (this.selectedView.type === 'filter') {
-                const filter = this.filters.find((f) => f.id === this.selectedView.id);
+            currentTitle() {
+             if (this.selectedView.type === 'builtin') {
+                 const key = String(this.selectedView.key || 'next');
+                 const builtin = this.builtinFilters[key];
+                 if (builtin && builtin.name) return builtin.name;
+                 return key;
+             }
+             if (this.selectedView.type === 'filter') {
+                 const filterId = Number(this.selectedView.id);
+                 const filter = this.filters.find((f) => Number(f.id) === filterId);
+
                 return filter ? filter.name : 'Filter';
             }
             return 'Taskwarrior';
@@ -735,7 +792,10 @@ function createTaskwarriorApp({
          // Do not block initial task load; when the rules arrive, Vue will re-render.
          this.ensureTaskrcLoaded();
 
+         // Note: do not override any pre-set URL view params here.
+
          await this.loadTasksForSelection();
+
      },
      beforeUnmount() {
          window.removeEventListener('keydown', this.onGlobalKeydown);
@@ -978,13 +1038,20 @@ function createTaskwarriorApp({
                     this.selectedView = { type: 'builtin', key };
                     this.showTaskrc = false;
                 }
-            } else if (candidateView.type === 'filter') {
-                const exists = this.filters.some((f) => f.id === candidateView.id);
+                return;
+            }
+
+            if (candidateView.type === 'filter') {
+                const wantedId = Number(candidateView.id);
+                const exists = this.filters.some((filter) => Number(filter.id) === wantedId);
                 if (exists) {
-                    this.selectedView = { type: 'filter', id: candidateView.id };
+                    this.selectedView = { type: 'filter', id: wantedId };
                     this.showTaskrc = false;
                 }
-            } else if (candidateView.type === 'search') {
+                return;
+            }
+
+            if (candidateView.type === 'search') {
                 this.selectedView = { type: 'search' };
                 this.showTaskrc = false;
             }
@@ -1900,21 +1967,24 @@ function createTaskwarriorApp({
                     return;
                 }
 
-                if (this.selectedView.type === 'builtin') {
-                    const key = String(this.selectedView.key || '').trim();
-                    const builtin = this.builtinFilters[key];
-                    const query = builtin ? builtin.filter : (key === 'next' ? 'next' : key === 'today' ? 'due:today status:pending' : 'all');
-                    this.currentGroupBy = builtin?.group_by || null;
-                    const result = await queryService.getTasks(query, this.currentGroupBy);
+                 if (this.selectedView.type === 'builtin') {
+                     const key = String(this.selectedView.key || '').trim();
+                     const builtin = this.builtinFilters[key];
+                     const query = builtin ? builtin.filter : key;
+                     this.currentGroupBy = builtin?.group_by || null;
+                     const result = await queryService.getTasks(query, this.currentGroupBy);
+
                     this.tasks = result.tasks;
                     this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                     return;
                 }
 
-                if (this.selectedView.type === 'filter') {
-                    const filter = this.filters.find((f) => f.id === this.selectedView.id);
-                    if (!filter) {
+                 if (this.selectedView.type === 'filter') {
+                     const selectedId = Number(this.selectedView.id);
+                     const filter = this.filters.find((f) => Number(f.id) === selectedId);
+                     if (!filter) {
+
                         this.tasks = [];
                         this.taskGroups = [];
                         this.emptyMessage = 'Filter not found.';
@@ -1998,9 +2068,11 @@ function createTaskwarriorApp({
                     if (result.success) {
                         await this.refreshBuiltinFilters();
                     }
-                } else if (this.selectedView.type === 'filter') {
-                    const filter = this.filters.find((f) => f.id === this.selectedView.id);
-                    if (filter) {
+                 } else if (this.selectedView.type === 'filter') {
+                     const selectedId = Number(this.selectedView.id);
+                     const filter = this.filters.find((f) => Number(f.id) === selectedId);
+                     if (filter) {
+
                         const result = await apiClient.updateFilter(filter.id, {
                             group_by: this.currentGroupBy || '',
                         });

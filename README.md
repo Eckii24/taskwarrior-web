@@ -131,14 +131,16 @@ Call dentist +phone +urgent
 
 ### Viewing Tasks
 
-Select a report type to view your tasks:
-- **list**: Active tasks (default)
-- **next**: Most urgent tasks
-- **pending**: All pending tasks
-- **all**: All tasks including completed
-- **completed**: Completed tasks only
+Select a view/report to view your tasks:
+- **next**: Next tasks (Taskwarrior report)
+- **today**: Tasks due today (Taskwarrior report)
+- **all**: All tasks (Taskwarrior report)
 
-Or enter any custom taskwarrior report command.
+Or enter a filter/report expression.
+
+Rules:
+- If the **last token** matches a Taskwarrior report name (from `/api/reports`), it runs: `task <filters...> export <report>`
+- Otherwise it runs: `task <filter> export` (or `task export` when empty)
 
 ### Editing Tasks
 
@@ -211,8 +213,9 @@ The frontend implements Command Query Responsibility Segregation:
 ### Query Service (Read Operations)
 ```javascript
 class TaskQueryService {
-  async getTasks(filter) {
-    // Executes: task <filter> export
+  async getTasks(filterOrReport) {
+    // If last token is a known report: task <filters...> export <report>
+    // Otherwise: task <filter> export (or task export)
     // Returns parsed JSON array of tasks
   }
 }

@@ -78,6 +78,37 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(document.body.textContent).toContain('Hello');
     });
 
+    test('treats last token as report and appends to export', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Urgent report', status: 'pending', urgency: 2, tags: ['urgent'] });
+
+        backend.state.reports = ['newest'];
+
+        const seen = [];
+        backend.state.beforeFetch = ({ pathname, method, init }) => {
+            if (pathname !== '/api/task' || method !== 'POST') return null;
+            const body = init.body ? JSON.parse(String(init.body)) : {};
+            if (Array.isArray(body.args)) {
+                seen.push(body.args.join(' '));
+            } else if (body.args) {
+                seen.push(String(body.args));
+            }
+            return null;
+        };
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        // Simulate search selection (doesn't auto-load tasks).
+        vm.selectedView = { type: 'search' };
+        vm.lastSearch.term = 'status:pending newest';
+        vm.lastSearch.pendingOnly = false;
+        await vm.refreshCurrentPanel();
+        await flushPromises(vm, 6);
+
+        expect(seen.some((args) => args.trim() === 'status:pending export newest')).toBe(true);
+    });
+
     test('renders due, scheduled, and waiting dates in task list', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({

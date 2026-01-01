@@ -93,6 +93,16 @@ function getDefaultTaskrc(taskdataPath) {
         '# This file is managed by taskwarrior-web.',
         `data.location=${taskdataPath}`,
         '',
+        '# Default reports used by taskwarrior-web',
+        'report.next.description=Next (pending, page limited)',
+        'report.next.filter=status:pending limit:page',
+        '',
+        'report.today.description=Today (pending, due today)',
+        'report.today.filter=due:today status:pending',
+        '',
+        'report.all.description=All tasks',
+        'report.all.filter=',
+        '',
         '# TaskChampion sync settings (set these to enable sync)',
         '# sync.server.url=http://taskchampion-sync:8080',
         '# sync.server.client_id=your-client-id',
@@ -254,6 +264,26 @@ function createApp({
             .split(/\r?\n/)
             .map((line) => line.trim())
             .filter((line) => line.length > 0);
+    }
+
+    function parseReportNamesFromConfigLines(lines) {
+        const list = Array.isArray(lines) ? lines : [];
+        const names = new Set();
+
+        for (const rawLine of list) {
+            const line = String(rawLine || '').trim();
+            if (!line.startsWith('report.')) continue;
+
+            // Matches: report.<name>.<field>=...
+            const match = line.match(/^report\.([^.]+)\.[^=]+=/);
+            if (!match) continue;
+
+            const name = String(match[1] || '').trim();
+            if (!name) continue;
+            names.add(name);
+        }
+
+        return Array.from(names).sort((a, b) => a.localeCompare(b));
     }
 
     const completionCache = new Map();
@@ -722,6 +752,19 @@ function createApp({
                 suggestions,
                 values: completionValuesFromSuggestions(suggestions),
             });
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: error.stderr || error.message,
+            });
+        }
+    });
+
+    app.get('/api/reports', async (_req, res) => {
+        try {
+            const lines = await cachedCompletionLines('reports', ['rc.hooks=0', '_config'], 15000);
+            const reports = parseReportNamesFromConfigLines(lines);
+            res.json({ success: true, reports });
         } catch (error) {
             res.status(500).json({
                 success: false,
