@@ -230,20 +230,6 @@ class TaskApiClient {
         return order;
     }
 
-    sortByUrgency(tasks) {
-        const list = Array.isArray(tasks) ? tasks.slice() : [];
-
-        const urgencyFor = (task) => {
-            const status = String(task?.status || '').toLowerCase();
-            if (status === 'completed' || status === 'deleted') return 0;
-
-            const num = typeof task?.urgency === 'number' ? task.urgency : Number(task?.urgency);
-            return Number.isFinite(num) ? num : 0;
-        };
-
-        list.sort((a, b) => urgencyFor(b) - urgencyFor(a));
-        return list;
-    }
 
     async groupTasks(tasks, groupBy) {
         if (!groupBy || groupBy === 'none') {
@@ -372,9 +358,8 @@ class TaskApiClient {
 
         try {
             const tasks = JSON.parse(rawOutput);
-            const sorted = this.sortByUrgency(tasks);
-            const groups = await this.groupTasks(sorted, groupBy);
-            return { tasks: sorted, groups };
+            const groups = await this.groupTasks(tasks, groupBy);
+            return { tasks, groups };
         } catch (error) {
             throw new Error(`Failed to parse task export JSON: ${error.message}`);
         }
