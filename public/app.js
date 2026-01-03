@@ -142,22 +142,22 @@ class TaskApiClient {
          return await response.json();
      }
 
-     async getSettings() {
-         this.requireFetch();
-         const response = await this.fetchImpl(`${this.baseUrl}/settings`);
-         return await response.json();
-     }
-
-     async updateSettings(payload) {
-         this.requireFetch();
-         const response = await this.fetchImpl(`${this.baseUrl}/settings`, {
-             method: 'PUT',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify(payload),
-         });
-         return await response.json();
-     }
- }
+      async getSettings() {
+          this.requireFetch();
+          const response = await this.fetchImpl(`${this.baseUrl}/settings`);
+          return await response.json();
+      }
+ 
+      async updateSettings(payload) {
+          this.requireFetch();
+          const response = await this.fetchImpl(`${this.baseUrl}/settings`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+          });
+          return await response.json();
+      }
+  }
 
  class TaskQueryService {
      constructor(apiClient) {
@@ -317,58 +317,71 @@ class TaskApiClient {
     }
 
      async getTasks(filterOrReport, groupBy = null) {
-         // Preserve "" as a valid filter expression (meaning "export all").
-         // Only default to "next" when no argument was provided.
-          const normalized = filterOrReport === undefined ? 'next' : String(filterOrReport || '').trim();
-
-          const reportLookupEnabled = this.reportCache.value !== null;
-
-         const tokens = normalized ? normalized.split(/\s+/).filter(Boolean) : [];
-
+          // Preserve "" as a valid filter expression (meaning "export all").
+          // Only default to "next" when no argument was provided.
+           const normalized = filterOrReport === undefined ? 'next' : String(filterOrReport || '').trim();
+ 
+          const tokens = normalized ? normalized.split(/\s+/).filter(Boolean) : [];
+ 
           const reportNames = normalized && tokens.length > 0
               ? await this.getReportNamesCached()
               : new Set();
-
-          const reportCandidates = [];
-          void reportCandidates;
-
-
-         let args;
-
-         // If the last token is a report name, treat it as a report invocation.
-         // Example: "project:Home newest" => "project:Home export newest".
+ 
+          let report = null;
+          let filterTokens = tokens;
           if (tokens.length > 0) {
               const maybeReport = tokens[tokens.length - 1];
               if (reportNames.has(maybeReport)) {
-                 const report = maybeReport;
-                 const filterTokens = tokens.slice(0, -1);
-                 const filterPart = filterTokens.length > 0 ? `${filterTokens.join(' ')} ` : '';
-                 args = `${filterPart}export ${report}`;
-             }
-         }
-
-         if (!args) {
-             args = normalized ? `${normalized} export` : 'export';
-         }
-
-         const result = await this.apiClient.execute(args);
-
-        if (!result?.success) {
-            throw new Error(result?.error || 'Failed to load tasks');
-        }
-
-
-        const rawOutput = String(result?.output || '');
-        if (!rawOutput.trim()) return { tasks: [], groups: [] };
-
-        try {
-            const tasks = JSON.parse(rawOutput);
-            const groups = await this.groupTasks(tasks, groupBy);
-            return { tasks, groups };
-        } catch (error) {
-            throw new Error(`Failed to parse task export JSON: ${error.message}`);
-        }
-    }
+                  report = maybeReport;
+                  filterTokens = tokens.slice(0, -1);
+              }
+          }
+ 
+          const argsFilterPart = filterTokens.length > 0 ? `${filterTokens.join(' ')} ` : '';
+          const args = report ? `${argsFilterPart}export ${report}` : (normalized ? `${normalized} export` : 'export');
+ 
+          const result = await this.apiClient.execute(args);
+ 
+          if (!result?.success) {
+              throw new Error(result?.error || 'Failed to load tasks');
+          }
+ 
+          const rawOutput = String(result?.output || '');
+          if (!rawOutput.trim()) return { tasks: [], groups: [] };
+ 
+          try {
+              let tasks = JSON.parse(rawOutput);
+              if (!Array.isArray(tasks)) {
+                  tasks = tasks ? [tasks] : [];
+              }
+ 
+              // Taskwarrior's JSON export does not necessarily preserve report sorting.
+              // If we invoked a report: apply report sort settings manually.
+              // Otherwise default to urgency desc.
+              if (tasks.length > 1) {
+                  if (report) {
+                      const sortConfigRaw = await this.getTaskConfig(`report.${report}.sort`);
+                      const sortConfig = String(sortConfigRaw || '').trim();
+                      if (sortConfig) {
+                          tasks = sortTasksByReportSort(tasks, sortConfig);
+                      }
+                  }
+ 
+                  if (!report) {
+                      tasks = tasks.slice().sort((a, b) => {
+                          const aUrg = Number(a?.urgency) || 0;
+                          const bUrg = Number(b?.urgency) || 0;
+                          return bUrg - aUrg;
+                      });
+                  }
+              }
+ 
+              const groups = await this.groupTasks(tasks, groupBy);
+              return { tasks, groups };
+          } catch (error) {
+              throw new Error(`Failed to parse task export JSON: ${error.message}`);
+          }
+      }
 }
 
 class TaskCommandService {
@@ -468,6 +481,64 @@ const DATE_VALUE_ATTRS = ['due', 'wait', 'until', 'scheduled', 'start', 'end'];
 
 function escapeRegExp(text) {
     return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getTaskSortValue(task, field) {
+    const key = String(field || '').trim();
+    if (!key) return null;
+
+    const raw = task ? task[key] : undefined;
+    if (raw === undefined || raw === null) return null;
+
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+
+    const asNumber = Number(raw);
+    if (typeof raw !== 'boolean' && String(raw).trim() !== '' && Number.isFinite(asNumber)) {
+        return asNumber;
+    }
+
+    return String(raw);
+}
+
+function compareTaskSortValues(aValue, bValue) {
+    if (aValue === null && bValue === null) return 0;
+    if (aValue === null) return 1;
+    if (bValue === null) return -1;
+
+    if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return aValue - bValue;
+    }
+
+    return String(aValue).localeCompare(String(bValue));
+}
+
+function sortTasksByReportSort(tasks, sortConfig) {
+    const sortRaw = String(sortConfig || '').trim();
+    if (!sortRaw) return tasks;
+
+    const parts = sortRaw.split(',').map((part) => String(part || '').trim()).filter(Boolean);
+    if (parts.length === 0) return tasks;
+
+    const criteria = parts.map((part) => {
+        const tokens = part.split(/\s+/).filter(Boolean);
+        const field = tokens[0] ? String(tokens[0]).trim() : '';
+        const dirToken = tokens[1] ? String(tokens[1]).toLowerCase() : 'ascending';
+        const descending = dirToken === 'descending' || dirToken === 'desc' || dirToken === 'down';
+        return { field, descending };
+    }).filter((entry) => entry.field);
+
+    if (criteria.length === 0) return tasks;
+
+    return tasks.slice().sort((a, b) => {
+        for (const { field, descending } of criteria) {
+            const cmp = compareTaskSortValues(getTaskSortValue(a, field), getTaskSortValue(b, field));
+            if (cmp !== 0) {
+                return descending ? -cmp : cmp;
+            }
+        }
+
+        return 0;
+    });
 }
 
 function resolveAbbreviatedAttr(typedAttr, candidates = DATE_VALUE_ATTRS, minLen = DEFAULT_ATTR_ABBREV_MIN) {
@@ -1867,45 +1938,45 @@ function createTaskwarriorApp({
             }
         },
 
-        async refreshAppSettings() {
-            try {
-                const result = await apiClient.getSettings();
-                if (!result?.success) return;
+         async refreshAppSettings() {
+             try {
+                 const result = await apiClient.getSettings();
+                 if (!result?.success) return;
 
-                const rescheduleField = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
+                 const rescheduleField = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
 
-                this.settingsAppLoaded = {
-                    reschedule_field: rescheduleField,
-                };
-                this.settingsAppDraft = {
-                    reschedule_field: rescheduleField,
-                };
-            } catch {
-                // ignore
-            }
-        },
+                 this.settingsAppLoaded = {
+                     reschedule_field: rescheduleField,
+                 };
+                 this.settingsAppDraft = {
+                     reschedule_field: rescheduleField,
+                 };
+             } catch {
+                 // ignore
+             }
+         },
 
         resetAppSettingsDraft() {
             this.settingsAppDraft = { ...this.settingsAppLoaded };
         },
 
-        async saveAppSettings() {
-            try {
-                const payload = {
-                    reschedule_field: String(this.settingsAppDraft?.reschedule_field || '').trim(),
-                };
+         async saveAppSettings() {
+             try {
+                 const payload = {
+                     reschedule_field: String(this.settingsAppDraft?.reschedule_field || '').trim(),
+                 };
 
-                const result = await apiClient.updateSettings(payload);
-                if (!result?.success) {
-                    throw new Error(result?.error || 'Failed to save settings');
-                }
+                 const result = await apiClient.updateSettings(payload);
+                 if (!result?.success) {
+                     throw new Error(result?.error || 'Failed to save settings');
+                 }
 
-                await this.refreshAppSettings();
-                this.showToast('Saved app settings', 'success');
-            } catch (error) {
-                this.showToast(String(error?.message || error), 'error');
-            }
-        },
+                 await this.refreshAppSettings();
+                 this.showToast('Saved app settings', 'success');
+             } catch (error) {
+                 this.showToast(String(error?.message || error), 'error');
+             }
+         },
 
         reloadAndReapplyCurrentView() {
             // Persist before reload to make restoration deterministic.

@@ -198,12 +198,21 @@ function createApp({
 
     let settingsDb;
 
-    async function ensureSettingsDb() {
-        if (settingsDb) return settingsDb;
-        await ensureSettingsDbDirExists(settingsDbPath);
-        settingsDb = openSettingsDb(settingsDbPath);
-        return settingsDb;
-    }
+     async function ensureSettingsDb() {
+         if (settingsDb) return settingsDb;
+         await ensureSettingsDbDirExists(settingsDbPath);
+         settingsDb = openSettingsDb(settingsDbPath);
+         return settingsDb;
+     }
+
+     // kept for backward compatibility; settings are now in taskrc/reports
+     function settingsApiDisabled() {
+         return {
+             success: false,
+             error: 'settings API removed; configure Taskwarrior directly',
+         };
+     }
+
 
     async function execTask(argsArray) {
         await ensureTaskrcExists(taskrcPath, taskdataPath);
@@ -454,64 +463,15 @@ function createApp({
         });
     }
 
-     // Settings: app settings
-     app.get('/api/settings', async (_req, res) => {
-         try {
-             const db = await ensureSettingsDb();
-             const rows = db.prepare('SELECT key, value FROM app_settings').all();
-             const map = new Map(rows.map((row) => [String(row.key), String(row.value)]));
+      // Settings API was removed (reports replace builtin filter settings).
+      app.get('/api/settings', async (_req, res) => {
+          res.status(410).json(settingsApiDisabled());
+      });
 
-             const rescheduleField = map.get('reschedule_field') || 'due';
+      app.put('/api/settings', async (_req, res) => {
+          res.status(410).json(settingsApiDisabled());
+      });
 
-             res.json({
-                 success: true,
-                 settings: {
-                     reschedule_field: rescheduleField,
-                 },
-             });
-         } catch (error) {
-             res.status(500).json({ success: false, error: error.message });
-         }
-     });
-
-     app.put('/api/settings', async (req, res) => {
-         try {
-             const db = await ensureSettingsDb();
-
-             const rescheduleFieldRaw = req.body?.reschedule_field;
-             if (rescheduleFieldRaw === undefined) {
-                 return res.status(400).json({ success: false, error: 'reschedule_field is required' });
-             }
-
-             if (typeof rescheduleFieldRaw !== 'string') {
-                 return res.status(400).json({ success: false, error: 'reschedule_field must be a string' });
-             }
-
-             const rescheduleField = rescheduleFieldRaw.trim();
-             if (!rescheduleField) {
-                 return res.status(400).json({ success: false, error: 'reschedule_field must not be empty' });
-             }
-
-             if (!/^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(rescheduleField)) {
-                 return res.status(400).json({ success: false, error: 'reschedule_field has invalid characters' });
-             }
-
-             db.prepare(`
-                 INSERT INTO app_settings (key, value)
-                 VALUES ('reschedule_field', ?)
-                 ON CONFLICT(key) DO UPDATE SET value = excluded.value
-             `).run(rescheduleField);
-
-             res.json({
-                 success: true,
-                 settings: {
-                     reschedule_field: rescheduleField,
-                 },
-             });
-         } catch (error) {
-             res.status(500).json({ success: false, error: error.message });
-         }
-     });
 
      // Settings: custom filters
      app.get('/api/filters', async (_req, res) => {

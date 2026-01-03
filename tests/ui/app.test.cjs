@@ -109,6 +109,49 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(seen.some((args) => args.trim() === 'status:pending export newest')).toBe(true);
     });
 
+    test('applies report.sort when export order is unstable', async () => {
+        const backend = createMockBackend();
+        backend.state.reports = ['prio'];
+
+        // Return tasks in non-sorted order; UI should apply report.prio.sort.
+        backend.state.tasks = [
+            { uuid: 'u1', description: 'B', status: 'pending', urgency: 1, priority: 'B' },
+            { uuid: 'u2', description: 'A', status: 'pending', urgency: 1, priority: 'A' },
+        ];
+
+        backend.state.taskConfig['report.prio.sort'] = 'priority ascending';
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.selectedView = { type: 'search' };
+        vm.lastSearch.term = 'status:pending prio';
+        vm.lastSearch.pendingOnly = false;
+        await vm.refreshCurrentPanel();
+        await flushPromises(vm, 6);
+
+        expect(vm.tasks.map((t) => t.description)).toEqual(['A', 'B']);
+    });
+
+    test('defaults to urgency sorting when not using report', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks = [
+            { uuid: 'u1', description: 'Low', status: 'pending', urgency: 1 },
+            { uuid: 'u2', description: 'High', status: 'pending', urgency: 3 },
+        ];
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.selectedView = { type: 'search' };
+        vm.lastSearch.term = 'status:pending';
+        vm.lastSearch.pendingOnly = false;
+        await vm.refreshCurrentPanel();
+        await flushPromises(vm, 6);
+
+        expect(vm.tasks.map((t) => t.description)).toEqual(['High', 'Low']);
+    });
+
     test('renders due, scheduled, and waiting dates in task list', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({
