@@ -646,16 +646,18 @@ function createTaskwarriorApp({
             taskrcLoading: false,
             taskrcLoadPromise: null,
 
-             builtinFilters: {
-                 today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
-                 next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
-                 all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
-             },
-             settingsBuiltinVisibilityDraft: {
-                 today: { visible: true },
-                 next: { visible: true },
-                 all: { visible: true },
-             },
+              builtinFilters: {
+                  today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
+                  inbox: { key: 'inbox', name: 'Inbox', filter: 'status:pending project:', visible: true, group_by: null },
+                  next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
+                  all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
+              },
+              settingsBuiltinVisibilityDraft: {
+                  today: { visible: true },
+                  inbox: { visible: true },
+                  next: { visible: true },
+                  all: { visible: true },
+              },
 
              settingsAppDraft: {
                  reschedule_field: 'due',

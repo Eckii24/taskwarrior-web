@@ -251,11 +251,15 @@ describe('Backend API (supertest)', () => {
         const byKey = new Map(list.body.filters.map((f) => [f.key, f]));
 
         expect(byKey.has('today')).toBe(true);
+        expect(byKey.has('inbox')).toBe(true);
         expect(byKey.has('next')).toBe(true);
         expect(byKey.has('all')).toBe(true);
 
         expect(byKey.get('today').filter).toBe('due:today status:pending');
         expect(byKey.get('today').group_by).toBe(null);
+
+        expect(byKey.get('inbox').filter).toBe('status:pending project:');
+        expect(byKey.get('inbox').group_by).toBe(null);
 
         const update = await request(app)
             .put('/api/builtin-filters/today')

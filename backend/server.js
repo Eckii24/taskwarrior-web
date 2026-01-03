@@ -97,6 +97,9 @@ function getDefaultTaskrc(taskdataPath) {
         'report.next.description=Next (pending, page limited)',
         'report.next.filter=status:pending limit:page',
         '',
+        'report.inbox.description=Inbox (pending tasks without project)',
+        'report.inbox.filter=status:pending project:',
+        '',
         'report.today.description=Today (pending, due today)',
         'report.today.filter=due:today status:pending',
         '',
@@ -177,6 +180,7 @@ function openSettingsDb(settingsDbPath) {
     `);
 
     seedBuiltin.run('today', 'Today', 'due:today status:pending', 1, now, now);
+    seedBuiltin.run('inbox', 'Inbox', 'status:pending project:', 1, now, now);
     seedBuiltin.run('next', 'Next', 'status:pending limit:page', 1, now, now);
     seedBuiltin.run('all', 'All', '', 1, now, now);
 
