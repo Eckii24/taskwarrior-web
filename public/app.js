@@ -1294,6 +1294,11 @@ function createTaskwarriorApp({
                 // links: [text](url)
                 out = out.replace(/\[([^\]]+)]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
 
+                // auto-link plain URLs
+                out = out.replace(/(https?:\/\/[^\s<]+[^\s<\.)\]\}>,:;"'])/g, (match) => {
+                    return `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`;
+                });
+
                 // bold and italic (simple, non-nested)
                 out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
                 out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');

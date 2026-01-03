@@ -864,6 +864,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
         vm.modal.annotationDraft = 'note 1';
         expect(vm.renderMarkdown('**hi**')).toContain('<strong>hi</strong>');
+        expect(vm.renderMarkdown('See https://example.com now')).toContain('<a href="https://example.com"');
         await vm.addAnnotation();
         await flushPromises(vm, 3);
         expect(vm.toast.text).toContain('Added annotation');
