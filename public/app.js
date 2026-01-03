@@ -646,15 +646,15 @@ function createTaskwarriorApp({
             taskrcLoading: false,
             taskrcLoadPromise: null,
 
-            builtinFilters: {
-                today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
-                next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
-                all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
-            },
-             settingsBuiltinDraft: {
-                 today: { name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
-                 next: { name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
-                 all: { name: 'All', filter: '', visible: true, group_by: null },
+             builtinFilters: {
+                 today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
+                 next: { key: 'next', name: 'Next', filter: 'status:pending limit:page', visible: true, group_by: null },
+                 all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
+             },
+             settingsBuiltinVisibilityDraft: {
+                 today: { visible: true },
+                 next: { visible: true },
+                 all: { visible: true },
              },
 
              settingsAppDraft: {
@@ -1882,8 +1882,8 @@ function createTaskwarriorApp({
             try {
                 const result = await apiClient.getBuiltinFilters();
                 if (result.success && Array.isArray(result.filters)) {
-                    const next = { ...this.builtinFilters };
-                    const draft = { ...this.settingsBuiltinDraft };
+                     const next = { ...this.builtinFilters };
+                     const draft = { ...this.settingsBuiltinVisibilityDraft };
 
                     for (const entry of result.filters) {
                         const key = String(entry?.key || '').trim();
@@ -1897,16 +1897,13 @@ function createTaskwarriorApp({
                             group_by: entry?.group_by || null,
                         };
 
-                        draft[key] = {
-                            name: next[key].name,
-                            filter: next[key].filter,
-                            visible: next[key].visible,
-                            group_by: next[key].group_by,
-                        };
+                         draft[key] = {
+                             visible: next[key].visible,
+                         };
                     }
 
-                    this.builtinFilters = next;
-                    this.settingsBuiltinDraft = draft;
+                     this.builtinFilters = next;
+                     this.settingsBuiltinVisibilityDraft = draft;
 
                     if (this.selectedView.type === 'builtin') {
                         const selectedKey = String(this.selectedView.key || '').trim();
@@ -3376,53 +3373,49 @@ function createTaskwarriorApp({
             return {};
         },
 
-        async saveBuiltinFilters() {
-            const keys = ['today', 'next', 'all'];
-
-            try {
-                for (const key of keys) {
-                    const draft = this.settingsBuiltinDraft[key];
-                    if (!draft) continue;
-
-                    const payload = {
-                        name: String(draft.name || '').trim(),
-                        filter: String(draft.filter ?? ''),
-                        visible: Boolean(draft.visible),
-                    };
-
-                    const result = await apiClient.updateBuiltinFilter(key, payload);
-                    if (!result?.success) {
-                        throw new Error(result?.error || `Failed to save built-in filter: ${key}`);
-                    }
-                }
-
-                await this.refreshBuiltinFilters();
-                this.showToast('Saved filter settings', 'success');
-            } catch (error) {
-                this.showToast(String(error?.message || error), 'error');
-            }
-        },
-
-        toggleBuiltinVisibility(key) {
-            const k = String(key || '').trim();
-            if (!k || !this.settingsBuiltinDraft[k]) return;
-            this.settingsBuiltinDraft[k].visible = !this.settingsBuiltinDraft[k].visible;
-        },
-
-        resetBuiltinSettingsDraft() {
-            const keys = ['today', 'next', 'all'];
-            const next = { ...this.settingsBuiltinDraft };
-            for (const key of keys) {
-                const current = this.builtinFilters[key];
-                if (!current) continue;
-                next[key] = {
-                    name: current.name,
-                    filter: current.filter,
-                    visible: current.visible,
-                };
-            }
-            this.settingsBuiltinDraft = next;
-        },
+         async saveBuiltinFilters() {
+             const keys = ['today', 'next', 'all'];
+ 
+             try {
+                 for (const key of keys) {
+                     const draft = this.settingsBuiltinVisibilityDraft[key];
+                     if (!draft) continue;
+ 
+                     const payload = {
+                         visible: Boolean(draft.visible),
+                     };
+ 
+                     const result = await apiClient.updateBuiltinFilter(key, payload);
+                     if (!result?.success) {
+                         throw new Error(result?.error || `Failed to save built-in filter visibility: ${key}`);
+                     }
+                 }
+ 
+                 await this.refreshBuiltinFilters();
+                 this.showToast('Saved filter settings', 'success');
+             } catch (error) {
+                 this.showToast(String(error?.message || error), 'error');
+             }
+         },
+ 
+         toggleBuiltinVisibility(key) {
+             const k = String(key || '').trim();
+             if (!k || !this.settingsBuiltinVisibilityDraft[k]) return;
+             this.settingsBuiltinVisibilityDraft[k].visible = !this.settingsBuiltinVisibilityDraft[k].visible;
+         },
+ 
+         resetBuiltinSettingsDraft() {
+             const keys = ['today', 'next', 'all'];
+             const next = { ...this.settingsBuiltinVisibilityDraft };
+             for (const key of keys) {
+                 const current = this.builtinFilters[key];
+                 if (!current) continue;
+                 next[key] = {
+                     visible: current.visible,
+                 };
+             }
+             this.settingsBuiltinVisibilityDraft = next;
+         },
     },
 });
 

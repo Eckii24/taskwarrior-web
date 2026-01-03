@@ -517,6 +517,22 @@ a:hover {
     margin-top: 10px;
 }
 
+.settings-hint {
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.4;
+    margin: 8px 0 14px;
+}
+
+.settings-hint code {
+    font-size: 0.9em;
+}
+
+.settings-row .text-input:disabled {
+    opacity: 0.75;
+    cursor: not-allowed;
+}
+
 .main {
     grid-row: 2;
     height: calc(100vh - var(--topbar-h));

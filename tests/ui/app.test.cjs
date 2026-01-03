@@ -1175,30 +1175,29 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.openSettings();
         await flushPromises(vm, 3);
 
-        vm.settingsBuiltinDraft.today.name = 'My Today';
-        vm.settingsBuiltinDraft.today.filter = 'due:tomorrow status:pending';
         vm.toggleBuiltinVisibility('today');
-        expect(vm.settingsBuiltinDraft.today.visible).toBe(false);
+        expect(vm.settingsBuiltinVisibilityDraft.today.visible).toBe(false);
 
         await vm.saveBuiltinFilters();
         await flushPromises(vm, 4);
 
-        expect(vm.builtinFilters.today.name).toBe('My Today');
+        expect(vm.builtinFilters.today.name).toBe('Today');
         expect(vm.builtinFilters.today.visible).toBe(false);
+        expect(vm.settingsBuiltinVisibilityDraft.today.visible).toBe(false);
 
         vm.selectBuiltin('today');
         await flushPromises(vm, 2);
         expect(vm.selectedView).not.toEqual({ type: 'builtin', key: 'today' });
 
         vm.toggleBuiltinVisibility('today');
-        expect(vm.settingsBuiltinDraft.today.visible).toBe(true);
+        expect(vm.settingsBuiltinVisibilityDraft.today.visible).toBe(true);
         await vm.saveBuiltinFilters();
         await flushPromises(vm, 4);
 
         vm.selectBuiltin('today');
         await flushPromises(vm, 4);
-        expect(vm.currentTitle).toBe('My Today');
-        expect(vm.tasks.map((t) => t.uuid)).toEqual(['uuid-2']);
+        expect(vm.currentTitle).toBe('Today');
+        expect(vm.tasks.map((t) => t.uuid)).toEqual(['uuid-1']);
     });
 
     test('groups tasks by project and persists per view', async () => {

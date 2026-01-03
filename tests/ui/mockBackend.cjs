@@ -290,8 +290,7 @@ function createMockBackend() {
 
             const next = {
                 ...existing,
-                name: body.name !== undefined ? String(body.name) : existing.name,
-                filter: body.filter !== undefined ? String(body.filter) : existing.filter,
+                // name/filter come from taskrc reports and are treated as read-only.
                 visible: body.visible !== undefined ? Boolean(body.visible) : existing.visible,
                 group_by: body.group_by !== undefined ? String(body.group_by || '').trim() || null : existing.group_by,
             };
