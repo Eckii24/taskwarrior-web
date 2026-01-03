@@ -34,14 +34,19 @@ class TaskApiClient {
         }
     }
 
-    async execute(args) {
+    async execute(args, annotation) {
         try {
             this.requireFetch();
+
+            const body = { args };
+            if (annotation !== undefined) {
+                body.annotation = annotation;
+            }
 
             const response = await this.fetchImpl(`${this.baseUrl}/task`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ args }),
+                body: JSON.stringify(body),
             });
             return await response.json();
         } catch (error) {
@@ -371,8 +376,8 @@ class TaskCommandService {
         this.apiClient = apiClient;
     }
 
-    async addTask(description) {
-        return await this.apiClient.execute(`add ${description}`);
+    async addTask(description, annotation) {
+        return await this.apiClient.execute(`add ${description}`, annotation);
     }
 
     async modifyTask(taskUuid, modifications) {
@@ -624,6 +629,7 @@ function createTaskwarriorApp({
                 tags: '',
                 priority: '',
                 due: '',
+                initialAnnotation: '', // For adding tasks with an initial annotation
                  showTaskDetails: false,
                  taskDetailsOutput: '',
                  // Annotations (Taskwarrior 'annotations' field)
@@ -1055,6 +1061,7 @@ function createTaskwarriorApp({
                 const tagsEmpty = !String(this.modal.tags || '').trim();
                 const priorityEmpty = !String(this.modal.priority || '').trim();
                 const dueEmpty = !String(this.modal.due || '').trim();
+                const initialAnnotationEmpty = !String(this.modal.initialAnnotation || '').trim();
 
                 const noAttributeDropdown = !this.modal.activeAttributeDropdown;
                 const attributeValueEmpty = !String(this.modal.attributeInputValue || '').trim();
@@ -1065,6 +1072,7 @@ function createTaskwarriorApp({
                     tagsEmpty &&
                     priorityEmpty &&
                     dueEmpty &&
+                    initialAnnotationEmpty &&
                     noAttributeDropdown &&
                     attributeValueEmpty
                 );
@@ -2307,6 +2315,7 @@ function createTaskwarriorApp({
                  baseModal.tags = '';
                  baseModal.priority = '';
                  baseModal.due = '';
+                 baseModal.initialAnnotation = '';
                  baseModal.originalDescription = '';
                  baseModal.originalProject = '';
                  baseModal.originalTags = '';
@@ -2341,6 +2350,7 @@ function createTaskwarriorApp({
             this.modal.tags = '';
             this.modal.priority = '';
             this.modal.due = '';
+            this.modal.initialAnnotation = '';
              this.modal.showTaskDetails = false;
              this.modal.taskDetailsOutput = '';
              this.modal.showAnnotations = false;
@@ -2656,7 +2666,7 @@ function createTaskwarriorApp({
              const type = this.modal.type;
 
 
-            if (type === 'add') {
+             if (type === 'add') {
                 const description = String(this.modal.description || '').trim();
                 if (!description) return;
                 
@@ -2683,7 +2693,10 @@ function createTaskwarriorApp({
                      taskCommand += ` ${scheduleField}:${this.modal.due}`;
                  }
                 
-                const result = await commandService.addTask(taskCommand);
+                // Get initial annotation if provided
+                const annotation = String(this.modal.initialAnnotation || '').trim() || undefined;
+                
+                const result = await commandService.addTask(taskCommand, annotation);
                 if (result.success) {
                     this.showToast('Added task', 'success');
                     this.closeModal();

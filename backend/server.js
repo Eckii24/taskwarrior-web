@@ -776,7 +776,7 @@ function createApp({
 // Single endpoint to execute taskwarrior commands
     app.post('/api/task', async (req, res) => {
         try {
-            const { args } = req.body;
+            const { args, annotation } = req.body;
 
             if (!args || (!Array.isArray(args) && typeof args !== 'string')) {
                 return res.status(400).json({
@@ -789,6 +789,41 @@ function createApp({
 
             // Execute taskwarrior command using execFile for security
             const { stdout, stderr } = await execTask(argsArray);
+
+            // If annotation is provided and this is an 'add' command, annotate the newly created task
+            if (annotation && typeof annotation === 'string' && annotation.trim()) {
+                const annotationText = annotation.trim();
+                
+                // Check if this is an 'add' command (first non-rc arg should be 'add')
+                const firstNonRcArg = argsArray.find(arg => !String(arg).startsWith('rc.'));
+                const isAddCommand = firstNonRcArg === 'add';
+                
+                if (isAddCommand) {
+                    // Extract the task ID from stdout (taskwarrior outputs "Created task <id>.")
+                    const match = stdout.match(/Created task (\d+)\./);
+                    if (match) {
+                        const taskId = match[1];
+                        
+                        // Add annotation to the newly created task
+                        // Use single quotes and escape any embedded single quotes
+                        const escapedAnnotation = annotationText.replace(/'/g, "\\'");
+                        const annotateArgs = [taskId, 'annotate', `'${escapedAnnotation}'`];
+                        
+                        try {
+                            await execTask(annotateArgs);
+                        } catch (annotateError) {
+                            // If annotation fails, we still return success for task creation
+                            // but include a warning in stderr
+                            const warningMsg = `Task created but annotation failed: ${annotateError.message}`;
+                            return res.json({
+                                success: true,
+                                output: stdout,
+                                error: stderr ? `${stderr}\n${warningMsg}` : warningMsg,
+                            });
+                        }
+                    }
+                }
+            }
 
             res.json({
                 success: true,

@@ -1312,6 +1312,16 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="field" style="margin-top: 16px;">
+                        <input
+                            type="text"
+                            v-model="modal.initialAnnotation"
+                            class="text-input"
+                            placeholder="Initial annotation (optional)"
+                            autocomplete="off"
+                        >
+                    </div>
                 </div>
 
                 <div v-else-if="modal.type === 'edit'" class="modal-form">

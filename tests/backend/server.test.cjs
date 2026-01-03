@@ -497,4 +497,129 @@ describe('Backend API (supertest)', () => {
         expect(errorRes.status).toBe(500);
         expect(errorRes.body.success).toBe(false);
     });
+
+    test('POST /api/task with annotation field', async () => {
+        const dir = tmpPath('task-annotation');
+        const taskrcPath = path.join(dir, 'taskrc');
+        const dbPath = path.join(dir, 'settings.sqlite');
+
+        let taskAddCalled = false;
+        let annotateCalledForTask = null;
+        let annotateCalledWithText = null;
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async (args) => {
+                // args will have rc.confirmation=off prepended
+                // For 'add': [rc.confirmation=off, 'add', ...]
+                // For 'annotate': [rc.confirmation=off, '42', 'annotate', "'annotation text'"]
+                const nonRcArgs = args.filter(arg => !arg.startsWith('rc.'));
+                
+                if (nonRcArgs[0] === 'add') {
+                    taskAddCalled = true;
+                    return { stdout: 'Created task 42.', stderr: '' };
+                }
+                
+                if (nonRcArgs[1] === 'annotate') {
+                    // nonRcArgs: ['42', 'annotate', "'annotation text'"]
+                    annotateCalledForTask = nonRcArgs[0];
+                    annotateCalledWithText = nonRcArgs[2];
+                    return { stdout: 'Annotated task 42.', stderr: '' };
+                }
+                
+                return { stdout: '', stderr: '' };
+            },
+        });
+
+        // Test task creation with annotation
+        const res = await request(app)
+            .post('/api/task')
+            .send({ 
+                args: 'add Test task with annotation',
+                annotation: 'This is my first annotation'
+            });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(taskAddCalled).toBe(true);
+        expect(annotateCalledForTask).toBe('42');
+        expect(annotateCalledWithText).toContain('This is my first annotation');
+    });
+
+    test('POST /api/task without annotation field works normally', async () => {
+        const dir = tmpPath('task-no-annotation');
+        const taskrcPath = path.join(dir, 'taskrc');
+        const dbPath = path.join(dir, 'settings.sqlite');
+
+        let annotateWasCalled = false;
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async (args) => {
+                const command = args.find(arg => !arg.startsWith('rc.'));
+                
+                if (command === 'annotate') {
+                    annotateWasCalled = true;
+                }
+                
+                if (command === 'add') {
+                    return { stdout: 'Created task 42.', stderr: '' };
+                }
+                
+                return { stdout: '', stderr: '' };
+            },
+        });
+
+        // Test task creation without annotation
+        const res = await request(app)
+            .post('/api/task')
+            .send({ args: 'add Test task without annotation' });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(annotateWasCalled).toBe(false);
+    });
+
+    test('POST /api/task with empty annotation does not add annotation', async () => {
+        const dir = tmpPath('task-empty-annotation');
+        const taskrcPath = path.join(dir, 'taskrc');
+        const dbPath = path.join(dir, 'settings.sqlite');
+
+        let annotateWasCalled = false;
+
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath,
+            settingsDbPath: dbPath,
+            execTaskOverride: async (args) => {
+                const command = args.find(arg => !arg.startsWith('rc.'));
+                
+                if (command === 'annotate') {
+                    annotateWasCalled = true;
+                }
+                
+                if (command === 'add') {
+                    return { stdout: 'Created task 42.', stderr: '' };
+                }
+                
+                return { stdout: '', stderr: '' };
+            },
+        });
+
+        // Test task creation with empty annotation
+        const res = await request(app)
+            .post('/api/task')
+            .send({ 
+                args: 'add Test task',
+                annotation: '  '  // empty/whitespace only
+            });
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+        expect(annotateWasCalled).toBe(false);
+    });
 });
