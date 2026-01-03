@@ -1315,13 +1315,13 @@
                     </div>
 
                     <div class="field" style="margin-top: 16px;">
-                        <input
-                            type="text"
+                        <textarea
                             v-model="modal.initialAnnotation"
                             class="text-input"
                             placeholder="Initial annotation (optional)"
+                            rows="3"
                             autocomplete="off"
-                        >
+                        ></textarea>
                     </div>
                 </div>
 
@@ -1469,14 +1469,13 @@
                         <div v-if="modal.showAnnotations" class="collapsible-content">
                             <div class="annotations">
                                 <div class="annotations-new">
-                                    <input
-                                        type="text"
+                                    <textarea
                                         v-model="modal.annotationDraft"
                                         class="text-input"
                                         placeholder="Add annotation"
+                                        rows="3"
                                         autocomplete="off"
-                                        @keydown.enter.prevent="addAnnotation"
-                                    >
+                                    ></textarea>
                                     <button
                                         class="btn small primary"
                                         type="button"
@@ -1521,20 +1520,19 @@
                                         </div>
 
                                         <div v-if="modal.annotationEditKey === (String(annotation.entry || '').trim() + '|' + String(annotation.description || ''))" class="annotation-edit">
-                                            <input
-                                                type="text"
+                                            <textarea
                                                 v-model="modal.annotationEditDraft"
                                                 class="text-input"
+                                                rows="3"
                                                 autocomplete="off"
-                                                @keydown.enter.prevent="saveEditAnnotation(annotation)"
                                                 @keydown.esc.prevent="cancelEditAnnotation"
-                                            >
+                                            ></textarea>
                                             <div class="annotation-edit-actions">
                                                 <button class="btn small" type="button" @click="cancelEditAnnotation">Cancel</button>
                                                 <button class="btn small primary" type="button" @click="saveEditAnnotation(annotation)" :disabled="!modal.annotationEditDraft || busyTaskUuids[modal.taskId]">Save</button>
                                             </div>
                                         </div>
-                                        <div v-else class="annotation-text">{{ annotation.description }}</div>
+                                        <div v-else class="annotation-text annotation-markdown" v-html="renderMarkdown(annotation.description)"></div>
                                     </div>
                                 </div>
                             </div>

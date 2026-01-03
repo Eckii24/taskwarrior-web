@@ -1273,6 +1273,39 @@ function createTaskwarriorApp({
             }, durationMs);
         },
 
+        renderMarkdown(text) {
+            const input = String(text || '');
+
+            // Tiny, safe-ish subset renderer (no raw HTML passthrough).
+            // Supports: paragraphs, line breaks, inline code, **bold**, *italic*, and links.
+            const escapeHtml = (value) => String(value)
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+
+            const renderInline = (raw) => {
+                let out = escapeHtml(raw);
+
+                // inline code
+                out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+                // links: [text](url)
+                out = out.replace(/\[([^\]]+)]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+                // bold and italic (simple, non-nested)
+                out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+                return out;
+            };
+
+            const lines = input.replace(/\r\n?/g, '\n').split('\n');
+            const html = lines.map((line) => renderInline(line)).join('<br>');
+            return `<p>${html}</p>`;
+        },
+
         resetCompletion() {
             this.completion = {
                 field: null,
@@ -2645,12 +2678,14 @@ function createTaskwarriorApp({
              const uuid = String(this.modal?.taskId || '').trim();
              if (!uuid) return;
 
-             const text = String(this.modal.annotationDraft || '').trim();
-             if (!text) return;
+              const text = String(this.modal.annotationDraft || '').trim();
+              if (!text) return;
 
-             await this.withBusyTask(uuid, async () => {
-                 const arg = sanitizeTaskCommandArg(text);
-                 const result = await commandService.annotateTask(uuid, arg);
+              const normalized = text.replace(/\s*\n\s*/g, ' / ');
+
+              await this.withBusyTask(uuid, async () => {
+                  const arg = sanitizeTaskCommandArg(normalized);
+                  const result = await commandService.annotateTask(uuid, arg);
                  if (result.success) {
                      this.modal.annotationDraft = '';
                      await this.refreshTaskAnnotations(uuid);
@@ -2679,18 +2714,21 @@ function createTaskwarriorApp({
              if (!uuid) return;
 
              const entry = String(annotation?.entry || '').trim();
-             const original = String(annotation?.description || '');
-             const draft = String(this.modal.annotationEditDraft || '').trim();
+              const original = String(annotation?.description || '');
+              const draftRaw = String(this.modal.annotationEditDraft || '').trim();
 
-             if (!draft) return;
-             if (draft === original) {
-                 this.cancelEditAnnotation();
-                 return;
-             }
+              if (!draftRaw) return;
 
-             await this.withBusyTask(uuid, async () => {
-                 const deleteArg = sanitizeTaskCommandArg(original);
-                 const delResult = await commandService.denotateTask(uuid, deleteArg);
+              const draft = draftRaw.replace(/\s*\n\s*/g, ' / ');
+
+              if (draft === original) {
+                  this.cancelEditAnnotation();
+                  return;
+              }
+ 
+              await this.withBusyTask(uuid, async () => {
+                  const deleteArg = sanitizeTaskCommandArg(original);
+                  const delResult = await commandService.denotateTask(uuid, deleteArg);
                  if (!delResult.success) {
                      this.showToast(delResult.error || 'Failed to update annotation', 'error');
                      return;

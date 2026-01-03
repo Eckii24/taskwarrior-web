@@ -863,6 +863,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(String(vm.modal.taskDetailsOutput)).toContain('UUID: uuid-1');
 
         vm.modal.annotationDraft = 'note 1';
+        expect(vm.renderMarkdown('**hi**')).toContain('<strong>hi</strong>');
         await vm.addAnnotation();
         await flushPromises(vm, 3);
         expect(vm.toast.text).toContain('Added annotation');
