@@ -283,8 +283,11 @@ function createApp({
             const line = String(rawLine || '').trim();
             if (!line.startsWith('report.')) continue;
 
-            // Matches: report.<name>.<field>=...
-            const match = line.match(/^report\.([^.]+)\.[^=]+=/);
+            // Taskwarrior's `_config` output differs across versions:
+            // - some print `report.<name>.<field>=...`
+            // - others print `report.<name>.<field>`
+            // We accept both so report discovery works reliably.
+            const match = line.match(/^report\.([^.]+)\.[^=]+(?:=|$)/);
             if (!match) continue;
 
             const name = String(match[1] || '').trim();

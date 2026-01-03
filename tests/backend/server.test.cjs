@@ -416,11 +416,12 @@ describe('Backend API (supertest)', () => {
                 if (str.includes('_config')) {
                     return {
                         stdout: [
-                            'report.next.description=Next tasks',
-                            'report.next.filter=status:pending',
-                            'report.today.filter=due:today status:pending',
-                            'report.all.filter=',
-                            'color.due.today=red',
+                            // Some Taskwarrior versions emit `key=value`, others only the key.
+                            'report.next.description',
+                            'report.next.filter',
+                            'report.today.filter',
+                            'report.all.filter',
+                            'color.due.today',
                             '',
                         ].join('\n'),
                         stderr: '',
