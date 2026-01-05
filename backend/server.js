@@ -470,14 +470,51 @@ function createApp({
         });
     }
 
-      // Settings API was removed (reports replace builtin filter settings).
-      app.get('/api/settings', async (_req, res) => {
-          res.status(410).json(settingsApiDisabled());
-      });
+     // Settings: app-level preferences (stored in settings DB).
+     app.get('/api/settings', async (_req, res) => {
+         try {
+             const db = await ensureSettingsDb();
+             const rows = db.prepare('SELECT key, value FROM app_settings').all();
+             const settings = {};
+             for (const entry of rows) {
+                 if (!entry?.key) continue;
+                 settings[String(entry.key)] = entry.value;
+             }
 
-      app.put('/api/settings', async (_req, res) => {
-          res.status(410).json(settingsApiDisabled());
-      });
+             const rescheduleField = String(settings.reschedule_field || 'due').trim() || 'due';
+             res.json({
+                 success: true,
+                 settings: {
+                     reschedule_field: rescheduleField,
+                 },
+             });
+         } catch (error) {
+             res.status(500).json({ success: false, error: error.message });
+         }
+     });
+
+     app.put('/api/settings', async (req, res) => {
+         try {
+             const db = await ensureSettingsDb();
+             const rescheduleFieldRaw = req.body?.reschedule_field;
+             const rescheduleField = typeof rescheduleFieldRaw === 'string' ? String(rescheduleFieldRaw).trim() : '';
+             if (!rescheduleField) {
+                 return res.status(400).json({ success: false, error: 'reschedule_field must not be empty' });
+             }
+
+             db.prepare('INSERT INTO app_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+                 .run('reschedule_field', rescheduleField);
+
+             res.json({
+                 success: true,
+                 settings: {
+                     reschedule_field: rescheduleField,
+                 },
+             });
+         } catch (error) {
+             res.status(500).json({ success: false, error: error.message });
+         }
+     });
 
 
      // Settings: custom filters

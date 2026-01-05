@@ -210,7 +210,7 @@ describe('Backend API (supertest)', () => {
         expect(missingDelete.body.success).toBe(false);
     });
 
-    test('settings API is removed (410)', async () => {
+    test('settings API returns and updates reschedule field', async () => {
         const dir = tmpPath('settings');
         const dbPath = path.join(dir, 'settings.sqlite');
         const taskrcPath = path.join(dir, 'taskrc');
@@ -223,12 +223,23 @@ describe('Backend API (supertest)', () => {
         });
 
         const getDefault = await request(app).get('/api/settings');
-        expect(getDefault.status).toBe(410);
-        expect(getDefault.body.success).toBe(false);
+        expect(getDefault.status).toBe(200);
+        expect(getDefault.body.success).toBe(true);
+        expect(getDefault.body.settings.reschedule_field).toBe('due');
+
+        const invalidPut = await request(app).put('/api/settings').send({ reschedule_field: '' });
+        expect(invalidPut.status).toBe(400);
+        expect(invalidPut.body.success).toBe(false);
 
         const put = await request(app).put('/api/settings').send({ reschedule_field: 'wait' });
-        expect(put.status).toBe(410);
-        expect(put.body.success).toBe(false);
+        expect(put.status).toBe(200);
+        expect(put.body.success).toBe(true);
+        expect(put.body.settings.reschedule_field).toBe('wait');
+
+        const getUpdated = await request(app).get('/api/settings');
+        expect(getUpdated.status).toBe(200);
+        expect(getUpdated.body.success).toBe(true);
+        expect(getUpdated.body.settings.reschedule_field).toBe('wait');
     });
 
     test('builtin filters API (seed + update)', async () => {
