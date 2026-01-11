@@ -510,6 +510,51 @@ a:hover {
     font-family: inherit;
 }
 
+.settings-multi-chip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+}
+
+.settings-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel-2);
+    color: var(--text);
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings-chip input {
+    width: 16px;
+    height: 16px;
+}
+
+.settings-chip.active {
+    border-color: rgba(203, 166, 247, 0.6);
+    box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.12);
+}
+
+.settings-chip span {
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
+@media (max-width: 520px) {
+    .settings-row {
+        grid-template-columns: 30px 1fr;
+    }
+
+    .settings-row > :nth-child(3) {
+        grid-column: 1 / -1;
+    }
+}
+
 .settings-actions {
     display: flex;
     justify-content: flex-end;

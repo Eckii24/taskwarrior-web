@@ -1354,6 +1354,37 @@ function createTaskwarriorApp({
             this.reschedule = { open: true, taskUuid: uuid, custom: '' };
         },
 
+        isRescheduleFieldSelected(field) {
+            const value = String(field || '').trim();
+            if (!value) return false;
+            const selected = Array.isArray(this.settingsAppDraft?.reschedule_field)
+                ? this.settingsAppDraft.reschedule_field
+                : [];
+            return selected.includes(value);
+        },
+
+        toggleRescheduleField(field) {
+            const value = String(field || '').trim();
+            if (!value) return;
+
+            const selected = Array.isArray(this.settingsAppDraft?.reschedule_field)
+                ? this.settingsAppDraft.reschedule_field.slice()
+                : [];
+
+            const idx = selected.indexOf(value);
+            if (idx >= 0) {
+                if (selected.length <= 1) {
+                    this.showToast('Select at least one attribute', 'error');
+                    return;
+                }
+                selected.splice(idx, 1);
+            } else {
+                selected.push(value);
+            }
+
+            this.settingsAppDraft.reschedule_field = selected;
+        },
+
         rescheduleFieldNames() {
             const raw = this.settingsAppLoaded?.reschedule_field;
             const list = Array.isArray(raw) ? raw : String(raw || 'due').split(',');

@@ -383,12 +383,24 @@
                             <div class="settings-row">
                                 <div class="settings-icon" aria-hidden="true"></div>
                                 <div class="settings-label">Attributes</div>
-                                <select class="text-input" v-model="settingsAppDraft.reschedule_field" multiple>
-                                    <option value="due">due</option>
-                                    <option value="schedule">schedule</option>
-                                    <option value="wait">wait</option>
-                                    <option value="until">until</option>
-                                </select>
+                                <div class="settings-multi-chip">
+                                    <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due') }">
+                                        <input type="checkbox" :checked="isRescheduleFieldSelected('due')" @change="toggleRescheduleField('due')">
+                                        <span>due</span>
+                                    </label>
+                                    <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule') }">
+                                        <input type="checkbox" :checked="isRescheduleFieldSelected('schedule')" @change="toggleRescheduleField('schedule')">
+                                        <span>schedule</span>
+                                    </label>
+                                    <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait') }">
+                                        <input type="checkbox" :checked="isRescheduleFieldSelected('wait')" @change="toggleRescheduleField('wait')">
+                                        <span>wait</span>
+                                    </label>
+                                    <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until') }">
+                                        <input type="checkbox" :checked="isRescheduleFieldSelected('until')" @change="toggleRescheduleField('until')">
+                                        <span>until</span>
+                                    </label>
+                                </div>
                             </div>
 
                         <div class="settings-actions">
