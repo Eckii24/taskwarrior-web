@@ -561,11 +561,39 @@
                         </div>
 
                     <!-- Multi-select reschedule popup -->
-                    <div v-if="multiSelectMode && reschedule.open && reschedule.multiSelect" class="multi-reschedule-container" @click.stop>
-                        <div class="reschedule-pop multi-reschedule-pop">
-                            <div class="reschedule-title">Reschedule {{ selectedTaskUuids.size }} tasks</div>
+                        <div v-if="multiSelectMode && reschedule.open && reschedule.multiSelect" class="multi-reschedule-container" @click.stop>
+                         <div class="reschedule-pop multi-reschedule-pop">
+                             <div class="reschedule-header-row">
+                                 <div class="reschedule-title">Reschedule {{ selectedTaskUuids.size }} tasks</div>
+                                 <button
+                                     class="btn small"
+                                     type="button"
+                                     @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
+                                 >
+                                     {{ rescheduleFieldLabelForClear() }}
+                                 </button>
+                             </div>
 
-                            <div class="reschedule-toolbar">
+                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip" style="margin: 0 0 10px 0;">
+                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
+                                     <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
+                                     <span>due</span>
+                                 </label>
+                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
+                                     <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
+                                     <span>schedule</span>
+                                 </label>
+                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
+                                     <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
+                                     <span>wait</span>
+                                 </label>
+                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
+                                     <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
+                                     <span>until</span>
+                                 </label>
+                             </div>
+ 
+                             <div class="reschedule-toolbar">
                                 <button
                                     class="schedule-btn"
                                     type="button"
@@ -796,9 +824,37 @@
                                                 class="reschedule-pop"
                                                 @click.stop
                                             >
-                                                <div class="reschedule-title">Date</div>
+                                                 <div class="reschedule-header-row">
+                                                     <div class="reschedule-title">Date</div>
+                                                     <button
+                                                         class="btn small"
+                                                         type="button"
+                                                         @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
+                                                     >
+                                                         {{ rescheduleFieldLabelForClear() }}
+                                                     </button>
+                                                 </div>
 
-                                                <div class="reschedule-toolbar">
+                                                 <div v-if="reschedule.showFieldPicker" class="settings-multi-chip" style="margin: 0 0 10px 0;">
+                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
+                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
+                                                         <span>due</span>
+                                                     </label>
+                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
+                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
+                                                         <span>schedule</span>
+                                                     </label>
+                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
+                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
+                                                         <span>wait</span>
+                                                     </label>
+                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
+                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
+                                                         <span>until</span>
+                                                     </label>
+                                                 </div>
+ 
+                                                 <div class="reschedule-toolbar">
                                                     <button
                                                         class="schedule-btn"
                                                         type="button"
@@ -1035,10 +1091,38 @@
                                             v-if="reschedule.open && reschedule.taskUuid === task.uuid"
                                             class="reschedule-pop"
                                             @click.stop
-                                        >
-                                            <div class="reschedule-title">Date</div>
+                                            >
+                                             <div class="reschedule-title">Date</div>
 
-                                            <div class="reschedule-toolbar">
+                                             <button
+                                                 class="btn small"
+                                                 type="button"
+                                                 style="margin: 8px 0 10px 0;"
+                                                 @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
+                                             >
+                                                 {{ rescheduleFieldLabelForClear() }}
+                                             </button>
+
+                                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip" style="margin: 0 0 10px 0;">
+                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
+                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
+                                                     <span>due</span>
+                                                 </label>
+                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
+                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
+                                                     <span>schedule</span>
+                                                 </label>
+                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
+                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
+                                                     <span>wait</span>
+                                                 </label>
+                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
+                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
+                                                     <span>until</span>
+                                                 </label>
+                                             </div>
+ 
+                                             <div class="reschedule-toolbar">
                                                 <button
                                                     class="schedule-btn"
                                                     type="button"

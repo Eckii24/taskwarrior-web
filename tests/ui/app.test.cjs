@@ -511,7 +511,45 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.selectedTaskUuids.size).toBe(0);
     });
 
-    test('multi-edit modal includes input and runs task <uuids> mod <input>', async () => {
+     test('multi-reschedule can override default fields per action', async () => {
+         const backend = createMockBackend();
+         backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
+         backend.state.tasks.push({ uuid: 'uuid-2', description: 'Second', status: 'pending', urgency: 1.2 });
+
+         backend.state.settings.reschedule_field = 'due,wait';
+
+         const { vm } = mountWithBackend(backend);
+         await flushPromises(vm, 10);
+
+         document.querySelector('.tasks-controls .control-btn[aria-label="Enable multi-select mode"]').click();
+         await flushPromises(vm, 2);
+
+         const cards = document.querySelectorAll('.task-card');
+         cards[0].click();
+         cards[1].click();
+         await flushPromises(vm, 2);
+
+         document.querySelector('.multi-select-actions button[aria-label="Reschedule selected"]').click();
+         await flushPromises(vm, 2);
+
+         expect(vm.reschedule.open).toBe(true);
+         expect(vm.reschedule.multiSelect).toBe(true);
+         expect(vm.reschedule.fields).toEqual(['due', 'wait']);
+         expect(vm.reschedule.showFieldPicker).toBe(false);
+
+         // Override for this bulk reschedule: only schedule.
+         vm.reschedule.fields = ['schedule'];
+
+         await vm.applyMultiReschedulePreset('today');
+         await flushPromises(vm, 6);
+
+         expect(backend.state.tasks[0].schedule).toBe('today');
+         expect(backend.state.tasks[1].schedule).toBe('today');
+         expect(backend.state.tasks[0].due).toBeUndefined();
+         expect(backend.state.tasks[0].wait).toBeUndefined();
+     });
+
+     test('multi-edit modal includes input and runs task <uuids> mod <input>', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
         backend.state.tasks.push({ uuid: 'uuid-2', description: 'Second', status: 'pending', urgency: 1.2 });
@@ -700,31 +738,56 @@ describe('Taskwarrior Web UI (component-style)', () => {
         confirmSpy.mockRestore();
     });
 
-    test('reschedules a task and clears reschedule field', async () => {
-        const backend = createMockBackend();
-        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today', wait: 'today' });
+     test('reschedules a task and clears reschedule field', async () => {
+         const backend = createMockBackend();
+         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today', wait: 'today' });
 
-        backend.state.settings.reschedule_field = 'due,wait';
+         backend.state.settings.reschedule_field = 'due,wait';
 
-        const { vm } = mountWithBackend(backend);
-        await flushPromises(vm, 6);
+         const { vm } = mountWithBackend(backend);
+         await flushPromises(vm, 6);
 
-        vm.toggleReschedule('uuid-1');
-        expect(vm.reschedule.open).toBe(true);
+         vm.toggleReschedule('uuid-1');
+         expect(vm.reschedule.open).toBe(true);
+         expect(vm.reschedule.showFieldPicker).toBe(false);
 
-        await vm.applyReschedulePreset('uuid-1', 'tomorrow');
-        await flushPromises(vm, 5);
-        expect(vm.toast.text).toContain('Rescheduled task');
-        expect(backend.state.tasks[0].due).toBe('tomorrow');
-        expect(backend.state.tasks[0].wait).toBe('tomorrow');
+         await vm.applyReschedulePreset('uuid-1', 'tomorrow');
+         await flushPromises(vm, 5);
+         expect(vm.toast.text).toContain('Rescheduled task');
+         expect(backend.state.tasks[0].due).toBe('tomorrow');
+         expect(backend.state.tasks[0].wait).toBe('tomorrow');
 
-        vm.toggleReschedule('uuid-1');
-        await vm.clearRescheduleField('uuid-1');
-        await flushPromises(vm, 5);
-        expect(vm.toast.text).toContain('Cleared Due/Wait');
-        expect(backend.state.tasks[0].due).toBeUndefined();
-        expect(backend.state.tasks[0].wait).toBeUndefined();
-    });
+         vm.toggleReschedule('uuid-1');
+         await vm.clearRescheduleField('uuid-1');
+         await flushPromises(vm, 5);
+         expect(vm.toast.text).toContain('Cleared Due/Wait');
+         expect(backend.state.tasks[0].due).toBeUndefined();
+         expect(backend.state.tasks[0].wait).toBeUndefined();
+     });
+
+     test('reschedule can override default fields per action', async () => {
+         const backend = createMockBackend();
+         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Override', status: 'pending', urgency: 1.5 });
+
+         backend.state.settings.reschedule_field = 'due,wait';
+
+         const { vm } = mountWithBackend(backend);
+         await flushPromises(vm, 6);
+
+         vm.toggleReschedule('uuid-1');
+         expect(vm.reschedule.fields).toEqual(['due', 'wait']);
+         expect(vm.reschedule.showFieldPicker).toBe(false);
+
+         // Override for this reschedule: only schedule.
+         vm.reschedule.fields = ['schedule'];
+
+         await vm.applyReschedulePreset('uuid-1', 'tomorrow');
+         await flushPromises(vm, 5);
+
+         expect(backend.state.tasks[0].schedule).toBe('tomorrow');
+         expect(backend.state.tasks[0].due).toBeUndefined();
+         expect(backend.state.tasks[0].wait).toBeUndefined();
+     });
 
     test('searches pending-only and includes completed', async () => {
         const backend = createMockBackend();
@@ -1344,11 +1407,17 @@ describe('Taskwarrior Web UI (component-style)', () => {
         const { vm } = mountWithBackend(backend);
         await flushPromises(vm, 6);
 
+        vm.toggleReschedule('uuid-1');
+        await flushPromises(vm, 2);
+
         await vm.applyReschedulePreset('uuid-1', 'tomorrow');
         await flushPromises(vm, 4);
 
         expect(backend.state.tasks[0].wait).toBe('tomorrow');
         expect(backend.state.tasks[0].due).toBe('today');
+
+        vm.toggleReschedule('uuid-1');
+        await flushPromises(vm, 2);
 
         await vm.clearRescheduleField('uuid-1');
         await flushPromises(vm, 4);

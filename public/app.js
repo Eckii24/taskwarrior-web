@@ -767,6 +767,8 @@ function createTaskwarriorApp({
                 open: false,
                 taskUuid: null,
                 custom: '',
+                fields: [],
+                showFieldPicker: false,
             },
 
             groupDropdownOpen: false,
@@ -1339,7 +1341,7 @@ function createTaskwarriorApp({
 
         closeReschedule() {
             if (!this.reschedule.open) return;
-            this.reschedule = { open: false, taskUuid: null, custom: '' };
+            this.reschedule = { open: false, taskUuid: null, custom: '', fields: [], showFieldPicker: false };
         },
 
         toggleReschedule(taskUuid) {
@@ -1351,35 +1353,55 @@ function createTaskwarriorApp({
                 return;
             }
 
-            this.reschedule = { open: true, taskUuid: uuid, custom: '' };
+            this.reschedule = {
+                open: true,
+                taskUuid: uuid,
+                custom: '',
+                fields: this.rescheduleFieldNames(),
+                showFieldPicker: false,
+            };
         },
 
-        isRescheduleFieldSelected(field) {
+        isRescheduleFieldSelected(field, opts = {}) {
             const value = String(field || '').trim();
             if (!value) return false;
-            const selected = Array.isArray(this.settingsAppDraft?.reschedule_field)
-                ? this.settingsAppDraft.reschedule_field
-                : [];
+
+            const preferReschedule = Boolean(opts?.preferReschedule);
+
+            const selected = preferReschedule && this.reschedule?.open
+                ? (Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : [])
+                : (Array.isArray(this.settingsAppDraft?.reschedule_field) ? this.settingsAppDraft.reschedule_field : []);
+
             return selected.includes(value);
         },
 
-        toggleRescheduleField(field) {
+        toggleRescheduleField(field, opts = {}) {
             const value = String(field || '').trim();
             if (!value) return;
 
-            const selected = Array.isArray(this.settingsAppDraft?.reschedule_field)
-                ? this.settingsAppDraft.reschedule_field.slice()
-                : [];
+            const allowEmpty = Boolean(opts?.allowEmpty);
+            const preferReschedule = Boolean(opts?.preferReschedule);
+
+            const currentSelected = preferReschedule && this.reschedule?.open
+                ? (Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : [])
+                : (Array.isArray(this.settingsAppDraft?.reschedule_field) ? this.settingsAppDraft.reschedule_field : []);
+
+            const selected = currentSelected.slice();
 
             const idx = selected.indexOf(value);
             if (idx >= 0) {
-                if (selected.length <= 1) {
+                if (!allowEmpty && selected.length <= 1) {
                     this.showToast('Select at least one attribute', 'error');
                     return;
                 }
                 selected.splice(idx, 1);
             } else {
                 selected.push(value);
+            }
+
+            if (preferReschedule && this.reschedule?.open) {
+                this.reschedule.fields = selected;
+                return;
             }
 
             this.settingsAppDraft.reschedule_field = selected;
@@ -1394,11 +1416,14 @@ function createTaskwarriorApp({
         },
 
         rescheduleFieldName() {
-            return this.rescheduleFieldNames()[0] || 'due';
+            const active = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : null;
+            const list = Array.isArray(active) && active.length > 0 ? active : this.rescheduleFieldNames();
+            return list[0] || 'due';
         },
 
         rescheduleFieldLabel() {
-            const fields = this.rescheduleFieldNames();
+            const active = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : null;
+            const fields = Array.isArray(active) && active.length > 0 ? active : this.rescheduleFieldNames();
             if (fields.length === 0) return 'Due';
             if (fields.length === 1) {
                 const field = fields[0];
@@ -1409,7 +1434,8 @@ function createTaskwarriorApp({
         },
 
         rescheduleFieldLabelForClear() {
-            const fields = this.rescheduleFieldNames();
+            const active = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : null;
+            const fields = Array.isArray(active) && active.length > 0 ? active : this.rescheduleFieldNames();
             if (fields.length === 0) return 'Due';
             if (fields.length === 1) {
                 const field = fields[0];
@@ -1432,15 +1458,14 @@ function createTaskwarriorApp({
             const value = String(dateValue || '').trim();
             if (!uuid || !value) return;
 
-            const field = this.rescheduleFieldName();
+            const fieldsRaw = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : [];
+            const fields = fieldsRaw.map((f) => String(f).trim()).filter(Boolean);
+            const modifications = fields.length > 0
+                ? fields.map((f) => `${f}:${value}`)
+                : [`due:${value}`];
 
             await this.withBusyTask(uuid, async () => {
-                 const fields = this.rescheduleFieldNames();
-                 const modifications = fields.length > 0
-                     ? fields.map((f) => `${f}:${value}`)
-                     : [`due:${value}`];
-
-                 const result = await commandService.modifyTask(uuid, ...modifications);
+                const result = await commandService.modifyTask(uuid, ...modifications);
                 if (result.success) {
                     this.showToast('Rescheduled task', 'success');
                     this.closeReschedule();
@@ -1455,7 +1480,8 @@ function createTaskwarriorApp({
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
 
-            const fields = this.rescheduleFieldNames();
+            const fieldsRaw = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : [];
+            const fields = fieldsRaw.map((f) => String(f).trim()).filter(Boolean);
 
             await this.withBusyTask(uuid, async () => {
                 const modifications = fields.length > 0
@@ -1464,12 +1490,14 @@ function createTaskwarriorApp({
 
                 const result = await commandService.modifyTask(uuid, ...modifications);
                 if (result.success) {
-                    const label = this.rescheduleFieldLabelForClear();
+                    const label = fields.length > 0
+                        ? fields.map((field) => `${field[0].toUpperCase()}${field.slice(1)}`).join('/')
+                        : 'Due';
                     this.showToast(`Cleared ${label}`, 'success');
                     this.closeReschedule();
                     await this.refreshCurrentPanel();
                 } else {
-                    this.showToast(result.error || `Failed to clear ${field}`, 'error');
+                    this.showToast(result.error || 'Failed to clear', 'error');
                 }
             });
         },
@@ -1560,7 +1588,14 @@ function createTaskwarriorApp({
             // Open reschedule for the first selected task to get the UI
             // But we'll apply to all selected tasks
             const firstUuid = Array.from(this.selectedTaskUuids)[0];
-            this.reschedule = { open: true, taskUuid: firstUuid, custom: '', multiSelect: true };
+            this.reschedule = {
+                open: true,
+                taskUuid: firstUuid,
+                custom: '',
+                fields: this.rescheduleFieldNames(),
+                showFieldPicker: false,
+                multiSelect: true,
+            };
         },
 
         async applyMultiReschedulePreset(preset) {
@@ -1589,7 +1624,8 @@ function createTaskwarriorApp({
             const uuids = Array.from(this.selectedTaskUuids);
             if (uuids.length === 0) return;
 
-            const fields = this.rescheduleFieldNames();
+            const fieldsRaw = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : [];
+            const fields = fieldsRaw.map((f) => String(f).trim()).filter(Boolean);
             const modifications = fields.length > 0
                 ? fields.map((f) => `${f}:`)
                 : ['due:'];
@@ -1601,7 +1637,9 @@ function createTaskwarriorApp({
                 if (result.success) successCount++;
             }
 
-            const label = this.rescheduleFieldLabelForClear();
+            const label = fields.length > 0
+                ? fields.map((field) => `${field[0].toUpperCase()}${field.slice(1)}`).join('/')
+                : 'Due';
             this.showToast(`Cleared ${label} for ${successCount}/${uuids.length} tasks`, 'success');
             this.closeReschedule();
             await this.refreshCurrentPanel();
@@ -1626,7 +1664,8 @@ function createTaskwarriorApp({
             const value = String(dateValue || '').trim();
             if (!value) return;
 
-            const fields = this.rescheduleFieldNames();
+            const fieldsRaw = Array.isArray(this.reschedule?.fields) ? this.reschedule.fields : [];
+            const fields = fieldsRaw.map((f) => String(f).trim()).filter(Boolean);
             const modifications = fields.length > 0
                 ? fields.map((f) => `${f}:${value}`)
                 : [`due:${value}`];
