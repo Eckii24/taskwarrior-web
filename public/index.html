@@ -574,7 +574,7 @@
                                  </button>
                              </div>
 
-                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip" style="margin: 0 0 10px 0;">
+                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
                                  <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
                                      <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
                                      <span>due</span>
@@ -835,7 +835,7 @@
                                                      </button>
                                                  </div>
 
-                                                 <div v-if="reschedule.showFieldPicker" class="settings-multi-chip" style="margin: 0 0 10px 0;">
+                                                 <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
                                                      <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
                                                          <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
                                                          <span>due</span>
@@ -1092,18 +1092,18 @@
                                             class="reschedule-pop"
                                             @click.stop
                                             >
-                                             <div class="reschedule-title">Date</div>
+                                             <div class="reschedule-header-row">
+                                                 <div class="reschedule-title">Date</div>
+                                                 <button
+                                                     class="btn small"
+                                                     type="button"
+                                                     @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
+                                                 >
+                                                     {{ rescheduleFieldLabelForClear() }}
+                                                 </button>
+                                             </div>
 
-                                             <button
-                                                 class="btn small"
-                                                 type="button"
-                                                 style="margin: 8px 0 10px 0;"
-                                                 @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
-                                             >
-                                                 {{ rescheduleFieldLabelForClear() }}
-                                             </button>
-
-                                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip" style="margin: 0 0 10px 0;">
+                                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
                                                  <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
                                                      <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
                                                      <span>due</span>
