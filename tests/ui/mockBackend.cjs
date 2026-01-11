@@ -261,9 +261,26 @@ function createMockBackend() {
         if (pathname === '/api/settings' && method === 'PUT') {
             const body = init.body ? JSON.parse(String(init.body)) : {};
             if (typeof body.reschedule_field !== 'string' || !String(body.reschedule_field).trim()) {
-                return jsonResponse({ success: false, error: 'reschedule_field must not be empty' }, { status: 400 });
+                return jsonResponse({ success: false, error: 'reschedule_field must include at least one value' }, { status: 400 });
             }
-            state.settings.reschedule_field = String(body.reschedule_field).trim();
+
+            const allowed = new Set(['due', 'schedule', 'wait', 'until']);
+            const requested = String(body.reschedule_field)
+                .split(',')
+                .map((value) => String(value).trim())
+                .filter(Boolean);
+
+            if (requested.length === 0) {
+                return jsonResponse({ success: false, error: 'reschedule_field must include at least one value' }, { status: 400 });
+            }
+
+            for (const field of requested) {
+                if (!allowed.has(field)) {
+                    return jsonResponse({ success: false, error: 'reschedule_field contains invalid values' }, { status: 400 });
+                }
+            }
+
+            state.settings.reschedule_field = Array.from(new Set(requested)).join(',');
             return jsonResponse({ success: true, settings: { ...state.settings } });
         }
 

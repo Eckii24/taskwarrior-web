@@ -481,13 +481,13 @@ function createApp({
                  settings[String(entry.key)] = entry.value;
              }
 
-             const rescheduleField = String(settings.reschedule_field || 'due').trim() || 'due';
-             res.json({
-                 success: true,
-                 settings: {
-                     reschedule_field: rescheduleField,
-                 },
-             });
+        const rescheduleFieldValue = String(settings.reschedule_field || 'due').trim() || 'due';
+        res.json({
+            success: true,
+            settings: {
+                reschedule_field: rescheduleFieldValue,
+            },
+        });
          } catch (error) {
              res.status(500).json({ success: false, error: error.message });
          }
@@ -495,22 +495,38 @@ function createApp({
 
      app.put('/api/settings', async (req, res) => {
          try {
-             const db = await ensureSettingsDb();
-             const rescheduleFieldRaw = req.body?.reschedule_field;
-             const rescheduleField = typeof rescheduleFieldRaw === 'string' ? String(rescheduleFieldRaw).trim() : '';
-             if (!rescheduleField) {
-                 return res.status(400).json({ success: false, error: 'reschedule_field must not be empty' });
-             }
+        const db = await ensureSettingsDb();
+        const rescheduleFieldRaw = req.body?.reschedule_field;
+        const rescheduleFieldValue = typeof rescheduleFieldRaw === 'string' ? String(rescheduleFieldRaw).trim() : '';
 
-             db.prepare('INSERT INTO app_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-                 .run('reschedule_field', rescheduleField);
+        const allowedRescheduleFields = new Set(['due', 'schedule', 'wait', 'until']);
+        const rescheduleFields = rescheduleFieldValue
+            .split(',')
+            .map((value) => String(value).trim())
+            .filter(Boolean);
 
-             res.json({
-                 success: true,
-                 settings: {
-                     reschedule_field: rescheduleField,
-                 },
-             });
+        if (rescheduleFields.length === 0) {
+            return res.status(400).json({ success: false, error: 'reschedule_field must include at least one value' });
+        }
+
+        for (const field of rescheduleFields) {
+            if (!allowedRescheduleFields.has(field)) {
+                return res.status(400).json({ success: false, error: 'reschedule_field contains invalid values' });
+            }
+        }
+
+        const deduped = Array.from(new Set(rescheduleFields));
+        const stored = deduped.join(',');
+
+        db.prepare('INSERT INTO app_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run('reschedule_field', stored);
+
+        res.json({
+            success: true,
+            settings: {
+                reschedule_field: stored,
+            },
+        });
          } catch (error) {
              res.status(500).json({ success: false, error: error.message });
          }

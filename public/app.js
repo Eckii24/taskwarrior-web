@@ -393,8 +393,20 @@ class TaskCommandService {
         return await this.apiClient.execute(`add ${description}`, annotation);
     }
 
-    async modifyTask(taskUuid, modifications) {
-        return await this.apiClient.execute(`${taskUuid} modify ${modifications}`);
+    async modifyTask(taskUuid, ...modifications) {
+        const uuid = String(taskUuid || '').trim();
+        if (!uuid) return { success: false, output: '', error: 'No task ID provided' };
+
+        const mods = modifications
+            .flat()
+            .map((value) => String(value || '').trim())
+            .filter(Boolean);
+
+        if (mods.length === 0) {
+            return { success: false, output: '', error: 'No modifications provided' };
+        }
+
+        return await this.apiClient.execute(`${uuid} modify ${mods.join(' ')}`);
     }
 
     async modifyTasks(taskUuids, modifications) {
@@ -659,13 +671,13 @@ function createTaskwarriorApp({
                   all: { visible: true },
               },
 
-             settingsAppDraft: {
-                 reschedule_field: 'due',
-             },
+            settingsAppDraft: {
+                reschedule_field: ['due'],
+            },
 
-             settingsAppLoaded: {
-                 reschedule_field: 'due',
-             },
+            settingsAppLoaded: {
+                reschedule_field: ['due'],
+            },
 
              filters: [],
              draggedFilterId: null,
@@ -1342,13 +1354,38 @@ function createTaskwarriorApp({
             this.reschedule = { open: true, taskUuid: uuid, custom: '' };
         },
 
+        rescheduleFieldNames() {
+            const raw = this.settingsAppLoaded?.reschedule_field;
+            const list = Array.isArray(raw) ? raw : String(raw || 'due').split(',');
+            return list
+                .map((value) => String(value).trim())
+                .filter(Boolean);
+        },
+
         rescheduleFieldName() {
-            return String(this.settingsAppLoaded?.reschedule_field || 'due').trim() || 'due';
+            return this.rescheduleFieldNames()[0] || 'due';
         },
 
         rescheduleFieldLabel() {
-            const field = this.rescheduleFieldName();
-            return field ? `${field[0].toUpperCase()}${field.slice(1)}` : 'Due';
+            const fields = this.rescheduleFieldNames();
+            if (fields.length === 0) return 'Due';
+            if (fields.length === 1) {
+                const field = fields[0];
+                return field ? `${field[0].toUpperCase()}${field.slice(1)}` : 'Due';
+            }
+
+            return 'Dates';
+        },
+
+        rescheduleFieldLabelForClear() {
+            const fields = this.rescheduleFieldNames();
+            if (fields.length === 0) return 'Due';
+            if (fields.length === 1) {
+                const field = fields[0];
+                return field ? `${field[0].toUpperCase()}${field.slice(1)}` : 'Due';
+            }
+
+            return fields.map((field) => `${field[0].toUpperCase()}${field.slice(1)}`).join('/');
         },
 
         formatTaskDateInput(value) {
@@ -1367,7 +1404,12 @@ function createTaskwarriorApp({
             const field = this.rescheduleFieldName();
 
             await this.withBusyTask(uuid, async () => {
-                const result = await commandService.modifyTask(uuid, `${field}:${value}`);
+                 const fields = this.rescheduleFieldNames();
+                 const modifications = fields.length > 0
+                     ? fields.map((f) => `${f}:${value}`)
+                     : [`due:${value}`];
+
+                 const result = await commandService.modifyTask(uuid, ...modifications);
                 if (result.success) {
                     this.showToast('Rescheduled task', 'success');
                     this.closeReschedule();
@@ -1382,12 +1424,17 @@ function createTaskwarriorApp({
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
 
-            const field = this.rescheduleFieldName();
+            const fields = this.rescheduleFieldNames();
 
             await this.withBusyTask(uuid, async () => {
-                const result = await commandService.modifyTask(uuid, `${field}:`);
+                const modifications = fields.length > 0
+                    ? fields.map((f) => `${f}:`)
+                    : ['due:'];
+
+                const result = await commandService.modifyTask(uuid, ...modifications);
                 if (result.success) {
-                    this.showToast(`Cleared ${field}`, 'success');
+                    const label = this.rescheduleFieldLabelForClear();
+                    this.showToast(`Cleared ${label}`, 'success');
                     this.closeReschedule();
                     await this.refreshCurrentPanel();
                 } else {
@@ -1511,15 +1558,20 @@ function createTaskwarriorApp({
             const uuids = Array.from(this.selectedTaskUuids);
             if (uuids.length === 0) return;
 
-            const field = this.rescheduleFieldName();
+            const fields = this.rescheduleFieldNames();
+            const modifications = fields.length > 0
+                ? fields.map((f) => `${f}:`)
+                : ['due:'];
+
             let successCount = 0;
 
             for (const uuid of uuids) {
-                const result = await commandService.modifyTask(uuid, `${field}:`);
+                const result = await commandService.modifyTask(uuid, ...modifications);
                 if (result.success) successCount++;
             }
 
-            this.showToast(`Cleared ${field} for ${successCount}/${uuids.length} tasks`, 'success');
+            const label = this.rescheduleFieldLabelForClear();
+            this.showToast(`Cleared ${label} for ${successCount}/${uuids.length} tasks`, 'success');
             this.closeReschedule();
             await this.refreshCurrentPanel();
         },
@@ -1540,11 +1592,18 @@ function createTaskwarriorApp({
         },
 
         async rescheduleMultipleTasks(uuids, dateValue) {
-            const field = this.rescheduleFieldName();
+            const value = String(dateValue || '').trim();
+            if (!value) return;
+
+            const fields = this.rescheduleFieldNames();
+            const modifications = fields.length > 0
+                ? fields.map((f) => `${f}:${value}`)
+                : [`due:${value}`];
+
             let successCount = 0;
 
             for (const uuid of uuids) {
-                const result = await commandService.modifyTask(uuid, `${field}:${dateValue}`);
+                const result = await commandService.modifyTask(uuid, ...modifications);
                 if (result.success) successCount++;
             }
 
@@ -1980,14 +2039,18 @@ function createTaskwarriorApp({
                  const result = await apiClient.getSettings();
                  if (!result?.success) return;
 
-                 const rescheduleField = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
+                const rescheduleFieldRaw = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
+                const rescheduleFields = rescheduleFieldRaw
+                    .split(',')
+                    .map((value) => String(value).trim())
+                    .filter(Boolean);
 
-                 this.settingsAppLoaded = {
-                     reschedule_field: rescheduleField,
-                 };
-                 this.settingsAppDraft = {
-                     reschedule_field: rescheduleField,
-                 };
+                this.settingsAppLoaded = {
+                    reschedule_field: rescheduleFields.length > 0 ? rescheduleFields : ['due'],
+                };
+                this.settingsAppDraft = {
+                    reschedule_field: rescheduleFields.length > 0 ? rescheduleFields : ['due'],
+                };
              } catch {
                  // ignore
              }
@@ -1999,9 +2062,15 @@ function createTaskwarriorApp({
 
          async saveAppSettings() {
              try {
-                 const payload = {
-                     reschedule_field: String(this.settingsAppDraft?.reschedule_field || '').trim(),
-                 };
+                const raw = this.settingsAppDraft?.reschedule_field;
+                const list = Array.isArray(raw) ? raw : [raw];
+                const cleaned = list
+                    .map((value) => String(value).trim())
+                    .filter(Boolean);
+
+                const payload = {
+                    reschedule_field: cleaned.join(','),
+                };
 
                  const result = await apiClient.updateSettings(payload);
                  if (!result?.success) {

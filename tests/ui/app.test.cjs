@@ -702,7 +702,9 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
     test('reschedules a task and clears reschedule field', async () => {
         const backend = createMockBackend();
-        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today' });
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today', wait: 'today' });
+
+        backend.state.settings.reschedule_field = 'due,wait';
 
         const { vm } = mountWithBackend(backend);
         await flushPromises(vm, 6);
@@ -714,12 +716,14 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await flushPromises(vm, 5);
         expect(vm.toast.text).toContain('Rescheduled task');
         expect(backend.state.tasks[0].due).toBe('tomorrow');
+        expect(backend.state.tasks[0].wait).toBe('tomorrow');
 
         vm.toggleReschedule('uuid-1');
         await vm.clearRescheduleField('uuid-1');
         await flushPromises(vm, 5);
-        expect(vm.toast.text).toContain('Cleared due');
+        expect(vm.toast.text).toContain('Cleared Due/Wait');
         expect(backend.state.tasks[0].due).toBeUndefined();
+        expect(backend.state.tasks[0].wait).toBeUndefined();
     });
 
     test('searches pending-only and includes completed', async () => {
@@ -983,21 +987,21 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.openSettings();
         await flushPromises(vm, 6);
 
-        expect(vm.settingsAppLoaded.reschedule_field).toBe('wait');
-        expect(vm.settingsAppDraft.reschedule_field).toBe('wait');
+        expect(vm.settingsAppLoaded.reschedule_field).toEqual(['wait']);
+        expect(vm.settingsAppDraft.reschedule_field).toEqual(['wait']);
 
-        vm.settingsAppDraft.reschedule_field = 'scheduled';
+        vm.settingsAppDraft.reschedule_field = ['schedule', 'due'];
         await flushPromises(vm, 1);
 
         vm.resetAppSettingsDraft();
-        expect(vm.settingsAppDraft.reschedule_field).toBe('wait');
+        expect(vm.settingsAppDraft.reschedule_field).toEqual(['wait']);
 
-        vm.settingsAppDraft.reschedule_field = 'scheduled';
+        vm.settingsAppDraft.reschedule_field = ['schedule'];
         await vm.saveAppSettings();
         await flushPromises(vm, 4);
 
-        expect(backend.state.settings.reschedule_field).toBe('scheduled');
-        expect(vm.settingsAppLoaded.reschedule_field).toBe('scheduled');
+        expect(backend.state.settings.reschedule_field).toBe('schedule');
+        expect(vm.settingsAppLoaded.reschedule_field).toEqual(['schedule']);
         expect(vm.toast.text).toContain('Saved app settings');
     });
 

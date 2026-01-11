@@ -227,19 +227,23 @@ describe('Backend API (supertest)', () => {
         expect(getDefault.body.success).toBe(true);
         expect(getDefault.body.settings.reschedule_field).toBe('due');
 
-        const invalidPut = await request(app).put('/api/settings').send({ reschedule_field: '' });
-        expect(invalidPut.status).toBe(400);
-        expect(invalidPut.body.success).toBe(false);
+        const invalidPutEmpty = await request(app).put('/api/settings').send({ reschedule_field: '' });
+        expect(invalidPutEmpty.status).toBe(400);
+        expect(invalidPutEmpty.body.success).toBe(false);
 
-        const put = await request(app).put('/api/settings').send({ reschedule_field: 'wait' });
+        const invalidPutValue = await request(app).put('/api/settings').send({ reschedule_field: 'nope' });
+        expect(invalidPutValue.status).toBe(400);
+        expect(invalidPutValue.body.success).toBe(false);
+
+        const put = await request(app).put('/api/settings').send({ reschedule_field: 'wait,due,wait' });
         expect(put.status).toBe(200);
         expect(put.body.success).toBe(true);
-        expect(put.body.settings.reschedule_field).toBe('wait');
+        expect(put.body.settings.reschedule_field).toBe('wait,due');
 
         const getUpdated = await request(app).get('/api/settings');
         expect(getUpdated.status).toBe(200);
         expect(getUpdated.body.success).toBe(true);
-        expect(getUpdated.body.settings.reschedule_field).toBe('wait');
+        expect(getUpdated.body.settings.reschedule_field).toBe('wait,due');
     });
 
     test('builtin filters API (seed + update)', async () => {
