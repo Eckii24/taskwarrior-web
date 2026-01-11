@@ -533,18 +533,173 @@
                                     </svg>
                                 </button>
 
-                                <button
-                                    v-if="selectedTaskUuids.size > 0"
-                                    type="button"
-                                    class="icon-btn small"
-                                    @click="rescheduleManyTasks"
-                                    title="Reschedule selected"
-                                    aria-label="Reschedule selected"
-                                >
-                                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
-                                    </svg>
-                                </button>
+                                <div v-if="selectedTaskUuids.size > 0" class="reschedule">
+                                    <button
+                                        type="button"
+                                        class="icon-btn small"
+                                        @click="rescheduleManyTasks"
+                                        title="Reschedule selected"
+                                        aria-label="Reschedule selected"
+                                    >
+                                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                            <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                                        </svg>
+                                    </button>
+
+                                    <div
+                                        v-if="multiSelectMode && reschedule.open && reschedule.multiSelect"
+                                        class="reschedule-pop"
+                                        @click.stop
+                                    >
+                                     <div class="reschedule-header-row">
+                                         <div class="reschedule-title">Reschedule {{ selectedTaskUuids.size }} tasks</div>
+                                         <button
+                                             class="btn small"
+                                             type="button"
+                                             @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
+                                         >
+                                             {{ rescheduleFieldLabelForClear() }}
+                                         </button>
+                                     </div>
+
+                                     <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
+                                         <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
+                                             <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
+                                             <span>due</span>
+                                         </label>
+                                         <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
+                                             <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
+                                             <span>schedule</span>
+                                         </label>
+                                         <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
+                                             <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
+                                             <span>wait</span>
+                                         </label>
+                                         <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
+                                             <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
+                                             <span>until</span>
+                                         </label>
+                                     </div>
+ 
+                                     <div class="reschedule-toolbar">
+                                        <button
+                                            class="schedule-btn"
+                                            type="button"
+                                            title="Today"
+                                            aria-label="Today"
+                                            @click="applyMultiReschedulePreset('today')"
+                                        >
+                                            <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <circle cx="12" cy="12" r="4"></circle>
+                                                <path d="M12 2v2"></path>
+                                                <path d="M12 20v2"></path>
+                                                <path d="M4.93 4.93l1.41 1.41"></path>
+                                                <path d="M17.66 17.66l1.41 1.41"></path>
+                                                <path d="M2 12h2"></path>
+                                                <path d="M20 12h2"></path>
+                                                <path d="M4.93 19.07l1.41-1.41"></path>
+                                                <path d="M17.66 6.34l1.41-1.41"></path>
+                                            </svg>
+                                        </button>
+
+                                        <button
+                                            class="schedule-btn"
+                                            type="button"
+                                            title="Tomorrow"
+                                            aria-label="Tomorrow"
+                                            @click="applyMultiReschedulePreset('tomorrow')"
+                                        >
+                                            <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M3 18h18"></path>
+                                                <path d="M7 18a5 5 0 0 1 10 0"></path>
+                                                <path d="M12 8v-2"></path>
+                                                <path d="M7.5 9.5l-1.5-1.5"></path>
+                                                <path d="M16.5 9.5l1.5-1.5"></path>
+                                                <path d="M9 6h6"></path>
+                                            </svg>
+                                        </button>
+
+                                        <button
+                                            class="schedule-btn"
+                                            type="button"
+                                            title="Next week"
+                                            aria-label="Next week"
+                                            @click="applyMultiReschedulePreset('sonw')"
+                                        >
+                                            <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M7 3v2"></path>
+                                                <path d="M17 3v2"></path>
+                                                <path d="M4 7h16"></path>
+                                                <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                                                <path d="M14 11h4"></path>
+                                                <path d="M14 11v4"></path>
+                                            </svg>
+                                        </button>
+
+                                        <label
+                                            class="schedule-btn schedule-date-btn"
+                                            title="Calendar"
+                                        >
+                                            <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M7 3v2"></path>
+                                                <path d="M17 3v2"></path>
+                                                <path d="M4 7h16"></path>
+                                                <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
+                                                <path d="M8 11h.01"></path>
+                                                <path d="M12 11h.01"></path>
+                                                <path d="M16 11h.01"></path>
+                                                <path d="M8 15h.01"></path>
+                                                <path d="M12 15h.01"></path>
+                                                <path d="M16 15h.01"></path>
+                                            </svg>
+                                            <input
+                                                type="date"
+                                                class="reschedule-calendar-input"
+                                                aria-label="Calendar"
+                                                @change="onMultiRescheduleCalendarChange($event)"
+                                            >
+                                        </label>
+
+                                        <button
+                                            class="schedule-btn danger"
+                                            type="button"
+                                            title="Clear"
+                                            aria-label="Clear"
+                                            @click="clearMultiRescheduleField()"
+                                        >
+                                            <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M18 6L6 18"></path>
+                                                <path d="M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+
+                                    </div>
+
+                                    <div class="reschedule-custom">
+                                        <input
+                                            type="text"
+                                            class="text-input compact"
+                                            v-model="reschedule.custom"
+                                            :placeholder="`${rescheduleFieldName()} value (e.g. 2025-01-03, eom)`"
+                                            autocomplete="off"
+                                            @keydown.enter.prevent="applyMultiRescheduleCustom()"
+                                        >
+
+                                        <button
+                                            class="schedule-btn primary"
+                                            type="button"
+                                            title="Set"
+                                            aria-label="Set"
+                                            @click="applyMultiRescheduleCustom()"
+                                            :disabled="!reschedule.custom"
+                                        >
+                                            <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M20 6L9 17l-5-5"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    </div>
+                                </div>
                                 <button
                                     v-if="selectedTaskUuids.size > 0"
                                     type="button"
@@ -560,169 +715,7 @@
                             </div>
                         </div>
 
-                    <!-- Multi-select reschedule popup -->
-                        <div v-if="multiSelectMode && reschedule.open && reschedule.multiSelect" class="multi-reschedule-container" @click.stop>
-                         <div class="reschedule-pop multi-reschedule-pop">
-                             <div class="reschedule-header-row">
-                                 <div class="reschedule-title">Reschedule {{ selectedTaskUuids.size }} tasks</div>
-                                 <button
-                                     class="btn small"
-                                     type="button"
-                                     @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
-                                 >
-                                     {{ rescheduleFieldLabelForClear() }}
-                                 </button>
-                             </div>
 
-                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
-                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
-                                     <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
-                                     <span>due</span>
-                                 </label>
-                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
-                                     <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
-                                     <span>schedule</span>
-                                 </label>
-                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
-                                     <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
-                                     <span>wait</span>
-                                 </label>
-                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
-                                     <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
-                                     <span>until</span>
-                                 </label>
-                             </div>
- 
-                             <div class="reschedule-toolbar">
-                                <button
-                                    class="schedule-btn"
-                                    type="button"
-                                    title="Today"
-                                    aria-label="Today"
-                                    @click="applyMultiReschedulePreset('today')"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <circle cx="12" cy="12" r="4"></circle>
-                                        <path d="M12 2v2"></path>
-                                        <path d="M12 20v2"></path>
-                                        <path d="M4.93 4.93l1.41 1.41"></path>
-                                        <path d="M17.66 17.66l1.41 1.41"></path>
-                                        <path d="M2 12h2"></path>
-                                        <path d="M20 12h2"></path>
-                                        <path d="M4.93 19.07l1.41-1.41"></path>
-                                        <path d="M17.66 6.34l1.41-1.41"></path>
-                                    </svg>
-                                </button>
-
-                                <button
-                                    class="schedule-btn"
-                                    type="button"
-                                    title="Tomorrow"
-                                    aria-label="Tomorrow"
-                                    @click="applyMultiReschedulePreset('tomorrow')"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M3 18h18"></path>
-                                        <path d="M7 18a5 5 0 0 1 10 0"></path>
-                                        <path d="M12 8v-2"></path>
-                                        <path d="M7.5 9.5l-1.5-1.5"></path>
-                                        <path d="M16.5 9.5l1.5-1.5"></path>
-                                        <path d="M9 6h6"></path>
-                                    </svg>
-                                </button>
-
-                                <button
-                                    class="schedule-btn"
-                                    type="button"
-                                    title="Next week"
-                                    aria-label="Next week"
-                                    @click="applyMultiReschedulePreset('sonw')"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M7 3v2"></path>
-                                        <path d="M17 3v2"></path>
-                                        <path d="M4 7h16"></path>
-                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
-                                        <path d="M14 11h4"></path>
-                                        <path d="M14 11v4"></path>
-                                    </svg>
-                                </button>
-
-                                <label
-                                    class="schedule-btn schedule-date-btn"
-                                    title="Calendar"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M7 3v2"></path>
-                                        <path d="M17 3v2"></path>
-                                        <path d="M4 7h16"></path>
-                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
-                                        <path d="M8 11h.01"></path>
-                                        <path d="M12 11h.01"></path>
-                                        <path d="M16 11h.01"></path>
-                                        <path d="M8 15h.01"></path>
-                                        <path d="M12 15h.01"></path>
-                                        <path d="M16 15h.01"></path>
-                                    </svg>
-                                    <input
-                                        type="date"
-                                        class="reschedule-calendar-input"
-                                        aria-label="Calendar"
-                                        @change="onMultiRescheduleCalendarChange($event)"
-                                    >
-                                </label>
-
-                                <button
-                                    class="schedule-btn danger"
-                                    type="button"
-                                    title="Clear"
-                                    aria-label="Clear"
-                                    @click="clearMultiRescheduleField()"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M18 6L6 18"></path>
-                                        <path d="M6 6l12 12"></path>
-                                    </svg>
-                                </button>
-
-                                <button
-                                    class="schedule-btn"
-                                    type="button"
-                                    title="Close"
-                                    aria-label="Close"
-                                    @click="closeReschedule()"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
-                                    </svg>
-                                </button>
-                            </div>
-
-                            <div class="reschedule-custom">
-                                <input
-                                    type="text"
-                                    class="text-input compact"
-                                    v-model="reschedule.custom"
-                                    :placeholder="`${rescheduleFieldName()} value (e.g. 2025-01-03, eom)`"
-                                    autocomplete="off"
-                                    @keydown.enter.prevent="applyMultiRescheduleCustom()"
-                                >
-
-                                <button
-                                    class="schedule-btn primary"
-                                    type="button"
-                                    title="Set"
-                                    aria-label="Set"
-                                    @click="applyMultiRescheduleCustom()"
-                                    :disabled="!reschedule.custom"
-                                >
-                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M20 6L9 17l-5-5"></path>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
                     
                     <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
                     <div v-else-if="currentGroupBy && currentGroupBy !== 'none'" class="task-list-grouped" @click="closeReschedule">
@@ -820,7 +813,7 @@
                                             </button>
 
                                             <div
-                                                v-if="reschedule.open && reschedule.taskUuid === task.uuid"
+                                                v-if="reschedule.open && !reschedule.multiSelect && reschedule.taskUuid === task.uuid"
                                                 class="reschedule-pop"
                                                 @click.stop
                                             >
@@ -1076,6 +1069,7 @@
 
                                     <div v-if="task.status === 'pending'" class="reschedule">
                                         <button
+                                            v-if="!multiSelectMode"
                                             class="icon-btn small"
                                             type="button"
                                             aria-label="Reschedule task"
@@ -1087,10 +1081,10 @@
                                             </svg>
                                         </button>
 
-                                        <div
-                                            v-if="reschedule.open && reschedule.taskUuid === task.uuid"
-                                            class="reschedule-pop"
-                                            @click.stop
+                                            <div
+                                                v-if="reschedule.open && !reschedule.multiSelect && reschedule.taskUuid === task.uuid"
+                                                class="reschedule-pop"
+                                                @click.stop
                                             >
                                              <div class="reschedule-header-row">
                                                  <div class="reschedule-title">Date</div>
@@ -1245,7 +1239,7 @@
                                         </div>
                                     </div>
 
-                                    <button v-if="task.status === 'pending'" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
+                                    <button v-if="task.status === 'pending' && !multiSelectMode" class="icon-btn small" type="button" aria-label="Edit task" @click="editTask(task.uuid)" :disabled="busyTaskUuids[task.uuid]">
                                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                                             <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 2.83H5v-.92l9.06-9.06.92.92L5.92 20.08zM20.71 7.04a1.003 1.003 0 0 0 0-1.42L18.37 3.29a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.83z"/>
                                         </svg>

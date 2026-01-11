@@ -1005,7 +1005,9 @@ a:hover {
     max-width: 720px;
     margin: 0 auto;
     box-shadow: var(--shadow);
-    max-height: calc(100svh - 24px);
+
+    /* Keep the modal fully visible even with bottom toasts/toolbars. */
+    max-height: calc(100svh - 24px - 84px);
     overflow: auto;
 }
 
@@ -1640,16 +1642,7 @@ a:hover {
     padding: 8px 0;
 }
 
-.multi-reschedule-container {
-    padding: 16px;
-    background: var(--panel);
-    border-bottom: 1px solid var(--line);
-}
 
-.multi-reschedule-pop {
-    max-width: 600px;
-    margin: 0 auto;
-}
 
 
 .reschedule-pop .settings-multi-chip {

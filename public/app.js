@@ -1503,6 +1503,10 @@ function createTaskwarriorApp({
         },
 
         async applyReschedulePreset(taskUuid, preset) {
+            if (this.reschedule.multiSelect) {
+                return await this.applyMultiReschedulePreset(preset);
+            }
+
             const key = String(preset || '').trim();
 
             if (key === 'today') return await this.rescheduleTask(taskUuid, 'today');
@@ -1511,12 +1515,20 @@ function createTaskwarriorApp({
         },
 
         async applyRescheduleCustom(taskUuid) {
+            if (this.reschedule.multiSelect) {
+                return await this.applyMultiRescheduleCustom();
+            }
+
             const value = String(this.reschedule.custom || '').trim();
             if (!value) return;
             await this.rescheduleTask(taskUuid, value);
         },
 
         async onRescheduleCalendarChange(taskUuid, event) {
+            if (this.reschedule.multiSelect) {
+                return await this.onMultiRescheduleCalendarChange(event);
+            }
+
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
 
@@ -1585,12 +1597,11 @@ function createTaskwarriorApp({
                 return;
             }
 
-            // Open reschedule for the first selected task to get the UI
-            // But we'll apply to all selected tasks
-            const firstUuid = Array.from(this.selectedTaskUuids)[0];
+            // Open the bulk reschedule UI. Important: do NOT set taskUuid,
+            // otherwise a single-task popover might also open.
             this.reschedule = {
                 open: true,
-                taskUuid: firstUuid,
+                taskUuid: null,
                 custom: '',
                 fields: this.rescheduleFieldNames(),
                 showFieldPicker: false,
