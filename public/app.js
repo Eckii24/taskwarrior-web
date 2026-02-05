@@ -741,10 +741,10 @@ function createTaskwarriorApp({
             modalEscForceCloseUntil: 0,
             modalEscHintTimeoutId: null,
 
-            searchPendingOnly: true,
+            searchPendingOnly: false,
             lastSearch: {
                 term: '',
-                pendingOnly: true,
+                pendingOnly: false,
             },
 
             toast: {
