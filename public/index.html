@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#181825">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Taskwarrior">
 
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
@@ -24,6 +29,8 @@
                 class="icon-btn"
                 type="button"
                 aria-label="Open menu"
+                aria-controls="app-sidebar"
+                :aria-expanded="drawerOpen"
                 @click="toggleDrawer(true)"
             >
                 <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -49,10 +56,11 @@
         <div
             class="drawer-backdrop"
             :class="{ open: drawerOpen }"
+            aria-hidden="true"
             @click="toggleDrawer(false)"
         ></div>
 
-            <aside class="sidebar" :class="{ open: drawerOpen }" aria-label="Filters">
+        <aside id="app-sidebar" class="sidebar" :class="{ open: drawerOpen }" aria-label="Navigation">
             <div class="sidebar-header">
                 <div class="brand">
                     <img class="brand-icon" src="logo.png" alt="">
@@ -423,7 +431,7 @@
                 </div>
 
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
-                    <div class="tasks-heading-row">
+                    <div class="tasks-heading-row" :class="{ 'controls-hidden': selectedView.type === 'search' }">
                         <div class="tasks-heading">{{ currentTitle }}</div>
                         <div v-if="!showTaskrc && selectedView.type !== 'search'" class="tasks-controls">
                             <button
@@ -444,6 +452,8 @@
                                 type="button"
                                 class="control-btn"
                                 :class="{ 'has-value': currentGroupBy && currentGroupBy !== 'none' }"
+                                aria-haspopup="listbox"
+                                :aria-expanded="groupDropdownOpen"
                                 @click="toggleGroupDropdown"
                             >
                                 <svg class="control-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -455,16 +465,19 @@
                                 </svg>
                             </button>
                             
-                            <div v-if="groupDropdownOpen" class="attribute-dropdown group-dropdown">
-                                <div 
-                                    v-for="option in groupOptions" 
+                            <div v-if="groupDropdownOpen" class="attribute-dropdown group-dropdown" role="listbox" aria-label="Group tasks by">
+                                <button
+                                    v-for="option in groupOptions"
                                     :key="option.value"
+                                    type="button"
                                     class="dropdown-item"
                                     :class="{ active: currentGroupBy === option.value }"
+                                    role="option"
+                                    :aria-selected="currentGroupBy === option.value"
                                     @click="selectGroupOption(option.value)"
                                 >
                                     {{ option.label }}
-                                </div>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -717,7 +730,7 @@
 
 
                     
-                    <div v-if="tasks.length === 0" class="empty-state">{{ emptyMessage }}</div>
+                    <div v-if="tasks.length === 0" class="empty-state" :class="{ loading: emptyMessage === 'Loading…' }" role="status">{{ emptyMessage }}</div>
                     <div v-else-if="currentGroupBy && currentGroupBy !== 'none'" class="task-list-grouped" @click="closeReschedule">
                         <div v-for="group in taskGroups" :key="group.key" class="task-group">
                             <div class="task-group-header">{{ group.name }}</div>
@@ -727,6 +740,12 @@
                                 :style="getTaskCardStyle(task)"
                                 :class="{ 'task-selected': multiSelectMode && isTaskSelected(task.uuid) }"
                                 @click="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                                @keydown.enter.prevent="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                                @keydown.space.prevent="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                                :role="multiSelectMode ? 'button' : undefined"
+                                :tabindex="multiSelectMode ? 0 : undefined"
+                                :aria-pressed="multiSelectMode ? isTaskSelected(task.uuid) : undefined"
+                                :aria-busy="Boolean(busyTaskUuids[task.uuid])"
                             >
                             <div v-if="!multiSelectMode" class="task-check">
                                     <input
@@ -994,6 +1013,12 @@
                             :style="getTaskCardStyle(task)"
                             :class="{ 'task-selected': multiSelectMode && isTaskSelected(task.uuid) }"
                             @click="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                            @keydown.enter.prevent="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                            @keydown.space.prevent="multiSelectMode ? toggleTaskSelection(task.uuid) : null"
+                            :role="multiSelectMode ? 'button' : undefined"
+                            :tabindex="multiSelectMode ? 0 : undefined"
+                            :aria-pressed="multiSelectMode ? isTaskSelected(task.uuid) : undefined"
+                            :aria-busy="Boolean(busyTaskUuids[task.uuid])"
                         >
                         <div v-if="!multiSelectMode" class="task-check">
                                 <input
@@ -1258,9 +1283,9 @@
 
         <!-- Command modal (Add/Show/Execute/Search) -->
         <div class="modal-backdrop" v-if="modal.open" @click="tryCloseModal"></div>
-        <section class="modal" v-if="modal.open" role="dialog" aria-modal="true">
+        <section class="modal" v-if="modal.open" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <div class="modal-header">
-                <div class="modal-title">{{ modalTitle }}</div>
+                <div id="modal-title" class="modal-title">{{ modalTitle }}</div>
                 <button class="icon-btn" :class="{ danger: modalEscHintVisible }" type="button" aria-label="Close" @click="tryCloseModal">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path fill="currentColor" d="M18.3 5.71 12 12l6.3 6.29-1.41 1.42L10.59 13.4 4.3 19.71 2.89 18.29 9.17 12 2.89 5.71 4.3 4.29l6.29 6.3 6.3-6.3 1.41 1.42z"/>
@@ -1579,6 +1604,7 @@
                             type="button"
                             class="collapsible-header"
                             @click="modal.showAnnotations = !modal.showAnnotations"
+                            :aria-expanded="modal.showAnnotations"
                         >
                             <svg class="collapsible-icon" :class="{ expanded: modal.showAnnotations }" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -1666,6 +1692,7 @@
                             type="button"
                             class="collapsible-header"
                             @click="modal.showTaskDetails = !modal.showTaskDetails"
+                            :aria-expanded="modal.showTaskDetails"
                         >
                             <svg class="collapsible-icon" :class="{ expanded: modal.showTaskDetails }" viewBox="0 0 24 24" aria-hidden="true">
                                 <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -1946,7 +1973,7 @@
         </section>
 
         <!-- Inline message (kept minimal) -->
-        <div v-if="toast.text" class="toast" :class="toast.type">{{ toast.text }}</div>
+        <div v-if="toast.text" class="toast" :class="toast.type" role="status" aria-live="polite">{{ toast.text }}</div>
     </div>
 
     <script src="app.js"></script>

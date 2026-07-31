@@ -32,9 +32,9 @@
         const g = parseInt(match[2], 10);
         const b = parseInt(match[3], 10);
 
-        // Convert 0-5 range to 0-255
+        // Match xterm's 6×6×6 color cube used by Taskwarrior terminals.
         const toHex = (val) => {
-            const scaled = Math.round((val / 5) * 255);
+            const scaled = val === 0 ? 0 : 55 + val * 40;
             return scaled.toString(16).padStart(2, '0');
         };
 
@@ -242,7 +242,7 @@
             if (!trimmed || trimmed.startsWith('#')) continue;
 
             // Match color.* rules
-            const match = trimmed.match(/^color\.([a-zA-Z0-9_.]+)\s*=\s*(.+)$/);
+            const match = trimmed.match(/^color\.([^\s=]+)\s*=\s*(.+)$/);
             if (match) {
                 const ruleName = match[1].trim();
                 const ruleValue = match[2].trim();

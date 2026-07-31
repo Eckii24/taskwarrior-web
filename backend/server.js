@@ -1,11 +1,12 @@
-const express = require('express');
-const cors = require('cors');
 const { execFile } = require('child_process');
-const path = require('path');
-const { promisify } = require('util');
+const { randomUUID } = require('crypto');
 const fs = require('fs/promises');
 const os = require('os');
+const path = require('path');
+const { promisify } = require('util');
+
 const Database = require('better-sqlite3');
+const express = require('express');
 
 const execFileAsync = promisify(execFile);
 const PORT = process.env.PORT || 3000;
@@ -61,6 +62,14 @@ function tokenizeShellArgs(text) {
         }
 
         if (ch === '"' || ch === "'") {
+            // Treat apostrophes inside words as text (e.g. Bob's). Quotes at
+            // token boundaries still group whitespace as expected.
+            const previous = current[current.length - 1] || '';
+            if (ch === "'" && /[a-zA-Z0-9]/.test(previous)) {
+                current += ch;
+                continue;
+            }
+
             quote = ch;
             continue;
         }
@@ -195,8 +204,8 @@ function createApp({
 } = {}) {
     const app = express();
 
-    // Middleware
-    app.use(cors());
+    // Same-origin API only. Wildcard CORS would let arbitrary websites send
+    // destructive Taskwarrior commands to a locally reachable instance.
     app.use(express.json());
     app.use(express.static(path.join(__dirname, '../public')));
 
@@ -262,9 +271,13 @@ function createApp({
 
             await fs.mkdir(path.dirname(taskrcPath), { recursive: true });
 
-            const tmpPath = `${taskrcPath}.tmp`;
-            await fs.writeFile(tmpPath, content, { encoding: 'utf8' });
-            await fs.rename(tmpPath, taskrcPath);
+            const tmpPath = `${taskrcPath}.${process.pid}.${randomUUID()}.tmp`;
+            try {
+                await fs.writeFile(tmpPath, content, { encoding: 'utf8' });
+                await fs.rename(tmpPath, taskrcPath);
+            } finally {
+                await fs.rm(tmpPath, { force: true }).catch(() => {});
+            }
 
             res.type('text/plain').send('OK');
         } catch (error) {
@@ -580,7 +593,10 @@ function createApp({
             let visible = existing.visible;
             if (hasVisible) {
                 const rawVisible = req.body.visible;
-                visible = rawVisible ? 1 : 0;
+                if (typeof rawVisible !== 'boolean' && rawVisible !== 0 && rawVisible !== 1) {
+                    return res.status(400).json({ success: false, error: 'visible must be a boolean' });
+                }
+                visible = rawVisible === true || rawVisible === 1 ? 1 : 0;
             }
 
             if (hasName && !name) {
@@ -796,44 +812,60 @@ function createApp({
 // Single endpoint to execute taskwarrior commands
     app.post('/api/task', async (req, res) => {
         try {
-            const { args, annotation } = req.body;
+            const body = req.body && typeof req.body === 'object' ? req.body : {};
+            const { args, annotation } = body;
 
-            if (!args || (!Array.isArray(args) && typeof args !== 'string')) {
+            if (!Array.isArray(args) && typeof args !== 'string') {
                 return res.status(400).json({
                     success: false,
                     error: 'args parameter is required (array or string)',
                 });
             }
 
-            const argsArray = Array.isArray(args) ? args : tokenizeShellArgs(args);
+            if (Array.isArray(args) && args.some((arg) => typeof arg !== 'string')) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'args array must contain only strings',
+                });
+            }
 
-            // Execute taskwarrior command using execFile for security
+            const argsArray = Array.isArray(args) ? args.slice() : tokenizeShellArgs(args);
+            if (argsArray.length === 0 || !argsArray.some((arg) => arg.trim().length > 0)) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'args must not be empty',
+                });
+            }
+
+            if (annotation !== undefined && typeof annotation !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'annotation must be a string',
+                });
+            }
+
+            // Execute Taskwarrior using execFile for security.
             const { stdout, stderr } = await execTask(argsArray);
 
-            // If annotation is provided and this is an 'add' command, annotate the newly created task
-            if (annotation && typeof annotation === 'string' && annotation.trim()) {
+            // If annotation is provided and this is an 'add' command, annotate the new task.
+            if (typeof annotation === 'string' && annotation.trim()) {
                 const annotationText = annotation.trim();
-                
-                // Check if this is an 'add' command (first non-rc arg should be 'add')
-                const firstNonRcArg = argsArray.find(arg => !String(arg).startsWith('rc.'));
+                const firstNonRcArg = argsArray.find((arg) => !String(arg).startsWith('rc.'));
                 const isAddCommand = firstNonRcArg === 'add';
-                
+
                 if (isAddCommand) {
-                    // Extract the task ID from stdout (taskwarrior outputs "Created task <id>.")
+                    // Taskwarrior outputs "Created task <id>." after a successful add.
                     const match = stdout.match(/Created task (\d+)\./);
                     if (match) {
                         const taskId = match[1];
-                        
-                        // Add annotation to the newly created task
-                        // Use single quotes and escape any embedded single quotes
-                        const escapedAnnotation = annotationText.replace(/'/g, "\\'");
-                        const annotateArgs = [taskId, 'annotate', `'${escapedAnnotation}'`];
-                        
+
+                        // execFile receives raw arguments. Quotes would become annotation text.
+                        const annotateArgs = [taskId, 'annotate', annotationText];
+
                         try {
                             await execTask(annotateArgs);
                         } catch (annotateError) {
-                            // If annotation fails, we still return success for task creation
-                            // but include a warning in stderr
+                            // Task creation succeeded. Preserve that result and expose the warning.
                             const warningMsg = `Task created but annotation failed: ${annotateError.message}`;
                             return res.json({
                                 success: true,

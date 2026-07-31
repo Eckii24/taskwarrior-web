@@ -389,8 +389,14 @@ class TaskCommandService {
         this.apiClient = apiClient;
     }
 
-    async addTask(description, annotation) {
-        return await this.apiClient.execute(`add ${description}`, annotation);
+    async addTask(taskArgs, annotation) {
+        if (Array.isArray(taskArgs)) {
+            const args = taskArgs.map((value) => String(value ?? '')).filter((value) => value.length > 0);
+            if (args.length === 0) return { success: false, output: '', error: 'No task description provided' };
+            return await this.apiClient.execute(['add', ...args], annotation);
+        }
+
+        return await this.apiClient.execute(`add ${String(taskArgs || '').trim()}`, annotation);
     }
 
     async modifyTask(taskUuid, ...modifications) {
@@ -406,13 +412,21 @@ class TaskCommandService {
             return { success: false, output: '', error: 'No modifications provided' };
         }
 
-        return await this.apiClient.execute(`${uuid} modify ${mods.join(' ')}`);
+        return await this.apiClient.execute([uuid, 'modify', ...mods]);
     }
 
     async modifyTasks(taskUuids, modifications) {
         const uuids = Array.isArray(taskUuids) ? taskUuids.map((uuid) => String(uuid || '').trim()).filter(Boolean) : [];
         if (uuids.length === 0) {
             return { success: false, output: '', error: 'No task IDs provided' };
+        }
+
+        if (Array.isArray(modifications)) {
+            const mods = modifications.map((value) => String(value || '').trim()).filter(Boolean);
+            if (mods.length === 0) {
+                return { success: false, output: '', error: 'No modifications provided' };
+            }
+            return await this.apiClient.execute([...uuids, 'mod', ...mods]);
         }
 
         const mods = String(modifications || '').trim();
@@ -424,31 +438,31 @@ class TaskCommandService {
     }
 
     async completeTask(taskUuid) {
-        return await this.apiClient.execute(`${taskUuid} done`);
+        return await this.apiClient.execute([String(taskUuid), 'done']);
     }
 
     async markPending(taskUuid) {
-        return await this.apiClient.execute(`${taskUuid} mod status:pending`);
+        return await this.apiClient.execute([String(taskUuid), 'mod', 'status:pending']);
     }
 
     async deleteTask(taskUuid) {
-        return await this.apiClient.execute(`${taskUuid} delete`);
+        return await this.apiClient.execute([String(taskUuid), 'delete']);
     }
 
     async annotateTask(taskUuid, annotationText) {
-        return await this.apiClient.execute(`${taskUuid} annotate ${annotationText}`);
+        return await this.apiClient.execute([String(taskUuid), 'annotate', String(annotationText)]);
     }
 
     async denotateTask(taskUuid, pattern) {
-        return await this.apiClient.execute(`${taskUuid} denotate ${pattern}`);
+        return await this.apiClient.execute([String(taskUuid), 'denotate', String(pattern)]);
     }
 
     async exportTask(taskUuid) {
-        return await this.apiClient.execute(`${taskUuid} export`);
+        return await this.apiClient.execute([String(taskUuid), 'export']);
     }
 
     async showTask(taskUuid) {
-        return await this.apiClient.execute(`${taskUuid}`);
+        return await this.apiClient.execute([String(taskUuid)]);
     }
 
     async executeCustom(command) {
@@ -688,6 +702,8 @@ function createTaskwarriorApp({
              },
 
              currentGroupBy: null,
+             taskLoadRequestId: 0,
+             completionRequestId: 0,
 
 
             selectedView: { type: 'builtin', key: 'next' },
@@ -812,6 +828,10 @@ function createTaskwarriorApp({
             return this.taskrcText !== this.loadedTaskrcText;
         },
             currentTitle() {
+             if (this.showTaskrc) return 'Settings';
+             if (this.mainMode === 'output') return 'Command output';
+             if (this.selectedView.type === 'search') return 'Search';
+
              if (this.selectedView.type === 'builtin') {
                  const key = String(this.selectedView.key || 'next');
                  const builtin = this.builtinFilters[key];
@@ -880,6 +900,8 @@ function createTaskwarriorApp({
          window.removeEventListener('click', this.onGlobalClick);
 
          this.removeGestureListeners();
+         if (this.toastTimeoutId) clearTimeout(this.toastTimeoutId);
+         if (this.modalEscHintTimeoutId) clearTimeout(this.modalEscHintTimeoutId);
      },
      methods: {
          installGestureListeners() {
@@ -1165,6 +1187,12 @@ function createTaskwarriorApp({
                 );
             }
 
+            if (type === 'edit-multi') {
+                const fields = ['value', 'project', 'tags', 'priority', 'due', 'attributeInputValue'];
+                return fields.every((field) => !String(this.modal[field] || '').trim())
+                    && !this.modal.activeAttributeDropdown;
+            }
+
             if (type === 'edit') {
                 const noAttributeDropdown = !this.modal.activeAttributeDropdown;
                 const attributeValueEmpty = !String(this.modal.attributeInputValue || '').trim();
@@ -1266,6 +1294,7 @@ function createTaskwarriorApp({
         },
 
          openSettings() {
+             this.beginTaskLoad();
              this.showTaskrc = true;
              this.persistSelectedView({ type: 'builtin', key: 'next' });
              this.mainMode = 'tasks';
@@ -1292,8 +1321,7 @@ function createTaskwarriorApp({
         renderMarkdown(text) {
             const input = String(text || '');
 
-            // Tiny, safe-ish subset renderer (no raw HTML passthrough).
-            // Supports: paragraphs, line breaks, inline code, **bold**, *italic*, and links.
+            // Tiny safe subset: paragraphs, line breaks, inline code, emphasis, links.
             const escapeHtml = (value) => String(value)
                 .replaceAll('&', '&amp;')
                 .replaceAll('<', '&lt;')
@@ -1301,33 +1329,48 @@ function createTaskwarriorApp({
                 .replaceAll('"', '&quot;')
                 .replaceAll("'", '&#39;');
 
-            const renderInline = (raw) => {
-                let out = escapeHtml(raw);
-
-                // inline code
-                out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-                // links: [text](url)
-                out = out.replace(/\[([^\]]+)]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-
-                // auto-link plain URLs
-                out = out.replace(/(https?:\/\/[^\s<]+[^\s<\.)\]\}>,:;"'])/g, (match) => {
-                    return `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`;
-                });
-
-                // bold and italic (simple, non-nested)
-                out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-                out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-                return out;
+            const fragments = [];
+            let markerPrefix = '\uE000TW';
+            while (input.includes(markerPrefix)) markerPrefix += 'X';
+            const stash = (html) => {
+                const marker = `${markerPrefix}${fragments.length}\uE001`;
+                fragments.push(html);
+                return marker;
             };
 
-            const lines = input.replace(/\r\n?/g, '\n').split('\n');
-            const html = lines.map((line) => renderInline(line)).join('<br>');
-            return `<p>${html}</p>`;
+            // Protect generated markup from later regex passes. Without placeholders,
+            // auto-linking rewrites URLs inside already generated <a href> attributes.
+            let source = input.replace(/`([^`\n]+)`/g, (_match, code) => {
+                return stash(`<code>${escapeHtml(code)}</code>`);
+            });
+
+            source = source.replace(/\[([^\]\n]+)]\((https?:\/\/[^\s)]+)\)/g, (_match, label, url) => {
+                const safeUrl = escapeHtml(url);
+                return stash(`<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`);
+            });
+
+            let output = escapeHtml(source);
+            output = output.replace(/https?:\/\/[^\s<]+/g, (candidate) => {
+                const trailingMatch = candidate.match(/[.,!?;:)\]}*]+$/);
+                const trailing = trailingMatch ? trailingMatch[0] : '';
+                const url = trailing ? candidate.slice(0, -trailing.length) : candidate;
+                if (!url) return candidate;
+                return `${stash(`<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`)}${trailing}`;
+            });
+
+            output = output.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            output = output.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            output = output.replace(/\r\n?|\n/g, '<br>');
+
+            fragments.forEach((fragment, index) => {
+                output = output.replace(`${markerPrefix}${index}\uE001`, fragment);
+            });
+
+            return `<p>${output}</p>`;
         },
 
         resetCompletion() {
+            this.completionRequestId += 1;
             this.completion = {
                 field: null,
                 token: '',
@@ -1704,7 +1747,14 @@ function createTaskwarriorApp({
                 type: 'edit-multi',
                 taskIds: Array.from(this.selectedTaskUuids),
                 value: '',
+                project: '',
+                tags: '',
+                priority: '',
+                due: '',
+                activeAttributeDropdown: null,
+                attributeInputValue: '',
             };
+            this.resetCompletion();
 
             this.$nextTick(() => {
                 const input = this.$refs.modalInput;
@@ -1717,12 +1767,27 @@ function createTaskwarriorApp({
             if (uuids.length === 0) return;
 
             const input = String(this.modal.value || '').trim();
-            if (!input) {
+            const structured = [];
+            const project = String(this.modal.project || '').trim();
+            const tags = String(this.modal.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean);
+            const priority = String(this.modal.priority || '').trim();
+            const due = String(this.modal.due || '').trim();
+
+            if (project) structured.push(`project:${project}`);
+            tags.forEach((tag) => structured.push(`+${tag}`));
+            if (priority) structured.push(`priority:${priority}`);
+            if (due) structured.push(`${this.rescheduleFieldName()}:${due}`);
+
+            if (!input && structured.length === 0) {
                 this.showToast('No modifications specified', 'error');
                 return;
             }
 
-            const result = await commandService.modifyTasks(uuids, input);
+            const modifications = input
+                ? [input, ...structured.map((value) => sanitizeTaskCommandArg(value))].filter(Boolean).join(' ')
+                : structured;
+
+            const result = await commandService.modifyTasks(uuids, modifications);
             if (result.success) {
                 this.showToast(`Modified ${uuids.length} tasks`, 'success');
                 this.closeModal();
@@ -1866,9 +1931,9 @@ function createTaskwarriorApp({
         },
 
         async updateCompletion(field, tokenInfo, { autoTrigger = false } = {}) {
+            const requestId = ++this.completionRequestId;
             const token = tokenInfo.token || '';
             const spec = this.getCompletionSpec(field);
-
             let suggestions = [];
 
             if (spec && spec.type === 'local') {
@@ -1879,13 +1944,13 @@ function createTaskwarriorApp({
             } else {
                 const normalized = String(token).trim();
                 if (!normalized) {
-                    this.resetCompletion();
+                    if (requestId === this.completionRequestId) this.resetCompletion();
                     return [];
                 }
-
                 suggestions = await this.fetchCompletionSuggestions(normalized);
             }
 
+            if (requestId !== this.completionRequestId) return [];
             if (suggestions.length === 0) {
                 this.resetCompletion();
                 return [];
@@ -1913,7 +1978,6 @@ function createTaskwarriorApp({
             const { start, end } = this.completion;
             const nextValue = replaceRange(current, start, end, suggestion);
             const cursor = start + suggestion.length;
-
             this.setFieldValue(field, nextValue);
 
             this.$nextTick(() => {
@@ -1925,15 +1989,16 @@ function createTaskwarriorApp({
             });
 
             this.resetCompletion();
-
             const normalizedSuggestion = String(suggestion || '').trim();
             if (!normalizedSuggestion.endsWith(':')) return;
 
+            const requestId = ++this.completionRequestId;
             const requestPrefix = normalizedSuggestion;
             const raw = await this.fetchCompletionSuggestions(requestPrefix);
+            if (requestId !== this.completionRequestId) return;
+
             const stripPrefix = new RegExp(`^${escapeRegExp(requestPrefix)}`);
             const suggestions = this.stripPrefixFromSuggestions(raw, stripPrefix);
-
             if (suggestions.length === 0) return;
 
             const tokenInfo = { token: '', start: cursor, end: cursor };
@@ -2185,6 +2250,7 @@ function createTaskwarriorApp({
         },
 
         selectSearch() {
+            this.beginTaskLoad();
             this.showTaskrc = false;
             this.selectedView = { type: 'search' };
             this.persistSelectedView(this.selectedView);
@@ -2202,52 +2268,69 @@ function createTaskwarriorApp({
             this.loadTasksForSelection();
         },
 
+        beginTaskLoad() {
+            this.taskLoadRequestId += 1;
+            return this.taskLoadRequestId;
+        },
+
+        isCurrentTaskLoad(requestId) {
+            return requestId === this.taskLoadRequestId;
+        },
+
         async loadTasksForSelection() {
+            const requestId = this.beginTaskLoad();
+            const selectedView = { ...this.selectedView };
             this.emptyMessage = 'Loading…';
+            this.tasks = [];
+            this.taskGroups = [];
             this.mainMode = 'tasks';
             this.mainOutput = '';
-
-            // Kick off taskrc loading so colors can be applied.
             this.ensureTaskrcLoaded();
 
             try {
-                if (this.selectedView.type === 'search') {
+                if (selectedView.type === 'search') {
+                    if (!this.isCurrentTaskLoad(requestId)) return;
                     this.tasks = [];
                     this.taskGroups = [];
                     this.emptyMessage = 'Use Search to load tasks.';
                     return;
                 }
 
-                 if (this.selectedView.type === 'builtin') {
-                     const key = String(this.selectedView.key || '').trim();
-                     const builtin = this.builtinFilters[key];
-                     const query = builtin ? builtin.filter : key;
-                     this.currentGroupBy = builtin?.group_by || null;
-                     const result = await queryService.getTasks(query, this.currentGroupBy);
-
+                if (selectedView.type === 'builtin') {
+                    const key = String(selectedView.key || '').trim();
+                    const builtin = this.builtinFilters[key];
+                    const query = builtin ? builtin.filter : key;
+                    const groupBy = builtin?.group_by || null;
+                    const result = await queryService.getTasks(query, groupBy);
+                    if (!this.isCurrentTaskLoad(requestId)) return;
+                    this.currentGroupBy = groupBy;
                     this.tasks = result.tasks;
                     this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                     return;
                 }
 
-                 if (this.selectedView.type === 'filter') {
-                     const selectedId = Number(this.selectedView.id);
-                     const filter = this.filters.find((f) => Number(f.id) === selectedId);
-                     if (!filter) {
-
+                if (selectedView.type === 'filter') {
+                    const selectedId = Number(selectedView.id);
+                    const filter = this.filters.find((entry) => Number(entry.id) === selectedId);
+                    if (!filter) {
+                        if (!this.isCurrentTaskLoad(requestId)) return;
                         this.tasks = [];
                         this.taskGroups = [];
                         this.emptyMessage = 'Filter not found.';
                         return;
                     }
-                    this.currentGroupBy = filter?.group_by || null;
-                    const result = await queryService.getTasks(filter.filter, this.currentGroupBy);
+
+                    const groupBy = filter?.group_by || null;
+                    const result = await queryService.getTasks(filter.filter, groupBy);
+                    if (!this.isCurrentTaskLoad(requestId)) return;
+                    this.currentGroupBy = groupBy;
                     this.tasks = result.tasks;
                     this.taskGroups = result.groups;
                     this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                 }
             } catch (error) {
+                if (!this.isCurrentTaskLoad(requestId)) return;
                 this.tasks = [];
                 this.taskGroups = [];
                 this.emptyMessage = 'Error loading tasks.';
@@ -2257,29 +2340,40 @@ function createTaskwarriorApp({
 
         async refreshCurrentPanel() {
             if (this.showTaskrc) return;
-
-            // Ensure taskrc loading is in progress so refreshes/coloring stay consistent.
             this.ensureTaskrcLoaded();
 
-            if (this.selectedView.type === 'search') {
-                const term = String(this.lastSearch.term || '').trim();
-                if (!term) {
-                    this.tasks = [];
-                    this.taskGroups = [];
-                    this.emptyMessage = 'Use Search to load tasks.';
-                    return;
-                }
-
-                const prefix = this.lastSearch.pendingOnly ? 'status:pending ' : '';
-                this.mainMode = 'tasks';
-                const result = await queryService.getTasks(`${prefix}${term}`, this.currentGroupBy);
-                this.tasks = result.tasks;
-                this.taskGroups = result.groups;
-                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+            if (this.selectedView.type !== 'search') {
+                await this.loadTasksForSelection();
                 return;
             }
 
-            await this.loadTasksForSelection();
+            const term = String(this.lastSearch.term || '').trim();
+            const requestId = this.beginTaskLoad();
+            if (!term) {
+                this.tasks = [];
+                this.taskGroups = [];
+                this.emptyMessage = 'Use Search to load tasks.';
+                return;
+            }
+
+            const prefix = this.lastSearch.pendingOnly ? 'status:pending ' : '';
+            this.tasks = [];
+            this.taskGroups = [];
+            this.emptyMessage = 'Loading…';
+            this.mainMode = 'tasks';
+            try {
+                const result = await queryService.getTasks(`${prefix}${term}`, this.currentGroupBy);
+                if (!this.isCurrentTaskLoad(requestId)) return;
+                this.tasks = result.tasks;
+                this.taskGroups = result.groups;
+                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
+            } catch (error) {
+                if (!this.isCurrentTaskLoad(requestId)) return;
+                this.tasks = [];
+                this.taskGroups = [];
+                this.emptyMessage = 'Error loading tasks.';
+                this.showToast(String(error?.message || error), 'error');
+            }
         },
 
         toggleGroupDropdown() {
@@ -2766,6 +2860,7 @@ function createTaskwarriorApp({
         },
 
         async updateAttributeCompletion(attributeName, tokenInfo) {
+            const requestId = ++this.completionRequestId;
             const fieldByAttr = {
                 project: 'modal.project',
                 tags: 'modal.tags',
@@ -2775,14 +2870,14 @@ function createTaskwarriorApp({
 
             const mappedField = fieldByAttr[String(attributeName || '')];
             if (!mappedField) {
-                this.resetCompletion();
+                if (requestId === this.completionRequestId) this.resetCompletion();
                 return [];
             }
 
             const token = tokenInfo.token || '';
             const spec = this.getCompletionSpec(mappedField);
             if (!spec) {
-                this.resetCompletion();
+                if (requestId === this.completionRequestId) this.resetCompletion();
                 return [];
             }
 
@@ -2794,6 +2889,7 @@ function createTaskwarriorApp({
                 suggestions = this.stripPrefixFromSuggestions(raw, spec.stripPrefix);
             }
 
+            if (requestId !== this.completionRequestId) return [];
             if (suggestions.length === 0) {
                 this.resetCompletion();
                 return [];
@@ -2831,99 +2927,93 @@ function createTaskwarriorApp({
              }
          },
 
-         async addAnnotation() {
-             const uuid = String(this.modal?.taskId || '').trim();
-             if (!uuid) return;
+        async addAnnotation() {
+            const uuid = String(this.modal?.taskId || '').trim();
+            if (!uuid) return;
+            const text = String(this.modal.annotationDraft || '').trim();
+            if (!text) return;
+            const normalized = text.replace(/\s*\n\s*/g, ' / ');
 
-              const text = String(this.modal.annotationDraft || '').trim();
-              if (!text) return;
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.annotateTask(uuid, normalized);
+                if (result.success) {
+                    this.modal.annotationDraft = '';
+                    await this.refreshTaskAnnotations(uuid);
+                    this.showToast('Added annotation', 'success');
+                } else {
+                    this.showToast(result.error || 'Failed to add annotation', 'error');
+                }
+            });
+        },
 
-              const normalized = text.replace(/\s*\n\s*/g, ' / ');
+        startEditAnnotation(annotation) {
+            const entry = String(annotation?.entry || '').trim();
+            const description = String(annotation?.description || '');
+            const key = `${entry}|${description}`;
+            this.modal.annotationEditKey = key;
+            this.modal.annotationEditDraft = description;
+        },
 
-              await this.withBusyTask(uuid, async () => {
-                  const arg = sanitizeTaskCommandArg(normalized);
-                  const result = await commandService.annotateTask(uuid, arg);
-                 if (result.success) {
-                     this.modal.annotationDraft = '';
-                     await this.refreshTaskAnnotations(uuid);
-                     this.showToast('Added annotation', 'success');
-                 } else {
-                     this.showToast(result.error || 'Failed to add annotation', 'error');
-                 }
-             });
-         },
+        cancelEditAnnotation() {
+            this.modal.annotationEditKey = null;
+            this.modal.annotationEditDraft = '';
+        },
 
-         startEditAnnotation(annotation) {
-             const entry = String(annotation?.entry || '').trim();
-             const description = String(annotation?.description || '');
-             const key = `${entry}|${description}`;
-             this.modal.annotationEditKey = key;
-             this.modal.annotationEditDraft = description;
-         },
+        async saveEditAnnotation(annotation) {
+            const uuid = String(this.modal?.taskId || '').trim();
+            if (!uuid) return;
+            const original = String(annotation?.description || '');
+            const draftRaw = String(this.modal.annotationEditDraft || '').trim();
+            if (!draftRaw) return;
 
-         cancelEditAnnotation() {
-             this.modal.annotationEditKey = null;
-             this.modal.annotationEditDraft = '';
-         },
+            const draft = draftRaw.replace(/\s*\n\s*/g, ' / ');
+            if (draft === original) {
+                this.cancelEditAnnotation();
+                return;
+            }
 
-         async saveEditAnnotation(annotation) {
-             const uuid = String(this.modal?.taskId || '').trim();
-             if (!uuid) return;
+            await this.withBusyTask(uuid, async () => {
+                const deleteResult = await commandService.denotateTask(uuid, original);
+                if (!deleteResult.success) {
+                    this.showToast(deleteResult.error || 'Failed to update annotation', 'error');
+                    return;
+                }
 
-             const entry = String(annotation?.entry || '').trim();
-              const original = String(annotation?.description || '');
-              const draftRaw = String(this.modal.annotationEditDraft || '').trim();
+                const addResult = await commandService.annotateTask(uuid, draft);
+                if (addResult.success) {
+                    this.cancelEditAnnotation();
+                    await this.refreshTaskAnnotations(uuid);
+                    this.showToast('Updated annotation', 'success');
+                    return;
+                }
 
-              if (!draftRaw) return;
+                // Editing is delete + add in Taskwarrior. Restore old content on failure.
+                const rollbackResult = await commandService.annotateTask(uuid, original);
+                const rollbackMessage = rollbackResult.success
+                    ? ' Original annotation restored.'
+                    : ' Original annotation could not be restored.';
+                this.showToast(`${addResult.error || 'Failed to update annotation'}${rollbackMessage}`, 'error');
+                await this.refreshTaskAnnotations(uuid);
+            });
+        },
 
-              const draft = draftRaw.replace(/\s*\n\s*/g, ' / ');
+        async deleteAnnotation(annotation) {
+            const uuid = String(this.modal?.taskId || '').trim();
+            if (!uuid) return;
+            const description = String(annotation?.description || '').trim();
+            if (!description) return;
+            if (!confirm('Delete this annotation?')) return;
 
-              if (draft === original) {
-                  this.cancelEditAnnotation();
-                  return;
-              }
- 
-              await this.withBusyTask(uuid, async () => {
-                  const deleteArg = sanitizeTaskCommandArg(original);
-                  const delResult = await commandService.denotateTask(uuid, deleteArg);
-                 if (!delResult.success) {
-                     this.showToast(delResult.error || 'Failed to update annotation', 'error');
-                     return;
-                 }
-
-                 const addArg = sanitizeTaskCommandArg(draft);
-                 const addResult = await commandService.annotateTask(uuid, addArg);
-                 if (addResult.success) {
-                     this.cancelEditAnnotation();
-                     await this.refreshTaskAnnotations(uuid);
-                     this.showToast('Updated annotation', 'success');
-                 } else {
-                     this.showToast(addResult.error || 'Failed to update annotation', 'error');
-                     await this.refreshTaskAnnotations(uuid);
-                 }
-             });
-         },
-
-         async deleteAnnotation(annotation) {
-             const uuid = String(this.modal?.taskId || '').trim();
-             if (!uuid) return;
-
-             const description = String(annotation?.description || '').trim();
-             if (!description) return;
-
-             if (!confirm('Delete this annotation?')) return;
-
-             await this.withBusyTask(uuid, async () => {
-                 const arg = sanitizeTaskCommandArg(description);
-                 const result = await commandService.denotateTask(uuid, arg);
-                 if (result.success) {
-                     await this.refreshTaskAnnotations(uuid);
-                     this.showToast('Deleted annotation', 'success');
-                 } else {
-                     this.showToast(result.error || 'Failed to delete annotation', 'error');
-                 }
-             });
-         },
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.denotateTask(uuid, description);
+                if (result.success) {
+                    await this.refreshTaskAnnotations(uuid);
+                    this.showToast('Deleted annotation', 'success');
+                } else {
+                    this.showToast(result.error || 'Failed to delete annotation', 'error');
+                }
+            });
+        },
 
          async submitModal() {
              const type = this.modal.type;
@@ -2932,36 +3022,28 @@ function createTaskwarriorApp({
              if (type === 'add') {
                 const description = String(this.modal.description || '').trim();
                 if (!description) return;
-                
-                // Build task command from structured fields
-                let taskCommand = description;
-                
-                if (this.modal.project) {
-                    taskCommand += ` project:${this.modal.project}`;
-                }
-                
-                if (this.modal.tags) {
-                    const tags = this.modal.tags.split(',').map(t => t.trim()).filter(t => t);
-                    tags.forEach(tag => {
-                        taskCommand += ` +${tag}`;
-                    });
-                }
-                
-                if (this.modal.priority) {
-                    taskCommand += ` priority:${this.modal.priority}`;
-                }
-                
-                 const scheduleField = this.rescheduleFieldName();
-                 if (this.modal.due) {
-                     taskCommand += ` ${scheduleField}:${this.modal.due}`;
-                 }
-                
-                // Get initial annotation if provided
+
+                // Keep CLI syntax in the task-name field, but quote structured
+                // values so whitespace remains part of one Taskwarrior argument.
+                const taskParts = [description];
+                const project = String(this.modal.project || '').trim();
+                const tags = String(this.modal.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean);
+                const priority = String(this.modal.priority || '').trim();
+                const due = String(this.modal.due || '').trim();
+
+                if (project) taskParts.push(sanitizeTaskCommandArg(`project:${project}`));
+                tags.forEach((tag) => taskParts.push(sanitizeTaskCommandArg(`+${tag}`)));
+                if (priority) taskParts.push(sanitizeTaskCommandArg(`priority:${priority}`));
+                if (due) taskParts.push(sanitizeTaskCommandArg(`${this.rescheduleFieldName()}:${due}`));
+
                 const annotation = String(this.modal.initialAnnotation || '').trim() || undefined;
-                
-                const result = await commandService.addTask(taskCommand, annotation);
+                const result = await commandService.addTask(taskParts.join(' '), annotation);
                 if (result.success) {
-                    this.showToast('Added task', 'success');
+                    if (result.error) {
+                        this.showToast(`Added task. ${String(result.error).trim()}`, 'error', 5000);
+                    } else {
+                        this.showToast('Added task', 'success');
+                    }
                     this.closeModal();
                     await this.refreshCurrentPanel();
                 } else {
@@ -3037,8 +3119,7 @@ function createTaskwarriorApp({
                     return;
                 }
                 
-                const modifications = parts.join(' ');
-                const result = await commandService.modifyTask(taskId, modifications);
+                const result = await commandService.modifyTask(taskId, ...parts);
                 if (result.success) {
                     this.showToast('Updated task', 'success');
                     this.closeModal();
@@ -3078,13 +3159,9 @@ function createTaskwarriorApp({
                     pendingOnly: Boolean(this.searchPendingOnly),
                 };
 
-                const prefix = this.searchPendingOnly ? 'status:pending ' : '';
                 this.mainMode = 'tasks';
-                const result = await queryService.getTasks(`${prefix}${term}`, this.currentGroupBy);
-                this.tasks = result.tasks;
-                this.taskGroups = result.groups;
-                this.emptyMessage = this.tasks.length === 0 ? 'No tasks found.' : '';
                 this.closeModal();
+                await this.refreshCurrentPanel();
                 return;
             }
 
@@ -3569,7 +3646,7 @@ function createTaskwarriorApp({
         },
 
          async saveBuiltinFilters() {
-             const keys = ['today', 'next', 'all'];
+             const keys = ['today', 'inbox', 'next', 'all'];
  
              try {
                  for (const key of keys) {
@@ -3600,7 +3677,7 @@ function createTaskwarriorApp({
          },
  
          resetBuiltinSettingsDraft() {
-             const keys = ['today', 'next', 'all'];
+             const keys = ['today', 'inbox', 'next', 'all'];
              const next = { ...this.settingsBuiltinVisibilityDraft };
              for (const key of keys) {
                  const current = this.builtinFilters[key];

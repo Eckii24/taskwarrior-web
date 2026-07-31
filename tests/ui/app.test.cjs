@@ -10,6 +10,10 @@ function loadIndexHtml() {
     return fs.readFileSync(htmlPath, 'utf8');
 }
 
+function taskArgsText(body) {
+    return Array.isArray(body?.args) ? body.args.join(' ') : String(body?.args || '');
+}
+
 async function flushPromises(vm, ticks = 1) {
     const count = Math.max(1, Number(ticks) || 1);
     for (let i = 0; i < count; i++) {
@@ -150,6 +154,52 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await flushPromises(vm, 6);
 
         expect(vm.tasks.map((t) => t.description)).toEqual(['High', 'Low']);
+    });
+
+    test('ignores stale task responses after a newer search', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        const taskResponse = (description) => ({
+            ok: true,
+            status: 200,
+            async json() {
+                return {
+                    success: true,
+                    output: JSON.stringify([{ uuid: description, description, status: 'pending', urgency: 1 }]),
+                    error: '',
+                };
+            },
+        });
+
+        let resolveSlow;
+        backend.state.beforeFetch = async ({ pathname, method, init }) => {
+            if (pathname !== '/api/task' || method !== 'POST') return null;
+            const body = init.body ? JSON.parse(String(init.body)) : {};
+            const args = taskArgsText(body);
+            if (args.includes('slow')) {
+                return await new Promise((resolve) => {
+                    resolveSlow = () => resolve(taskResponse('Slow result'));
+                });
+            }
+            if (args.includes('fast')) return taskResponse('Fast result');
+            return null;
+        };
+
+        vm.selectedView = { type: 'search' };
+        vm.lastSearch = { term: 'slow', pendingOnly: false };
+        const slowRequest = vm.refreshCurrentPanel();
+        await flushPromises(vm, 2);
+
+        vm.lastSearch = { term: 'fast', pendingOnly: false };
+        await vm.refreshCurrentPanel();
+        expect(vm.tasks.map((task) => task.description)).toEqual(['Fast result']);
+
+        resolveSlow();
+        await slowRequest;
+        await flushPromises(vm, 2);
+        expect(vm.tasks.map((task) => task.description)).toEqual(['Fast result']);
     });
 
     test('renders due, scheduled, and waiting dates in task list', async () => {
@@ -549,7 +599,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
          expect(backend.state.tasks[0].wait).toBeUndefined();
      });
 
-     test('multi-edit modal includes input and runs task <uuids> mod <input>', async () => {
+     test('multi-edit applies free-form and structured fields', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
         backend.state.tasks.push({ uuid: 'uuid-2', description: 'Second', status: 'pending', urgency: 1.2 });
@@ -578,14 +628,23 @@ describe('Taskwarrior Web UI (component-style)', () => {
         const modalInput = document.querySelector('.modal-form input.text-input');
         expect(modalInput).toBeTruthy();
 
-        vm.modal.value = 'project:Bulk';
+        vm.modal.value = '+bulk';
+        vm.modal.project = 'Bulk Project';
+        vm.modal.priority = 'H';
+        vm.modal.due = 'tomorrow';
         await vm.submitModal();
         await flushPromises(vm, 8);
 
         const t1 = vm.tasks.find((t) => t.uuid === 'uuid-1');
         const t2 = vm.tasks.find((t) => t.uuid === 'uuid-2');
-        expect(t1.project).toBe('Bulk');
-        expect(t2.project).toBe('Bulk');
+        expect(t1.project).toBe('Bulk Project');
+        expect(t2.project).toBe('Bulk Project');
+        expect(t1.priority).toBe('H');
+        expect(t2.priority).toBe('H');
+        expect(t1.due).toBe('tomorrow');
+        expect(t2.due).toBe('tomorrow');
+        expect(t1.tags).toContain('bulk');
+        expect(t2.tags).toContain('bulk');
     });
 
     test('multi-select toolbar applies complete and delete to all selected tasks', async () => {
@@ -639,8 +698,8 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.openAddTask();
         await flushPromises(vm, 1);
 
-        vm.modal.description = 'Buy milk';
-        vm.modal.project = 'Home';
+        vm.modal.description = "Buy Matthias' milk";
+        vm.modal.project = 'Home Office';
         vm.modal.tags = 'groceries, urgent';
         vm.modal.priority = 'H';
         vm.modal.due = 'tomorrow';
@@ -648,9 +707,9 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await vm.submitModal();
         await flushPromises(vm, 5);
 
-        const added = vm.tasks.find((t) => String(t.description).includes('Buy milk'));
+        const added = vm.tasks.find((t) => t.description === "Buy Matthias' milk");
         expect(added).toBeTruthy();
-        expect(added.project).toBe('Home');
+        expect(added.project).toBe('Home Office');
         expect(Array.isArray(added.tags)).toBe(true);
         expect(added.tags.sort()).toEqual(['groceries', 'urgent']);
         expect(added.priority).toBe('H');
@@ -932,6 +991,12 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.modal.annotationDraft = 'note 1';
         expect(vm.renderMarkdown('**hi**')).toContain('<strong>hi</strong>');
         expect(vm.renderMarkdown('See https://example.com now')).toContain('<a href="https://example.com"');
+
+        const markdownHost = document.createElement('div');
+        markdownHost.innerHTML = vm.renderMarkdown('[Docs](https://example.com) and `https://code.example`');
+        expect(markdownHost.querySelectorAll('a')).toHaveLength(1);
+        expect(markdownHost.querySelector('a').textContent).toBe('Docs');
+        expect(markdownHost.querySelector('code a')).toBeNull();
         await vm.addAnnotation();
         await flushPromises(vm, 3);
         expect(vm.toast.text).toContain('Added annotation');
@@ -966,6 +1031,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await flushPromises(vm, 2);
 
         expect(vm.mainMode).toBe('output');
+        expect(vm.currentTitle).toBe('Command output');
         expect(vm.mainOutput).toContain('Executed:');
         expect(vm.modal.open).toBe(false);
     });
@@ -1066,6 +1132,19 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(backend.state.settings.reschedule_field).toBe('schedule');
         expect(vm.settingsAppLoaded.reschedule_field).toEqual(['schedule']);
         expect(vm.toast.text).toContain('Saved app settings');
+    });
+
+    test('saves Inbox visibility with other built-in filters', async () => {
+        const backend = createMockBackend();
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.settingsBuiltinVisibilityDraft.inbox.visible = false;
+        await vm.saveBuiltinFilters();
+        await flushPromises(vm, 4);
+
+        expect(backend.state.builtinFilters.inbox.visible).toBe(false);
+        expect(vm.builtinFilters.inbox.visible).toBe(false);
     });
 
     test('formatDate handles date-only, local and zulu timestamps', async () => {
@@ -1218,6 +1297,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.openSettings();
         await flushPromises(vm, 5);
 
+        expect(vm.currentTitle).toBe('Settings');
         expect(vm.taskrcText).toContain('data.location=/tmp');
 
         vm.taskrcText += '# comment\n';
@@ -1469,7 +1549,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
             if (pathname !== '/api/task' || method !== 'POST') return null;
 
             const body = init.body ? JSON.parse(String(init.body)) : {};
-            const args = String(body.args || '');
+            const args = taskArgsText(body);
             if (args.trim() !== 'uuid-1 export') return null;
 
             return {
@@ -1510,7 +1590,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
             if (pathname !== '/api/task' || method !== 'POST') return null;
 
             const body = init.body ? JSON.parse(String(init.body)) : {};
-            const args = String(body.args || '');
+            const args = taskArgsText(body);
             if (args.trim() !== 'uuid-1 export') return null;
 
             return {
@@ -1664,7 +1744,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         backend.state.beforeFetch = ({ pathname, method, init }) => {
             if (pathname === '/api/task' && method === 'POST') {
                 const body = init.body ? JSON.parse(String(init.body)) : {};
-                if (String(body.args || '').includes('uuid-1 done')) {
+                if (taskArgsText(body).includes('uuid-1 done')) {
                     return {
                         ok: true,
                         status: 200,
@@ -1674,7 +1754,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
                     };
                 }
 
-                if (String(body.args || '').startsWith('export')) {
+                if (taskArgsText(body).startsWith('export')) {
                     // Ensure refreshFilters reload still works.
                     return null;
                 }
@@ -1806,7 +1886,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         backend.state.beforeFetch = ({ pathname, method, init }) => {
             if (pathname === '/api/task' && method === 'POST') {
                 const body = init.body ? JSON.parse(String(init.body)) : {};
-                if (String(body.args || '').includes('uuid-1 delete')) {
+                if (taskArgsText(body).includes('uuid-1 delete')) {
                     return {
                         ok: true,
                         status: 200,

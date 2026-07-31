@@ -50,6 +50,23 @@ describe('Backend API (supertest)', () => {
         else process.env.TASKRC = originalTaskrc;
     });
 
+    test('does not expose the command API through wildcard CORS', async () => {
+        const dir = tmpPath('cors');
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath: path.join(dir, 'taskrc'),
+            settingsDbPath: path.join(dir, 'settings.sqlite'),
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const response = await request(app)
+            .options('/api/task')
+            .set('Origin', 'https://attacker.example')
+            .set('Access-Control-Request-Method', 'POST');
+
+        expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    });
+
     test('taskrc roundtrip (GET then PUT)', async () => {
         const dir = tmpPath('taskrc');
         const taskrcPath = path.join(dir, 'taskrc');
@@ -327,6 +344,10 @@ describe('Backend API (supertest)', () => {
         const emptyName = await request(app).put('/api/builtin-filters/today').send({ name: '   ' });
         expect(emptyName.status).toBe(400);
         expect(emptyName.body.success).toBe(false);
+
+        const invalidVisible = await request(app).put('/api/builtin-filters/today').send({ visible: 'false' });
+        expect(invalidVisible.status).toBe(400);
+        expect(invalidVisible.body.success).toBe(false);
     });
 
     test('/api/task proxies to execTaskOverride and tokenizes string args', async () => {
@@ -355,6 +376,13 @@ describe('Backend API (supertest)', () => {
         expect(calls[0]).toContain('add');
         expect(calls[0]).toContain('Hello world');
         expect(calls[0]).toContain('project:Home');
+
+        const apostrophe = await request(app)
+            .post('/api/task')
+            .send({ args: "add Bob's task" });
+
+        expect(apostrophe.status).toBe(200);
+        expect(calls[1]).toContain("Bob's");
     });
 
     test('/api/task rejects missing args and returns success:false on exec error', async () => {
@@ -376,6 +404,18 @@ describe('Backend API (supertest)', () => {
         const missing = await request(app).post('/api/task').send({});
         expect(missing.status).toBe(400);
         expect(missing.body.success).toBe(false);
+
+        const emptyString = await request(app).post('/api/task').send({ args: '   ' });
+        expect(emptyString.status).toBe(400);
+
+        const emptyArray = await request(app).post('/api/task').send({ args: [] });
+        expect(emptyArray.status).toBe(400);
+
+        const invalidArray = await request(app).post('/api/task').send({ args: ['export', 1] });
+        expect(invalidArray.status).toBe(400);
+
+        const invalidAnnotation = await request(app).post('/api/task').send({ args: ['export'], annotation: 42 });
+        expect(invalidAnnotation.status).toBe(400);
 
         const res = await request(app).post('/api/task').send({ args: ['export'] });
         expect(res.status).toBe(200);
@@ -499,7 +539,7 @@ describe('Backend API (supertest)', () => {
             execTaskOverride: async (args) => {
                 // args will have rc.confirmation=off prepended
                 // For 'add': [rc.confirmation=off, 'add', ...]
-                // For 'annotate': [rc.confirmation=off, '42', 'annotate', "'annotation text'"]
+                // For 'annotate': [rc.confirmation=off, '42', 'annotate', 'annotation text']
                 const nonRcArgs = args.filter(arg => !arg.startsWith('rc.'));
                 
                 if (nonRcArgs[0] === 'add') {
@@ -508,7 +548,7 @@ describe('Backend API (supertest)', () => {
                 }
                 
                 if (nonRcArgs[1] === 'annotate') {
-                    // nonRcArgs: ['42', 'annotate', "'annotation text'"]
+                    // nonRcArgs: ['42', 'annotate', 'annotation text']
                     annotateCalledForTask = nonRcArgs[0];
                     annotateCalledWithText = nonRcArgs[2];
                     return { stdout: 'Annotated task 42.', stderr: '' };
@@ -523,14 +563,14 @@ describe('Backend API (supertest)', () => {
             .post('/api/task')
             .send({ 
                 args: 'add Test task with annotation',
-                annotation: 'This is my first annotation'
+                annotation: "This is my first annotation's text",
             });
 
         expect(res.status).toBe(200);
         expect(res.body.success).toBe(true);
         expect(taskAddCalled).toBe(true);
         expect(annotateCalledForTask).toBe('42');
-        expect(annotateCalledWithText).toContain('This is my first annotation');
+        expect(annotateCalledWithText).toBe("This is my first annotation's text");
     });
 
     test('POST /api/task without annotation field works normally', async () => {

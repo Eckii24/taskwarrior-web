@@ -32,7 +32,9 @@ function parseShellLikeArgs(input) {
     let quote = null;
     let escaped = false;
 
-    for (const ch of text) {
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+
         if (escaped) {
             current += ch;
             escaped = false;
@@ -54,6 +56,12 @@ function parseShellLikeArgs(input) {
         }
 
         if (ch === '"' || ch === "'") {
+            const previous = current[current.length - 1] || '';
+            if (ch === "'" && /[a-zA-Z0-9]/.test(previous)) {
+                current += ch;
+                continue;
+            }
+
             quote = ch;
             continue;
         }
@@ -69,6 +77,7 @@ function parseShellLikeArgs(input) {
         current += ch;
     }
 
+    if (escaped) current += '\\';
     if (current) tokens.push(current);
     return tokens;
 }
@@ -224,6 +233,7 @@ function createMockBackend() {
         filters: [],
         builtinFilters: {
             today: { key: 'today', name: 'Today', filter: 'due:today status:pending', visible: true, group_by: null },
+            inbox: { key: 'inbox', name: 'Inbox', filter: 'status:pending project:', visible: true, group_by: null },
             next: { key: 'next', name: 'Next', filter: '', visible: true, group_by: null },
             all: { key: 'all', name: 'All', filter: '', visible: true, group_by: null },
         },

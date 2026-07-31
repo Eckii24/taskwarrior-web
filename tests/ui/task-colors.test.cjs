@@ -23,6 +23,7 @@ describe('TaskColors', () => {
             expect(TaskColors.parseColorToken('rgb500')).toBe('#ff0000');
             expect(TaskColors.parseColorToken('rgb050')).toBe('#00ff00');
             expect(TaskColors.parseColorToken('rgb005')).toBe('#0000ff');
+            expect(TaskColors.parseColorToken('rgb111')).toBe('#5f5f5f');
         });
 
         test('parses grayscale colors', () => {
@@ -189,6 +190,8 @@ color.active=rgb500 on rgb005
 color.priority.H=bold red
 color.project.Work=blue on gray5
 color.tag.urgent=underline yellow
+color.project.side-project=green
+color.due.2025-12-29=cyan
             `;
 
             const rules = TaskColors.parseTaskrcColors(taskrc);
@@ -196,6 +199,8 @@ color.tag.urgent=underline yellow
             expect(rules['priority.H']).toBeDefined();
             expect(rules['project.Work']).toBeDefined();
             expect(rules['tag.urgent']).toBeDefined();
+            expect(rules['project.side-project']).toBeDefined();
+            expect(rules['due.2025-12-29']).toBeDefined();
         });
     });
 

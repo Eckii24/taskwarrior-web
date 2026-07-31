@@ -5,7 +5,7 @@ A simple web interface that wraps the taskwarrior CLI, allowing you to manage yo
 
 ## Features
 
-- ✅ **Simplified Backend**: Single endpoint that executes taskwarrior commands
+- ✅ **Taskwarrior Backend**: Secure command endpoint plus filter, settings, completion, and taskrc APIs
 - ✅ **Vue.js Frontend**: Modern reactive UI with CQRS architecture
 - ✅ **CQRS Pattern**: Separate query (read) and command (write) services
 - ✅ **Add tasks with CLI syntax**: Full support for taskwarrior's powerful command syntax
@@ -17,9 +17,9 @@ A simple web interface that wraps the taskwarrior CLI, allowing you to manage yo
 ## Architecture
 
 ### Backend (Simplified)
-- **Single Endpoint**: `POST /api/task` - Accepts any taskwarrior command arguments
+- **Command Endpoint**: `POST /api/task` accepts Taskwarrior command arguments
 - **Direct CLI Execution**: Uses `execFile()` for secure command execution
-- **No Business Logic**: Frontend decides what commands to execute
+- **Taskwarrior as Source of Truth**: Tasks remain managed by the Taskwarrior CLI and taskrc
 
 ### Frontend (Vue.js + CQRS)
 - **TaskQueryService**: Handles read operations (queries)
@@ -33,7 +33,6 @@ A simple web interface that wraps the taskwarrior CLI, allowing you to manage yo
 - Docker
 - Docker Compose
 
-See [Docker Setup Guide](DOCKER.md) for Docker-based installation.
 
 ### Option 2: Local Installation
 - [Taskwarrior](https://taskwarrior.org/) installed on your system
@@ -73,7 +72,6 @@ docker compose up -d
 - Web Interface: http://localhost:3000
 - Sync Server: http://localhost:8080
 
-For more details, see the [Docker Setup Guide](DOCKER.md).
 
 ### Local Installation
 
@@ -117,8 +115,6 @@ http://localhost:3000
 
 ## Interface Guide
 
-For a full end-to-end UI feature checklist, see `MANUAL_TESTING.md`.
-
 ### Adding Tasks
 
 Use the "Add Task" section with full taskwarrior CLI syntax:
@@ -160,7 +156,7 @@ For advanced operations, use the "Execute Custom Command" section:
 
 ## API Endpoint
 
-The backend provides a single simplified endpoint:
+The backend provides this primary command endpoint:
 
 ### `POST /api/task`
 
@@ -243,8 +239,8 @@ class TaskApiClient {
 
 ## Technical Details
 
-### Backend (60 lines)
-- **Single Endpoint**: `POST /api/task` - executes any taskwarrior command
+### Backend
+- **Command Endpoint**: `POST /api/task` executes Taskwarrior commands
 - **Security**: Uses `execFile()` to prevent command injection
 - **No Business Logic**: Frontend controls all task operations
 
@@ -254,6 +250,10 @@ class TaskApiClient {
 - **Service Layer**: TaskQueryService, TaskCommandService, TaskApiClient
 - **Responsive Design**: Works on desktop and mobile
 - **CLI Syntax First**: Maintains taskwarrior's command syntax
+
+## Security
+
+The app has no built-in authentication and can modify tasks and taskrc settings. Keep it on a trusted network, behind a VPN, or behind an authenticated reverse proxy. Do not expose port 3000 directly to the public internet.
 
 ## Configuration
 
