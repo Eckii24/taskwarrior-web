@@ -732,6 +732,47 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(added.due).toBe('tomorrow');
     });
 
+    test('defaults add-task attributes from active filtered views and allows clearing them', async () => {
+        const backend = createMockBackend();
+        backend.state.filters.push({
+            id: 1,
+            name: 'Client work',
+            filter: 'project:Client +focus priority:H due:tomorrow status:pending',
+            order: 0,
+        });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        vm.selectedView = { type: 'builtin', key: 'today' };
+        vm.openAddTask();
+        expect(vm.modal.due).toBe('today');
+        expect(vm.modal.project).toBe('');
+        vm.closeModal();
+
+        vm.selectedView = { type: 'filter', id: 1 };
+        vm.openAddTask();
+        expect(vm.modal.project).toBe('Client');
+        expect(vm.modal.tags).toBe('focus');
+        expect(vm.modal.priority).toBe('H');
+        expect(vm.modal.due).toBe('tomorrow');
+        expect(vm.isModalUnchangedOrEmpty()).toBe(true);
+        vm.clearAttribute('project');
+        vm.clearAttribute('tags');
+        expect(vm.modal.project).toBe('');
+        expect(vm.modal.tags).toBe('');
+        expect(vm.isModalUnchangedOrEmpty()).toBe(false);
+        vm.closeModal();
+
+        vm.selectedView = { type: 'search' };
+        vm.lastSearch = { term: 'project:Personal +home priority:M due:eom', pendingOnly: true };
+        vm.openAddTask();
+        expect(vm.modal.project).toBe('Personal');
+        expect(vm.modal.tags).toBe('home');
+        expect(vm.modal.priority).toBe('M');
+        expect(vm.modal.due).toBe('eom');
+    });
+
     test('edits a task (change and clear attributes)', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({

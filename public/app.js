@@ -601,6 +601,39 @@ function resolveTaskFieldName(obj, typedField) {
     return null;
 }
 
+function getAddTaskDefaultsFromQuery(query, scheduleField) {
+    const defaults = {
+        project: '',
+        tags: '',
+        priority: '',
+        due: '',
+    };
+    const scheduleAttribute = String(scheduleField || 'due').trim().toLowerCase() || 'due';
+    const tags = [];
+    const tokens = String(query || '').trim().split(/\s+/).filter(Boolean);
+
+    for (const token of tokens) {
+        if (token.startsWith('+') && token.length > 1) {
+            tags.push(token.slice(1));
+            continue;
+        }
+
+        const separator = token.indexOf(':');
+        if (separator <= 0) continue;
+
+        const attribute = token.slice(0, separator).toLowerCase();
+        const value = token.slice(separator + 1).trim();
+        if (!value) continue;
+
+        if (attribute === 'project') defaults.project = value;
+        if (attribute === 'priority') defaults.priority = value;
+        if (attribute === scheduleAttribute) defaults.due = value;
+    }
+
+    defaults.tags = tags.join(', ');
+    return defaults;
+}
+
 function sanitizeTaskCommandArg(value) {
     const text = String(value ?? '').replace(/[\r\n\t]/g, ' ').trim();
     if (!text) return "''";
@@ -1166,25 +1199,19 @@ function createTaskwarriorApp({
 
             if (type === 'add') {
                 const descriptionEmpty = !String(this.modal.description || '').trim();
-                const projectEmpty = !String(this.modal.project || '').trim();
-                const tagsEmpty = !String(this.modal.tags || '').trim();
-                const priorityEmpty = !String(this.modal.priority || '').trim();
-                const dueEmpty = !String(this.modal.due || '').trim();
                 const initialAnnotationEmpty = !String(this.modal.initialAnnotation || '').trim();
-
+                const attributesUnchanged = this.modal.project === this.modal.originalProject
+                    && this.modal.tags === this.modal.originalTags
+                    && this.modal.priority === this.modal.originalPriority
+                    && this.modal.due === this.modal.originalDue;
                 const noAttributeDropdown = !this.modal.activeAttributeDropdown;
                 const attributeValueEmpty = !String(this.modal.attributeInputValue || '').trim();
 
-                return (
-                    descriptionEmpty &&
-                    projectEmpty &&
-                    tagsEmpty &&
-                    priorityEmpty &&
-                    dueEmpty &&
-                    initialAnnotationEmpty &&
-                    noAttributeDropdown &&
-                    attributeValueEmpty
-                );
+                return descriptionEmpty
+                    && initialAnnotationEmpty
+                    && attributesUnchanged
+                    && noAttributeDropdown
+                    && attributeValueEmpty;
             }
 
             if (type === 'edit-multi') {
@@ -2435,6 +2462,26 @@ function createTaskwarriorApp({
             }
         },
 
+        getAddTaskDefaults() {
+            if (this.selectedView.type === 'search') {
+                const pendingPrefix = this.lastSearch.pendingOnly ? 'status:pending ' : '';
+                return getAddTaskDefaultsFromQuery(`${pendingPrefix}${this.lastSearch.term || ''}`, this.rescheduleFieldName());
+            }
+
+            if (this.selectedView.type === 'builtin') {
+                const builtin = this.builtinFilters[String(this.selectedView.key || '').trim()];
+                return getAddTaskDefaultsFromQuery(builtin?.filter, this.rescheduleFieldName());
+            }
+
+            if (this.selectedView.type === 'filter') {
+                const selectedId = Number(this.selectedView.id);
+                const filter = this.filters.find((entry) => Number(entry.id) === selectedId);
+                return getAddTaskDefaultsFromQuery(filter?.filter, this.rescheduleFieldName());
+            }
+
+            return getAddTaskDefaultsFromQuery('', this.rescheduleFieldName());
+        },
+
         openAddTask() {
             this.openCommandModal('add');
             this.toggleDrawer(false);
@@ -2666,17 +2713,18 @@ function createTaskwarriorApp({
              const baseModal = { open: true, type, value: '', output: '', taskId: null, filterId: null, filterName: '', filterValue: '', filterIcon: '' };
 
              if (type === 'add') {
+                 const defaults = this.getAddTaskDefaults();
                  baseModal.description = '';
-                 baseModal.project = '';
-                 baseModal.tags = '';
-                 baseModal.priority = '';
-                 baseModal.due = '';
+                 baseModal.project = defaults.project;
+                 baseModal.tags = defaults.tags;
+                 baseModal.priority = defaults.priority;
+                 baseModal.due = defaults.due;
                  baseModal.initialAnnotation = '';
                  baseModal.originalDescription = '';
-                 baseModal.originalProject = '';
-                 baseModal.originalTags = '';
-                 baseModal.originalPriority = '';
-                 baseModal.originalDue = '';
+                 baseModal.originalProject = defaults.project;
+                 baseModal.originalTags = defaults.tags;
+                 baseModal.originalPriority = defaults.priority;
+                 baseModal.originalDue = defaults.due;
                  baseModal.activeAttributeDropdown = null;
                  baseModal.attributeInputValue = '';
              }
