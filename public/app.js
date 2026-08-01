@@ -1252,12 +1252,16 @@ function createTaskwarriorApp({
         },
 
         onGlobalClick(event) {
-            // Close group dropdown when clicking outside
-            if (this.groupDropdownOpen) {
-                const dropdown = event.target.closest('.tasks-controls');
-                if (!dropdown) {
-                    this.groupDropdownOpen = false;
-                }
+            const target = event?.target;
+
+            // Close group dropdown when clicking outside.
+            if (this.groupDropdownOpen && !target?.closest('.tasks-controls')) {
+                this.groupDropdownOpen = false;
+            }
+
+            // Keep the reschedule popover open only for clicks on its trigger or contents.
+            if (this.reschedule.open && !target?.closest('.reschedule')) {
+                this.closeReschedule();
             }
         },
 

@@ -476,6 +476,22 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.modal.type).toBe('add');
     });
 
+    test('opens the edit modal when a pending task card is clicked', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Edit me', status: 'pending', urgency: 1.5 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+
+        expect(document.querySelector('button[aria-label="Edit task"]')).toBeFalsy();
+        document.querySelector('.task-card').click();
+        await flushPromises(vm, 4);
+
+        expect(vm.modal.open).toBe(true);
+        expect(vm.modal.type).toBe('edit');
+        expect(vm.modal.taskId).toBe('uuid-1');
+    });
+
     test('multi-select: toggle shows X, uses icon buttons, and no selection circles', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'First', status: 'pending', urgency: 1.5 });
@@ -797,7 +813,23 @@ describe('Taskwarrior Web UI (component-style)', () => {
         confirmSpy.mockRestore();
     });
 
-     test('reschedules a task and clears reschedule field', async () => {
+     test('closes reschedule popover when clicking outside', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Reschedule me', status: 'pending', urgency: 1.5 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        vm.toggleReschedule('uuid-1');
+        await flushPromises(vm, 2);
+
+        vm.onGlobalClick({ target: document.querySelector('.reschedule-pop') });
+        expect(vm.reschedule.open).toBe(true);
+
+        vm.onGlobalClick({ target: document.body });
+        expect(vm.reschedule.open).toBe(false);
+    });
+
+    test('reschedules a task and clears reschedule field', async () => {
          const backend = createMockBackend();
          backend.state.tasks.push({ uuid: 'uuid-1', description: 'Due', status: 'pending', urgency: 1.5, due: 'today', wait: 'today' });
 
