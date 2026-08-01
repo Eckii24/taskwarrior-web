@@ -431,9 +431,9 @@
                 </div>
 
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
-                    <div class="tasks-heading-row" :class="{ 'controls-hidden': selectedView.type === 'search' }">
+                    <div class="tasks-heading-row">
                         <div class="tasks-heading">{{ currentTitle }}</div>
-                        <div v-if="!showTaskrc && selectedView.type !== 'search'" class="tasks-controls">
+                        <div v-if="!showTaskrc" class="tasks-controls">
                             <button
                                 type="button"
                                 class="control-btn"

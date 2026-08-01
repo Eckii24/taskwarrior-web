@@ -876,6 +876,28 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.tasks.map((t) => t.uuid).sort()).toEqual(['uuid-1', 'uuid-2']);
     });
 
+    test('shows grouping and multi-select controls for search results', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'findme', status: 'pending', urgency: 1.5 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 5);
+
+        vm.selectSearch();
+        await flushPromises(vm, 2);
+        vm.modal.value = 'findme';
+        await vm.submitModal();
+        await flushPromises(vm, 4);
+
+        const multiSelect = document.querySelector('.tasks-controls .control-btn[aria-label="Enable multi-select mode"]');
+        expect(multiSelect).toBeTruthy();
+        expect(document.querySelector('.tasks-controls .control-btn[aria-haspopup="listbox"]')).toBeTruthy();
+
+        multiSelect.click();
+        await flushPromises(vm, 2);
+        expect(vm.multiSelectMode).toBe(true);
+    });
+
     test('creates, edits, reorders, and deletes filters', async () => {
         const backend = createMockBackend();
         const fetchSpy = jest.fn(backend.fetchImpl);
