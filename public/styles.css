@@ -1601,6 +1601,8 @@ a:hover {
 }
 
 .multi-select-toolbar {
+    position: relative;
+    z-index: 11;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1631,6 +1633,10 @@ a:hover {
 .task-card.task-selected {
     background: rgba(203, 166, 247, 0.15) !important;
     border-left: 3px solid var(--accent);
+}
+
+.task-card.reschedule-open {
+    z-index: 11;
 }
 
 
