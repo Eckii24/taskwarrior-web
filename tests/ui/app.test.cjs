@@ -1560,6 +1560,26 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(updated.wait).toBeUndefined();
     });
 
+    test('marks a task done from the edit modal', async () => {
+        const backend = createMockBackend();
+        backend.state.tasks.push({ uuid: 'uuid-1', description: 'Finish me', status: 'pending', urgency: 1 });
+
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        await vm.editTask('uuid-1');
+        await flushPromises(vm, 4);
+
+        const doneButton = Array.from(document.querySelectorAll('.modal-task-actions button'))
+            .find((button) => button.textContent.trim() === 'Done');
+        expect(doneButton).toBeTruthy();
+
+        doneButton.click();
+        await flushPromises(vm, 5);
+
+        expect(backend.state.tasks[0].status).toBe('completed');
+        expect(vm.modal.open).toBe(false);
+    });
+
     test('edit modal shows configured field from export', async () => {
         const backend = createMockBackend();
         backend.state.settings.reschedule_field = 'scheduled';

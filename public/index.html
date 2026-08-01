@@ -1950,15 +1950,24 @@
             </div>
 
             <div class="modal-footer" v-if="modal.type !== 'show'">
-                <button
-                    v-if="modal.type === 'edit' && modal.taskId"
-                    class="btn danger"
-                    type="button"
-                    @click="deleteTask(modal.taskId)"
-                    :disabled="busyTaskUuids[modal.taskId]"
-                >
-                    Delete
-                </button>
+                <div v-if="modal.type === 'edit' && modal.taskId" class="modal-task-actions">
+                    <button
+                        class="btn danger"
+                        type="button"
+                        @click="deleteTask(modal.taskId)"
+                        :disabled="busyTaskUuids[modal.taskId]"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        class="btn primary"
+                        type="button"
+                        @click="completeTaskFromEdit(modal.taskId)"
+                        :disabled="busyTaskUuids[modal.taskId]"
+                    >
+                        Done
+                    </button>
+                </div>
                 <button
                     v-if="modal.type === 'filter' && modal.filterId"
                     class="btn danger"

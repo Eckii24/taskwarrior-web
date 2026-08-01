@@ -1140,6 +1140,16 @@ a:hover {
     margin-right: auto;
 }
 
+.modal-task-actions {
+    display: flex;
+    gap: 10px;
+    margin-right: auto;
+}
+
+.modal-footer .modal-task-actions .btn.danger {
+    margin-right: 0;
+}
+
 .completion-panel {
     margin-top: 10px;
     border: 1px solid var(--line);

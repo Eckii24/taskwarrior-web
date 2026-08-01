@@ -3377,6 +3377,25 @@ function createTaskwarriorApp({
             });
         },
 
+        async completeTaskFromEdit(taskUuid) {
+            const uuid = String(taskUuid || '').trim();
+            if (!uuid) return;
+
+            await this.withBusyTask(uuid, async () => {
+                const result = await commandService.completeTask(uuid);
+                if (result.success) {
+                    if (this.modal?.open && this.modal.type === 'edit' && String(this.modal.taskId) === uuid) {
+                        this.closeModal();
+                    }
+
+                    this.showToast('Marked done', 'success');
+                    await this.refreshCurrentPanel();
+                } else {
+                    this.showToast(result.error || 'Failed to update task', 'error');
+                }
+            });
+        },
+
         async deleteTask(taskUuid) {
             const uuid = String(taskUuid || '').trim();
             if (!uuid) return;
