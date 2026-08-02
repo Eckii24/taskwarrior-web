@@ -379,18 +379,14 @@ a:hover {
 }
 
 .filter-drop-zone {
-    height: 4px;
-    margin: 2px 10px;
+    height: 0;
+    margin: 0 10px;
     border-radius: 8px;
     transition: height 120ms ease, background 120ms ease;
 }
 
-.filters.reordering .filter-drop-zone {
-    height: 14px;
-}
-
 .filter-drop-zone.active {
-    height: 22px;
+    height: 14px;
     background: rgba(203, 166, 247, 0.38);
     outline: 1px dashed rgba(203, 166, 247, 0.8);
 }

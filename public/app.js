@@ -2665,20 +2665,24 @@ function createTaskwarriorApp({
             } catch (error) {
                 this.showToast(String(error?.message || error), 'error');
                 await this.refreshFilters();
-            } finally {
-                this.onFilterDragEnd();
             }
         },
 
         async onFilterDrop(targetFilter, event) {
             const draggedId = this.getDraggedFilterId(event);
             const targetId = Number(targetFilter?.id);
-            if (!draggedId || !Number.isFinite(targetId) || draggedId === targetId) return;
+            if (!draggedId || !Number.isFinite(targetId) || draggedId === targetId) {
+                this.onFilterDragEnd();
+                return;
+            }
 
             const current = this.filters.slice();
             const fromIndex = current.findIndex((f) => f.id === draggedId);
             const targetIndex = current.findIndex((f) => f.id === targetId);
-            if (fromIndex === -1 || targetIndex === -1) return;
+            if (fromIndex === -1 || targetIndex === -1) {
+                this.onFilterDragEnd();
+                return;
+            }
 
             const rect = event?.currentTarget?.getBoundingClientRect?.();
             const dropAfter = rect && Number.isFinite(event?.clientY)
@@ -2690,32 +2694,43 @@ function createTaskwarriorApp({
             if (dropAfter) insertIndex += 1;
             current.splice(insertIndex, 0, moved);
 
+            if (current.every((filter, index) => filter.id === this.filters[index]?.id)) {
+                this.onFilterDragEnd();
+                return;
+            }
+
             this.filters = current;
+            this.onFilterDragEnd();
             await this.persistFilterReorder(current);
         },
 
         async onFiltersDrop(event, position = 'end') {
             const draggedId = this.getDraggedFilterId(event);
-            if (!draggedId) return;
-
-            const normalized = position === 'start' ? 'start' : 'end';
-            const current = this.filters.slice();
-            const fromIndex = current.findIndex((f) => f.id === draggedId);
-            if (fromIndex === -1) return;
-
-            const toIndex = normalized === 'start' ? 0 : current.length;
-            const isNoop = (normalized === 'start' && fromIndex === 0)
-                || (normalized === 'end' && fromIndex === current.length - 1);
-            if (isNoop) {
+            if (!draggedId) {
                 this.onFilterDragEnd();
                 return;
             }
 
+            const normalized = position === 'start' ? 'start' : 'end';
+            const current = this.filters.slice();
+            const fromIndex = current.findIndex((f) => f.id === draggedId);
+            if (fromIndex === -1) {
+                this.onFilterDragEnd();
+                return;
+            }
+
+            const toIndex = normalized === 'start' ? 0 : current.length;
             const [moved] = current.splice(fromIndex, 1);
             const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
             current.splice(adjustedIndex, 0, moved);
 
+            if (current.every((filter, index) => filter.id === this.filters[index]?.id)) {
+                this.onFilterDragEnd();
+                return;
+            }
+
             this.filters = current;
+            this.onFilterDragEnd();
             await this.persistFilterReorder(current);
         },
 

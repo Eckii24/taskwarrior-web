@@ -196,13 +196,6 @@
                             :key="filter.id"
                         >
                             <div
-                                class="filter-drop-zone"
-                                :class="{ active: insertionTarget && insertionTarget.type === 'before' && insertionTarget.id === filter.id }"
-                                @dragenter.prevent="onFilterDragOver(filter, 'before', $event)"
-                                @dragover.prevent="onFilterDragOver(filter, 'before', $event)"
-                                @drop.prevent.stop="onFilterDrop(filter, $event)"
-                            ></div>
-                            <div
                                 class="filter-row"
                                 :class="{
                                     dragging: draggedFilterId === filter.id,

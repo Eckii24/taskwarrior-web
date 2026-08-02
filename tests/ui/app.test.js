@@ -1041,6 +1041,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
         const startDropZone = document.querySelector('.filters .filter-drop-zone.start');
         expect(startDropZone).toBeTruthy();
+        expect(document.querySelectorAll('.filter-entry .filter-drop-zone')).toHaveLength(0);
 
         // Ensure order persists after refresh
         await vm.refreshFilters();
@@ -1048,6 +1049,12 @@ describe('Taskwarrior Web UI (component-style)', () => {
 
         expect(vm.filters.map((f) => f.id)).toEqual([workFilterId, homeFilterId]);
         expect(vm.filters.map((f) => f.name)).toEqual(['Work', 'Home']);
+
+        // A no-op drop must clear the drag state instead of leaving its handle highlighted.
+        vm.onFilterDragStart({ id: workFilterId }, { dataTransfer });
+        await vm.onFilterDrop({ id: workFilterId }, { dataTransfer });
+        expect(vm.draggedFilterId).toBe(null);
+        expect(vm.insertionTarget).toBe(null);
 
         // Dropping on lower half of a row inserts after it, not at list end.
         vm.onFilterDragStart({ id: workFilterId }, { dataTransfer });
