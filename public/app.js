@@ -2613,13 +2613,18 @@ function createTaskwarriorApp({
             }
         },
 
-        onFilterDragOver(filter, position) {
+        onFilterDragOver(filter, position, event) {
             if (!this.draggedFilterId) return;
 
             if (position === 'before') {
                 const id = Number(filter?.id);
                 if (!Number.isFinite(id) || id <= 0) return;
-                this.insertionTarget = { type: 'before', id };
+
+                const rect = event?.currentTarget?.getBoundingClientRect?.();
+                const isRow = event?.currentTarget?.classList?.contains('filter-row');
+                const dropAfter = isRow && rect && Number.isFinite(event?.clientY)
+                    && event.clientY >= rect.top + rect.height / 2;
+                this.insertionTarget = { type: dropAfter ? 'after' : 'before', id };
                 return;
             }
 
@@ -2672,13 +2677,18 @@ function createTaskwarriorApp({
 
             const current = this.filters.slice();
             const fromIndex = current.findIndex((f) => f.id === draggedId);
-            const toIndex = current.findIndex((f) => f.id === targetId);
-            if (fromIndex === -1 || toIndex === -1) return;
+            const targetIndex = current.findIndex((f) => f.id === targetId);
+            if (fromIndex === -1 || targetIndex === -1) return;
 
-            // Drop on a filter means insert before it.
+            const rect = event?.currentTarget?.getBoundingClientRect?.();
+            const dropAfter = rect && Number.isFinite(event?.clientY)
+                ? event.clientY >= rect.top + rect.height / 2
+                : false;
             const [moved] = current.splice(fromIndex, 1);
-            const adjustedIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
-            current.splice(adjustedIndex, 0, moved);
+            let insertIndex = targetIndex;
+            if (fromIndex < targetIndex) insertIndex -= 1;
+            if (dropAfter) insertIndex += 1;
+            current.splice(insertIndex, 0, moved);
 
             this.filters = current;
             await this.persistFilterReorder(current);

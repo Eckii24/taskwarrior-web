@@ -177,7 +177,13 @@
                 <div class="nav-section">
                     <div class="nav-section-title">Filters</div>
 
-                    <div class="filters" @dragover.prevent @drop.prevent="onFiltersDrop" @dragleave="onFiltersDragLeave">
+                    <div
+                        class="filters"
+                        :class="{ reordering: draggedFilterId !== null }"
+                        @dragover.prevent
+                        @drop.prevent="onFiltersDrop"
+                        @dragleave="onFiltersDragLeave"
+                    >
                         <div
                             class="filter-drop-zone start"
                             :class="{ active: insertionTarget && insertionTarget.type === 'start' }"
@@ -196,12 +202,22 @@
                                 @dragover.prevent="onFilterDragOver(filter, 'before', $event)"
                                 @drop.prevent.stop="onFilterDrop(filter, $event)"
                             ></div>
-                            <div class="filter-row">
+                            <div
+                                class="filter-row"
+                                :class="{
+                                    dragging: draggedFilterId === filter.id,
+                                    'drop-before': insertionTarget && insertionTarget.type === 'before' && insertionTarget.id === filter.id,
+                                    'drop-after': insertionTarget && insertionTarget.type === 'after' && insertionTarget.id === filter.id,
+                                }"
+                                @dragenter.prevent="onFilterDragOver(filter, 'before', $event)"
+                                @dragover.prevent="onFilterDragOver(filter, 'before', $event)"
+                                @drop.prevent.stop="onFilterDrop(filter, $event)"
+                            >
                                 <span
                                     class="drag-handle"
                                     role="button"
                                     tabindex="0"
-                                    aria-label="Reorder filter"
+                                    :aria-label="`Drag ${filter.name} to reorder`"
                                     draggable="true"
                                     @click.stop
                                     @dragstart="onFilterDragStart(filter, $event)"

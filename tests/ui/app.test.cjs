@@ -1043,14 +1043,27 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.filters.map((f) => f.id)).toEqual([workFilterId, homeFilterId]);
         expect(vm.filters.map((f) => f.name)).toEqual(['Work', 'Home']);
 
+        // Dropping on lower half of a row inserts after it, not at list end.
+        vm.onFilterDragStart({ id: workFilterId }, { dataTransfer });
+        await vm.onFilterDrop({ id: homeFilterId }, {
+            dataTransfer,
+            clientY: 75,
+            currentTarget: {
+                getBoundingClientRect: () => ({ top: 0, height: 100 }),
+            },
+        });
+        await flushPromises(vm, 3);
+        expect(vm.filters.map((f) => f.id)).toEqual([homeFilterId, workFilterId]);
+
         // Edit a non-active filter
-        vm.openEditFilter(vm.filters[0]);
+        const workFilter = vm.filters.find((filter) => filter.id === workFilterId);
+        vm.openEditFilter(workFilter);
         vm.modal.filterName = 'Work2';
         vm.modal.filterIcon = '🧠';
         await vm.submitModal();
         await flushPromises(vm, 2);
-        expect(vm.filters[0].name).toBe('Work2');
-        expect(vm.filters[0].icon).toBe('🧠');
+        expect(vm.filters.find((filter) => filter.id === workFilterId).name).toBe('Work2');
+        expect(vm.filters.find((filter) => filter.id === workFilterId).icon).toBe('🧠');
 
         // Edit active filter triggers reload
         vm.selectCustomFilter(vm.filters[0]);
