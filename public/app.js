@@ -415,8 +415,9 @@ class TaskCommandService {
         return await this.apiClient.execute([uuid, 'modify', ...mods]);
     }
 
-    async modifyTasks(taskUuids, modifications) {
+    async modifyTasks(taskUuids, modifications, config = []) {
         const uuids = Array.isArray(taskUuids) ? taskUuids.map((uuid) => String(uuid || '').trim()).filter(Boolean) : [];
+        const configArgs = Array.isArray(config) ? config.map((value) => String(value || '').trim()).filter(Boolean) : [];
         if (uuids.length === 0) {
             return { success: false, output: '', error: 'No task IDs provided' };
         }
@@ -426,7 +427,7 @@ class TaskCommandService {
             if (mods.length === 0) {
                 return { success: false, output: '', error: 'No modifications provided' };
             }
-            return await this.apiClient.execute([...uuids, 'mod', ...mods]);
+            return await this.apiClient.execute([...configArgs, ...uuids, 'mod', ...mods]);
         }
 
         const mods = String(modifications || '').trim();
@@ -434,7 +435,9 @@ class TaskCommandService {
             return { success: false, output: '', error: 'No modifications provided' };
         }
 
-        return await this.apiClient.execute(`${uuids.join(' ')} mod ${mods}`);
+        return configArgs.length > 0
+            ? await this.apiClient.execute([...configArgs, ...uuids, 'mod', mods])
+            : await this.apiClient.execute(`${uuids.join(' ')} mod ${mods}`);
     }
 
     async completeTask(taskUuid) {
@@ -720,10 +723,22 @@ function createTaskwarriorApp({
 
             settingsAppDraft: {
                 reschedule_field: ['due'],
+                planner_date_field: 'due',
+                planner_days: 5,
             },
 
             settingsAppLoaded: {
                 reschedule_field: ['due'],
+                planner_date_field: 'due',
+                planner_days: 5,
+            },
+
+            planner: {
+                tasks: [],
+                selectedDate: '',
+                beforeTodayExpanded: false,
+                draggedUuid: null,
+                loading: false,
             },
 
              filters: [],
@@ -863,6 +878,7 @@ function createTaskwarriorApp({
             currentTitle() {
              if (this.showTaskrc) return 'Settings';
              if (this.mainMode === 'output') return 'Command output';
+             if (this.selectedView.type === 'planner') return 'Planner';
              if (this.selectedView.type === 'search') return 'Search';
 
              if (this.selectedView.type === 'builtin') {
@@ -1105,7 +1121,7 @@ function createTaskwarriorApp({
 
             // Only reload tasks when the task list is currently visible.
             if (this.showTaskrc) return;
-            if (this.mainMode !== 'tasks') return;
+            if (this.mainMode !== 'tasks' && this.mainMode !== 'planner') return;
 
             await this.refreshCurrentPanel();
         },
@@ -1125,8 +1141,8 @@ function createTaskwarriorApp({
                 } else if (safeView.type === 'filter') {
                     url.searchParams.set('viewType', 'filter');
                     url.searchParams.set('filterId', String(safeView.id));
-                } else if (safeView.type === 'search') {
-                    url.searchParams.set('viewType', 'search');
+                } else if (safeView.type === 'search' || safeView.type === 'planner') {
+                    url.searchParams.set('viewType', safeView.type);
                 }
 
                 window.history.replaceState({}, '', url.toString());
@@ -1150,8 +1166,8 @@ function createTaskwarriorApp({
                     if (Number.isFinite(filterId)) return { type: 'filter', id: filterId };
                 }
 
-                if (viewType === 'search') {
-                    return { type: 'search' };
+                if (viewType === 'search' || viewType === 'planner') {
+                    return { type: viewType };
                 }
 
                 return null;
@@ -1184,8 +1200,8 @@ function createTaskwarriorApp({
                 return;
             }
 
-            if (candidateView.type === 'search') {
-                this.selectedView = { type: 'search' };
+            if (candidateView.type === 'search' || candidateView.type === 'planner') {
+                this.selectedView = { type: candidateView.type };
                 this.showTaskrc = false;
             }
         },
@@ -1287,7 +1303,7 @@ function createTaskwarriorApp({
             }
 
             // Keep the reschedule popover open only for clicks on its trigger or contents.
-            if (this.reschedule.open && !target?.closest('.reschedule')) {
+            if (this.reschedule.open && !target?.closest('.reschedule, .reschedule-pop')) {
                 this.closeReschedule();
             }
         },
@@ -2219,15 +2235,18 @@ function createTaskwarriorApp({
                 const rescheduleFieldRaw = String(result?.settings?.reschedule_field || 'due').trim() || 'due';
                 const rescheduleFields = rescheduleFieldRaw
                     .split(',')
-                    .map((value) => String(value).trim())
+                    .map((value) => String(value).trim() === 'schedule' ? 'scheduled' : String(value).trim())
                     .filter(Boolean);
+                const plannerDateFieldRaw = String(result?.settings?.planner_date_field || rescheduleFields[0] || 'due').trim();
+                const plannerDateField = plannerDateFieldRaw === 'schedule' ? 'scheduled' : plannerDateFieldRaw;
+                const plannerDays = Number(result?.settings?.planner_days) === 7 ? 7 : 5;
 
                 this.settingsAppLoaded = {
                     reschedule_field: rescheduleFields.length > 0 ? rescheduleFields : ['due'],
+                    planner_date_field: plannerDateField,
+                    planner_days: plannerDays,
                 };
-                this.settingsAppDraft = {
-                    reschedule_field: rescheduleFields.length > 0 ? rescheduleFields : ['due'],
-                };
+                this.settingsAppDraft = { ...this.settingsAppLoaded };
              } catch {
                  // ignore
              }
@@ -2245,8 +2264,12 @@ function createTaskwarriorApp({
                     .map((value) => String(value).trim())
                     .filter(Boolean);
 
+                const plannerField = String(this.settingsAppDraft?.planner_date_field || '').trim();
+                const plannerDays = Number(this.settingsAppDraft?.planner_days);
                 const payload = {
                     reschedule_field: cleaned.join(','),
+                    planner_date_field: plannerField,
+                    planner_days: plannerDays,
                 };
 
                  const result = await apiClient.updateSettings(payload);
@@ -2278,6 +2301,147 @@ function createTaskwarriorApp({
             this.mainMode = 'tasks';
             this.toggleDrawer(false);
             this.loadTasksForSelection();
+        },
+
+        selectPlanner() {
+            this.showTaskrc = false;
+            this.selectedView = { type: 'planner' };
+            this.persistSelectedView(this.selectedView);
+            this.mainMode = 'planner';
+            this.toggleDrawer(false);
+            this.loadPlanner();
+        },
+
+        plannerFieldName() {
+            const field = String(this.settingsAppLoaded?.planner_date_field || 'due').trim();
+            return field === 'schedule' ? 'scheduled' : field;
+        },
+
+        localDateKey(value) {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+            const taskwarriorUtc = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+            const date = taskwarriorUtc
+                ? new Date(`${taskwarriorUtc[1]}-${taskwarriorUtc[2]}-${taskwarriorUtc[3]}T${taskwarriorUtc[4]}:${taskwarriorUtc[5]}:${taskwarriorUtc[6]}Z`)
+                : new Date(raw);
+            if (Number.isNaN(date.getTime())) return '';
+            const pad = (number) => String(number).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+        },
+
+        plannerDates() {
+            const count = Number(this.settingsAppLoaded?.planner_days) === 7 ? 7 : 5;
+            const dates = [];
+            const start = new Date();
+            start.setHours(12, 0, 0, 0);
+            for (let index = 0; index < count; index++) {
+                const date = new Date(start);
+                date.setDate(start.getDate() + index);
+                dates.push(this.localDateKey(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`));
+            }
+            return dates;
+        },
+
+        sortPlannerTasks(tasks) {
+            return tasks.sort((left, right) => this.getTaskUrgency(right) - this.getTaskUrgency(left));
+        },
+
+        plannerTaskDescription(description) {
+            const characters = Array.from(String(description || ''));
+            if (characters.length <= 50) return characters.join('');
+            return `${characters.slice(0, 50).join('').trimEnd()}…`;
+        },
+
+        beforeTodayPlannerTasks() {
+            const field = this.plannerFieldName();
+            const today = this.plannerDates()[0] || '';
+            return this.sortPlannerTasks(this.planner.tasks.filter((task) => {
+                const date = this.localDateKey(task?.[field]);
+                return date && date < today;
+            }));
+        },
+
+        plannerTasksForDate(date) {
+            const field = this.plannerFieldName();
+            return this.sortPlannerTasks(this.planner.tasks.filter((task) => this.localDateKey(task?.[field]) === date));
+        },
+
+        unplannedPlannerTasks() {
+            const field = this.plannerFieldName();
+            return this.sortPlannerTasks(this.planner.tasks.filter((task) => !String(task?.[field] || '').trim()));
+        },
+
+        formatPlannerDate(date) {
+            const local = new Date(`${date}T12:00:00`);
+            return local.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        },
+
+        async loadPlanner() {
+            this.planner.loading = true;
+            this.mainMode = 'planner';
+            try {
+                const result = await queryService.getTasks('status:pending');
+                this.planner.tasks = result.tasks;
+                this.tasks = result.tasks;
+                const dates = this.plannerDates();
+                if (!dates.includes(this.planner.selectedDate)) this.planner.selectedDate = dates[0] || '';
+            } catch (error) {
+                this.planner.tasks = [];
+                this.showToast(String(error?.message || error), 'error');
+            } finally {
+                this.planner.loading = false;
+            }
+        },
+
+        onPlannerDragStart(taskUuid, event) {
+            const uuid = String(taskUuid || '').trim();
+            this.planner.draggedUuid = uuid;
+            if (event?.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', uuid);
+            }
+        },
+
+        async onPlannerDrop(date, event) {
+            const uuid = String(event?.dataTransfer?.getData('text/plain') || this.planner.draggedUuid || '').trim();
+            this.planner.draggedUuid = null;
+            if (!uuid) return;
+            if (date) await this.planTasksOnDate([uuid], date);
+            else await this.unplanTasks([uuid]);
+        },
+
+        async planTasksOnDate(uuids, date) {
+            const taskIds = Array.isArray(uuids) ? uuids.map((uuid) => String(uuid || '').trim()).filter(Boolean) : [];
+            const value = String(date || '').trim();
+            if (!taskIds.length || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+            const result = await commandService.modifyTasks(taskIds, [`${this.plannerFieldName()}:${value}`], ['rc.recurrence.confirmation=no']);
+            if (!result.success) {
+                this.showToast(result.error || 'Failed to plan tasks', 'error');
+                return;
+            }
+            this.showToast(`Planned ${taskIds.length} task${taskIds.length === 1 ? '' : 's'}`, 'success');
+            await this.loadPlanner();
+        },
+
+        async unplanTasks(uuids) {
+            const taskIds = Array.isArray(uuids) ? uuids.map((uuid) => String(uuid || '').trim()).filter(Boolean) : [];
+            if (!taskIds.length) return;
+            const result = await commandService.modifyTasks(taskIds, [`${this.plannerFieldName()}:`], ['rc.recurrence.confirmation=no']);
+            if (!result.success) {
+                this.showToast(result.error || 'Failed to unplan tasks', 'error');
+                return;
+            }
+            this.showToast(`Unplanned ${taskIds.length} task${taskIds.length === 1 ? '' : 's'}`, 'success');
+            await this.loadPlanner();
+        },
+
+        async planSelectedOnDate(date) {
+            await this.planTasksOnDate(Array.from(this.selectedTaskUuids), date);
+        },
+
+        async unplanSelectedTasks() {
+            await this.unplanTasks(Array.from(this.selectedTaskUuids));
         },
 
         selectSearch() {
@@ -2319,6 +2483,11 @@ function createTaskwarriorApp({
             this.ensureTaskrcLoaded();
 
             try {
+                if (selectedView.type === 'planner') {
+                    await this.loadPlanner();
+                    return;
+                }
+
                 if (selectedView.type === 'search') {
                     if (!this.isCurrentTaskLoad(requestId)) return;
                     this.tasks = [];
@@ -2372,6 +2541,11 @@ function createTaskwarriorApp({
         async refreshCurrentPanel() {
             if (this.showTaskrc) return;
             this.ensureTaskrcLoaded();
+
+            if (this.selectedView.type === 'planner') {
+                await this.loadPlanner();
+                return;
+            }
 
             if (this.selectedView.type !== 'search') {
                 await this.loadTasksForSelection();
@@ -3786,6 +3960,168 @@ function createTaskwarriorApp({
          },
     },
 });
+
+    app.component('task-reschedule-control', {
+        props: {
+            taskUuid: { type: String, required: true },
+            disabled: { type: Boolean, default: false },
+        },
+        data() {
+            return {
+                popoverStyle: {},
+            };
+        },
+        computed: {
+            root() {
+                return this.$root;
+            },
+            isOpen() {
+                return this.root.reschedule.open
+                    && !this.root.reschedule.multiSelect
+                    && this.root.reschedule.taskUuid === this.taskUuid;
+            },
+        },
+        watch: {
+            isOpen(open) {
+                if (!open) return this.stopPositionTracking();
+                this.startPositionTracking();
+                this.$nextTick(() => this.updatePopoverPosition());
+            },
+        },
+        beforeUnmount() {
+            this.stopPositionTracking();
+        },
+        methods: {
+            startPositionTracking() {
+                window.addEventListener('resize', this.updatePopoverPosition);
+                window.addEventListener('scroll', this.updatePopoverPosition, true);
+            },
+            stopPositionTracking() {
+                window.removeEventListener('resize', this.updatePopoverPosition);
+                window.removeEventListener('scroll', this.updatePopoverPosition, true);
+            },
+            toggle() {
+                this.root.toggleReschedule(this.taskUuid);
+                this.$nextTick(() => this.updatePopoverPosition());
+            },
+            updatePopoverPosition() {
+                if (!this.isOpen || !this.$refs.trigger) return;
+
+                const rect = this.$refs.trigger.getBoundingClientRect();
+                const width = 260;
+                const gutter = 8;
+                const maxLeft = Math.max(gutter, window.innerWidth - width - gutter);
+                const left = Math.max(gutter, Math.min(rect.right - width, maxLeft));
+
+                this.popoverStyle = {
+                    top: `${Math.max(gutter, rect.bottom + gutter)}px`,
+                    left: `${left}px`,
+                };
+            },
+        },
+        template: `
+            <div class="reschedule">
+                <button
+                    ref="trigger"
+                    class="icon-btn small"
+                    type="button"
+                    title="Reschedule task"
+                    aria-label="Reschedule task"
+                    @click.stop="toggle"
+                    :disabled="disabled"
+                >
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
+                    </svg>
+                </button>
+                <Teleport to="body">
+                    <div v-if="isOpen" class="reschedule-pop reschedule-pop-teleported" :style="popoverStyle" @click.stop>
+                        <div class="reschedule-header-row">
+                            <div class="reschedule-title">Date</div>
+                            <button class="btn small" type="button" @click="root.reschedule.showFieldPicker = !root.reschedule.showFieldPicker">{{ root.rescheduleFieldLabelForClear() }}</button>
+                        </div>
+                        <div v-if="root.reschedule.showFieldPicker" class="settings-multi-chip">
+                            <label class="settings-chip" :class="{ active: root.isRescheduleFieldSelected('due', { preferReschedule: true }) }"><input type="checkbox" :checked="root.isRescheduleFieldSelected('due', { preferReschedule: true })" @change="root.toggleRescheduleField('due', { preferReschedule: true })"><span>due</span></label>
+                            <label class="settings-chip" :class="{ active: root.isRescheduleFieldSelected('scheduled', { preferReschedule: true }) }"><input type="checkbox" :checked="root.isRescheduleFieldSelected('scheduled', { preferReschedule: true })" @change="root.toggleRescheduleField('scheduled', { preferReschedule: true })"><span>scheduled</span></label>
+                            <label class="settings-chip" :class="{ active: root.isRescheduleFieldSelected('wait', { preferReschedule: true }) }"><input type="checkbox" :checked="root.isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="root.toggleRescheduleField('wait', { preferReschedule: true })"><span>wait</span></label>
+                            <label class="settings-chip" :class="{ active: root.isRescheduleFieldSelected('until', { preferReschedule: true }) }"><input type="checkbox" :checked="root.isRescheduleFieldSelected('until', { preferReschedule: true })" @change="root.toggleRescheduleField('until', { preferReschedule: true })"><span>until</span></label>
+                        </div>
+                        <div class="reschedule-toolbar">
+                            <button class="schedule-btn" type="button" title="Today" aria-label="Today" @click="root.applyReschedulePreset(taskUuid, 'today')" :disabled="disabled"><svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="M4.93 4.93l1.41 1.41"></path><path d="M17.66 17.66l1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="M4.93 19.07l1.41-1.41"></path><path d="M17.66 6.34l1.41-1.41"></path></svg></button>
+                            <button class="schedule-btn" type="button" title="Tomorrow" aria-label="Tomorrow" @click="root.applyReschedulePreset(taskUuid, 'tomorrow')" :disabled="disabled"><svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18"></path><path d="M7 18a5 5 0 0 1 10 0"></path><path d="M12 8v-2"></path><path d="M7.5 9.5l-1.5-1.5"></path><path d="M16.5 9.5l1.5-1.5"></path><path d="M9 6h6"></path></svg></button>
+                            <button class="schedule-btn" type="button" title="Next week" aria-label="Next week" @click="root.applyReschedulePreset(taskUuid, 'sonw')" :disabled="disabled"><svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v2"></path><path d="M17 3v2"></path><path d="M4 7h16"></path><path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path><path d="M14 11h4"></path><path d="M14 11v4"></path></svg></button>
+                            <label class="schedule-btn schedule-date-btn" title="Calendar"><svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v2"></path><path d="M17 3v2"></path><path d="M4 7h16"></path><path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path><path d="M8 11h.01"></path><path d="M12 11h.01"></path><path d="M16 11h.01"></path><path d="M8 15h.01"></path><path d="M12 15h.01"></path><path d="M16 15h.01"></path></svg><input type="date" class="reschedule-calendar-input" aria-label="Calendar" @change="root.onRescheduleCalendarChange(taskUuid, $event)"></label>
+                            <button class="schedule-btn danger" type="button" title="Clear" aria-label="Clear" @click="root.clearRescheduleField(taskUuid)" :disabled="disabled"><svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg></button>
+                        </div>
+                        <div class="reschedule-custom">
+                            <input type="text" class="text-input compact" v-model="root.reschedule.custom" :placeholder="root.rescheduleFieldName() + ' value (e.g. 2025-01-03, eom)'" autocomplete="off" @keydown.enter.prevent="root.applyRescheduleCustom(taskUuid)">
+                            <button class="schedule-btn primary" type="button" title="Set" aria-label="Set" @click="root.applyRescheduleCustom(taskUuid)" :disabled="!root.reschedule.custom || disabled"><svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg></button>
+                        </div>
+                    </div>
+                </Teleport>
+            </div>
+        `,
+    });
+
+    app.component('planner-task-card', {
+        props: {
+            task: { type: Object, required: true },
+            showUrgency: { type: Boolean, default: false },
+        },
+        computed: {
+            root() {
+                return this.$root;
+            },
+        },
+        template: `
+            <article
+                class="planner-card task-card"
+                :style="root.getTaskCardStyle(task)"
+                :class="{ 'task-selected': root.multiSelectMode && root.isTaskSelected(task.uuid), 'reschedule-open': root.reschedule.open && !root.reschedule.multiSelect && root.reschedule.taskUuid === task.uuid }"
+                draggable="true"
+                @dragstart="root.onPlannerDragStart(task.uuid, $event)"
+                @click="root.multiSelectMode ? root.toggleTaskSelection(task.uuid) : root.editTask(task.uuid)"
+                @keydown.enter.prevent="root.multiSelectMode ? root.toggleTaskSelection(task.uuid) : null"
+                @keydown.space.prevent="root.multiSelectMode ? root.toggleTaskSelection(task.uuid) : null"
+                :role="root.multiSelectMode ? 'button' : undefined"
+                :tabindex="root.multiSelectMode ? 0 : undefined"
+                :aria-pressed="root.multiSelectMode ? root.isTaskSelected(task.uuid) : undefined"
+                :aria-busy="Boolean(root.busyTaskUuids[task.uuid])"
+            >
+                <div class="task-main">
+                    <div class="task-desc">
+                        <span class="task-desc-text planner-card-description" :style="root.getTaskTextStyle(task)">{{ root.plannerTaskDescription(task.description) }}</span>
+                        <span v-if="task.project" class="meta meta-project"><span class="meta-text">{{ task.project }}</span></span>
+                        <span v-if="Array.isArray(task.tags) && task.tags.length" class="meta meta-tags"><span class="tag-pill" v-for="tag in task.tags" :key="tag">{{ tag }}</span></span>
+                        <span v-if="task.priority" class="meta meta-priority" :class="'priority-' + String(task.priority).toLowerCase()"><span class="priority-icon" aria-hidden="true">{{ task.priority === 'H' ? '!!!' : task.priority === 'M' ? '!!' : '!' }}</span></span>
+                        <span v-if="Array.isArray(task.annotations) && task.annotations.length" class="meta meta-annotations" title="Has annotations">
+                            <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M21 6c0-1.1-.9-2-2-2H5a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h10l6-6V6zm-8 13H5V6h14v9h-5v4zm4-7H7v-2h10v2zm0-4H7V6h10v2z"/>
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <div class="task-action-buttons">
+                        <div
+                            v-if="showUrgency && (task.status === 'completed' || task.status === 'deleted' || (task.urgency !== undefined && task.urgency !== null))"
+                            class="urgency"
+                        >
+                            <svg class="meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path fill="currentColor" d="M12 2 4.5 9.5 12 22l7.5-12.5L12 2zm0 4.2 4.18 6.98H7.82L12 6.2z"/>
+                            </svg>
+                            <span class="urgency-value">{{ root.formatUrgency(root.getTaskUrgency(task)) }}</span>
+                        </div>
+                        <task-reschedule-control
+                            v-if="!root.multiSelectMode"
+                            :task-uuid="task.uuid"
+                            :disabled="root.busyTaskUuids[task.uuid]"
+                        ></task-reschedule-control>
+                    </div>
+                </div>
+            </article>
+        `,
+    });
 
     return {
         app,

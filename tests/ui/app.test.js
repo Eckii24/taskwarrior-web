@@ -83,6 +83,166 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(document.body.textContent).toContain('Hello');
     });
 
+    test('Planner shows urgency only in fixed Unplanned and writes noninteractive date mutations', async () => {
+        const backend = createMockBackend();
+        backend.state.settings = { reschedule_field: 'due', planner_date_field: 'scheduled', planner_days: 7 };
+        const seen = [];
+        backend.state.beforeFetch = ({ pathname, method, init }) => {
+            if (pathname === '/api/task' && method === 'POST') seen.push(JSON.parse(String(init.body)).args);
+            return null;
+        };
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        const dates = vm.plannerDates();
+        backend.state.tasks.push(
+            { uuid: 'planned', description: 'Planned', status: 'pending', urgency: 10, scheduled: `${dates[0].replaceAll('-', '')}T120000Z` },
+            { uuid: 'unplanned', description: 'Unplanned', status: 'pending', urgency: 2 },
+        );
+
+        await vm.selectPlanner();
+        await flushPromises(vm, 4);
+        expect(vm.mainMode).toBe('planner');
+        expect(vm.plannerDates()).toHaveLength(7);
+        expect(vm.plannerTasksForDate(dates[0]).map((task) => task.uuid)).toEqual(['planned']);
+        expect(vm.unplannedPlannerTasks().map((task) => task.uuid)).toEqual(['unplanned']);
+        expect(document.querySelector('.planner-day-column .urgency')).toBeFalsy();
+        const unplannedUrgency = document.querySelector('.planner-unplanned .urgency');
+        expect(unplannedUrgency).toBeTruthy();
+        expect(unplannedUrgency.querySelector('svg.meta-icon')).toBeTruthy();
+        expect(unplannedUrgency.querySelector('.urgency-value').textContent).toBe('2.00');
+        expect(fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'styles.css'), 'utf8')).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.planner-unplanned \.urgency\s*\{\s*display:\s*inline-flex;/);
+
+        await vm.planTasksOnDate(['unplanned'], dates[1]);
+        expect(backend.state.tasks.find((task) => task.uuid === 'unplanned').scheduled).toBe(dates[1]);
+        expect(seen).toContainEqual(['rc.recurrence.confirmation=no', 'unplanned', 'mod', `scheduled:${dates[1]}`]);
+        await vm.unplanTasks(['unplanned']);
+        expect(backend.state.tasks.find((task) => task.uuid === 'unplanned').scheduled).toBeUndefined();
+        expect(seen).toContainEqual(['rc.recurrence.confirmation=no', 'unplanned', 'mod', 'scheduled:']);
+    });
+
+    test('Planner headings remain outside independently scrolling task lists', async () => {
+        const backend = createMockBackend();
+        backend.state.settings = { reschedule_field: 'due', planner_date_field: 'scheduled', planner_days: 5 };
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        const today = vm.plannerDates()[0];
+        backend.state.tasks.push(
+            { uuid: 'planned-list', description: 'Planned list', status: 'pending', urgency: 1, scheduled: today },
+            { uuid: 'unplanned-list', description: 'Unplanned list', status: 'pending', urgency: 1 },
+        );
+
+        await vm.selectPlanner();
+        await flushPromises(vm, 4);
+
+        const desktopDay = document.querySelector('.planner-day-column');
+        const unplanned = document.querySelector('.planner-unplanned');
+        const mobileDay = document.querySelector('.planner-mobile-day');
+        for (const section of [desktopDay, unplanned, mobileDay]) {
+            expect(section.children[0].matches('header, h2')).toBe(true);
+            expect(section.children[1].classList.contains('planner-task-list')).toBe(true);
+            expect(section.children[1].querySelector('.planner-card')).toBeTruthy();
+        }
+
+        const dropEvent = new Event('drop', { bubbles: true, cancelable: true });
+        desktopDay.children[1].dispatchEvent(dropEvent);
+        expect(dropEvent.defaultPrevented).toBe(true);
+
+        const styles = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'styles.css'), 'utf8');
+        expect(styles).toMatch(/\.planner-task-list\s*\{[^}]*overflow-y:\s*auto;/);
+        expect(styles).not.toMatch(/\.planner-day-column > header\s*\{[^}]*position:\s*sticky/);
+        expect(styles).not.toMatch(/\.planner-unplanned h2, \.planner-mobile-day h2\s*\{[^}]*position:\s*sticky/);
+    });
+
+    test('Planner renders urgency-sorted before-today tasks only when present', async () => {
+        const backend = createMockBackend();
+        backend.state.settings = { reschedule_field: 'due', planner_date_field: 'scheduled', planner_days: 5 };
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        const dates = vm.plannerDates();
+        const yesterday = new Date(`${dates[0]}T12:00:00`);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const priorDate = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+        backend.state.tasks.push(
+            { uuid: 'prior-low', description: 'Prior low', status: 'pending', urgency: 1, scheduled: priorDate },
+            { uuid: 'prior-high', description: 'Prior high', status: 'pending', urgency: 9, scheduled: priorDate },
+            { uuid: 'today-low', description: 'Today low', status: 'pending', urgency: 2, scheduled: dates[0] },
+            { uuid: 'today-high', description: 'Today high', status: 'pending', urgency: 7, scheduled: dates[0] },
+        );
+
+        await vm.selectPlanner();
+        await flushPromises(vm, 4);
+        expect(vm.beforeTodayPlannerTasks().map((task) => task.uuid)).toEqual(['prior-high', 'prior-low']);
+        expect(vm.plannerTasksForDate(dates[0]).map((task) => task.uuid)).toEqual(['today-high', 'today-low']);
+        expect(document.querySelectorAll('.planner-columns .planner-day-column')).toHaveLength(6);
+        expect(Array.from(document.querySelectorAll('.planner-columns .planner-before-today .task-desc-text')).map((el) => el.textContent)).toEqual(['Prior high', 'Prior low']);
+
+        const mobileSection = document.querySelector('.planner-mobile-before-today');
+        expect(mobileSection).toBeTruthy();
+        expect(mobileSection.textContent).toContain('Before today (2)');
+        expect(mobileSection.querySelectorAll('.planner-card')).toHaveLength(0);
+        mobileSection.querySelector('button').click();
+        await flushPromises(vm, 2);
+        expect(Array.from(mobileSection.querySelectorAll('.planner-card .task-desc-text')).map((el) => el.textContent)).toEqual(['Prior high', 'Prior low']);
+
+        vm.planner.tasks = [];
+        await flushPromises(vm, 2);
+        expect(document.querySelector('.planner-columns .planner-before-today')).toBeFalsy();
+        expect(document.querySelector('.planner-mobile-before-today')).toBeFalsy();
+    });
+
+    test('Planner cards reuse task cards and use the global reschedule UI', async () => {
+        const backend = createMockBackend();
+        backend.state.settings = { reschedule_field: 'due,scheduled,wait', planner_date_field: 'due', planner_days: 5 };
+        const description = 'A deliberately long Planner task description that exceeds fifty characters for display';
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        const today = vm.plannerDates()[0];
+        backend.state.tasks.push({ uuid: 'planner-card', description, status: 'pending', urgency: 4, due: today, tags: ['work'], annotations: [{ description: 'note' }] });
+
+        await vm.selectPlanner();
+        await flushPromises(vm, 4);
+
+        const card = document.querySelector('.planner-day-column .planner-card');
+        expect(card.classList.contains('task-card')).toBe(true);
+        expect(card.querySelector('.task-desc-text').textContent).toBe(`${description.slice(0, 50).trimEnd()}…`);
+        expect(card.querySelectorAll('button')).toHaveLength(1);
+        const trigger = card.querySelector('.reschedule button');
+        expect(trigger.classList.contains('icon-btn')).toBe(true);
+        expect(trigger.classList.contains('small')).toBe(true);
+        expect(trigger.title).toBe('Reschedule task');
+        expect(trigger.getAttribute('aria-label')).toBe('Reschedule task');
+        expect(card.querySelector('.meta-due, .meta-scheduled, .meta-wait, .urgency')).toBeFalsy();
+        expect(card.querySelector('.meta-annotations svg.meta-icon')).toBeTruthy();
+        expect(card.textContent).not.toContain('Notes');
+
+        trigger.click();
+        await flushPromises(vm, 2);
+        expect(vm.modal.open).toBe(false);
+        expect(vm.reschedule.taskUuid).toBe('planner-card');
+        const popover = document.body.querySelector('.reschedule-pop-teleported');
+        expect(popover).toBeTruthy();
+        expect(card.contains(popover)).toBe(false);
+        expect(popover.textContent).toContain('Due/Scheduled/Wait');
+        expect(Array.from(popover.querySelectorAll('.reschedule-toolbar [aria-label]')).map((control) => control.getAttribute('aria-label'))).toEqual(['Today', 'Tomorrow', 'Next week', 'Calendar', 'Clear']);
+        expect(popover.querySelector('[aria-label="Set"]')).toBeTruthy();
+        popover.querySelector('.reschedule-header-row button').click();
+        await flushPromises(vm, 1);
+        expect(Array.from(popover.querySelectorAll('.settings-chip')).map((chip) => chip.textContent)).toEqual(['due', 'scheduled', 'wait', 'until']);
+        expect(Array.from(popover.querySelectorAll('input[type="checkbox"]')).slice(0, 3).every((input) => input.checked)).toBe(true);
+
+        trigger.click();
+        card.click();
+        await flushPromises(vm, 4);
+        expect(vm.modal.type).toBe('edit');
+        expect(vm.modal.description).toBe(description);
+
+        vm.closeModal();
+        vm.toggleMultiSelectMode();
+        await flushPromises(vm, 1);
+        card.click();
+        expect(vm.selectedTaskUuids.has('planner-card')).toBe(true);
+    });
+
     test('treats last token as report and appends to export', async () => {
         const backend = createMockBackend();
         backend.state.tasks.push({ uuid: 'uuid-1', description: 'Urgent report', status: 'pending', urgency: 2, tags: ['urgent'] });
@@ -1260,8 +1420,8 @@ describe('Taskwarrior Web UI (component-style)', () => {
         await vm.saveAppSettings();
         await flushPromises(vm, 4);
 
-        expect(backend.state.settings.reschedule_field).toBe('schedule');
-        expect(vm.settingsAppLoaded.reschedule_field).toEqual(['schedule']);
+        expect(backend.state.settings.reschedule_field).toBe('scheduled');
+        expect(vm.settingsAppLoaded.reschedule_field).toEqual(['scheduled']);
         expect(vm.toast.text).toContain('Saved app settings');
     });
 

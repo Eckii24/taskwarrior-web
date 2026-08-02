@@ -260,6 +260,8 @@ describe('Backend API (Bun fetch)', () => {
         expect(getDefault.status).toBe(200);
         expect(getDefault.body.success).toBe(true);
         expect(getDefault.body.settings.reschedule_field).toBe('due');
+        expect(getDefault.body.settings.planner_date_field).toBe('due');
+        expect(getDefault.body.settings.planner_days).toBe(5);
 
         const invalidPutEmpty = await request(app).put('/api/settings').send({ reschedule_field: '' });
         expect(invalidPutEmpty.status).toBe(400);
@@ -269,15 +271,22 @@ describe('Backend API (Bun fetch)', () => {
         expect(invalidPutValue.status).toBe(400);
         expect(invalidPutValue.body.success).toBe(false);
 
-        const put = await request(app).put('/api/settings').send({ reschedule_field: 'wait,due,wait' });
+        const invalidPlanner = await request(app).put('/api/settings').send({ reschedule_field: 'due', planner_date_field: 'nope', planner_days: 5 });
+        expect(invalidPlanner.status).toBe(400);
+
+        const put = await request(app).put('/api/settings').send({ reschedule_field: 'schedule,wait,schedule', planner_date_field: 'scheduled', planner_days: 7 });
         expect(put.status).toBe(200);
         expect(put.body.success).toBe(true);
-        expect(put.body.settings.reschedule_field).toBe('wait,due');
+        expect(put.body.settings.reschedule_field).toBe('scheduled,wait');
+        expect(put.body.settings.planner_date_field).toBe('scheduled');
+        expect(put.body.settings.planner_days).toBe(7);
 
         const getUpdated = await request(app).get('/api/settings');
         expect(getUpdated.status).toBe(200);
         expect(getUpdated.body.success).toBe(true);
-        expect(getUpdated.body.settings.reschedule_field).toBe('wait,due');
+        expect(getUpdated.body.settings.reschedule_field).toBe('scheduled,wait');
+        expect(getUpdated.body.settings.planner_date_field).toBe('scheduled');
+        expect(getUpdated.body.settings.planner_days).toBe(7);
     });
 
     test('builtin filters API (seed + update)', async () => {

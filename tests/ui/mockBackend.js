@@ -240,6 +240,8 @@ function createMockBackend() {
          reports: ['next', 'today', 'all'],
         settings: {
             reschedule_field: 'due',
+            planner_date_field: 'due',
+            planner_days: 5,
         },
         taskrc: '# taskrc\n',
         nextTaskId: 1,
@@ -274,10 +276,11 @@ function createMockBackend() {
                 return jsonResponse({ success: false, error: 'reschedule_field must include at least one value' }, { status: 400 });
             }
 
-            const allowed = new Set(['due', 'schedule', 'wait', 'until']);
+            const normalize = (value) => String(value).trim() === 'schedule' ? 'scheduled' : String(value).trim();
+            const allowed = new Set(['due', 'scheduled', 'wait', 'until']);
             const requested = String(body.reschedule_field)
                 .split(',')
-                .map((value) => String(value).trim())
+                .map(normalize)
                 .filter(Boolean);
 
             if (requested.length === 0) {
@@ -290,7 +293,14 @@ function createMockBackend() {
                 }
             }
 
+            const plannerDateField = normalize(body.planner_date_field || requested[0]);
+            const plannerDays = body.planner_days === undefined ? 5 : Number(body.planner_days);
+            if (!allowed.has(plannerDateField) || (plannerDays !== 5 && plannerDays !== 7)) {
+                return jsonResponse({ success: false, error: 'invalid planner settings' }, { status: 400 });
+            }
             state.settings.reschedule_field = Array.from(new Set(requested)).join(',');
+            state.settings.planner_date_field = plannerDateField;
+            state.settings.planner_days = plannerDays;
             return jsonResponse({ success: true, settings: { ...state.settings } });
         }
 
@@ -491,6 +501,8 @@ function createMockBackend() {
 
                 return { args: argsText, tokens: parseShellLikeArgs(argsText) };
             })();
+
+            while (tokens[0] === 'rc.recurrence.confirmation=no') tokens.shift();
 
             if (!tokens.length) {
                 // Treat empty args like a plain "task" invocation.

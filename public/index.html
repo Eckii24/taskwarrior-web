@@ -115,6 +115,16 @@
                 </button>
 
                 <button
+                    class="nav-item"
+                    :class="{ active: !showTaskrc && selectedView.type === 'planner' }"
+                    type="button"
+                    @click="selectPlanner"
+                >
+                    <span class="nav-icon">📅</span>
+                    <span class="nav-label">Planner</span>
+                </button>
+
+                <button
                     v-if="builtinFilters.inbox && builtinFilters.inbox.visible"
                     class="nav-item"
                     :class="{ active: !showTaskrc && selectedView.type === 'builtin' && selectedView.key === 'inbox' }"
@@ -405,9 +415,9 @@
                                         <input type="checkbox" :checked="isRescheduleFieldSelected('due')" @change="toggleRescheduleField('due')">
                                         <span>due</span>
                                     </label>
-                                    <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule') }">
-                                        <input type="checkbox" :checked="isRescheduleFieldSelected('schedule')" @change="toggleRescheduleField('schedule')">
-                                        <span>schedule</span>
+                                    <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('scheduled') }">
+                                        <input type="checkbox" :checked="isRescheduleFieldSelected('scheduled')" @change="toggleRescheduleField('scheduled')">
+                                        <span>scheduled</span>
                                     </label>
                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait') }">
                                         <input type="checkbox" :checked="isRescheduleFieldSelected('wait')" @change="toggleRescheduleField('wait')">
@@ -418,6 +428,21 @@
                                         <span>until</span>
                                     </label>
                                 </div>
+                            </div>
+
+                            <div class="settings-row">
+                                <div class="settings-label">Planner date field</div>
+                                <select class="text-input" v-model="settingsAppDraft.planner_date_field" aria-label="Planner date field">
+                                    <option value="due">due</option>
+                                    <option value="scheduled">scheduled</option>
+                                    <option value="wait">wait</option>
+                                    <option value="until">until</option>
+                                </select>
+                                <div class="settings-label">Days</div>
+                                <select class="text-input" v-model.number="settingsAppDraft.planner_days" aria-label="Planner days">
+                                    <option :value="5">5 days</option>
+                                    <option :value="7">7 days</option>
+                                </select>
                             </div>
 
                         <div class="settings-actions">
@@ -437,6 +462,45 @@
 
                         <textarea class="taskrc-editor" v-model="taskrcText" spellcheck="false"></textarea>
                     </div>
+                </div>
+
+                <div v-else-if="mainMode === 'planner'" class="planner-view">
+                    <div class="planner-heading-row">
+                        <div class="tasks-heading">Planner</div>
+                        <button class="control-btn" type="button" @click="toggleMultiSelectMode">{{ multiSelectMode ? 'Done' : 'Select' }}</button>
+                        <label v-if="multiSelectMode && selectedTaskUuids.size" class="planner-plan-picker">Plan on <input type="date" @change="planSelectedOnDate($event.target.value); $event.target.value = ''"></label>
+                        <button v-if="multiSelectMode && selectedTaskUuids.size" class="control-btn danger" type="button" @click="unplanSelectedTasks">Unplan</button>
+                    </div>
+                    <div class="planner-date-strip" role="tablist" aria-label="Planner dates">
+                        <button v-for="date in plannerDates()" :key="date" type="button" class="planner-date-tab" :class="{ active: planner.selectedDate === date }" @click="planner.selectedDate = date">{{ formatPlannerDate(date) }}</button>
+                    </div>
+                    <div class="planner-columns">
+                        <section v-if="beforeTodayPlannerTasks().length" class="planner-day-column planner-before-today">
+                            <header><strong>Before today</strong></header>
+                            <div class="planner-task-list"><planner-task-card v-for="task in beforeTodayPlannerTasks()" :key="task.uuid" :task="task"></planner-task-card></div>
+                        </section>
+                        <section v-for="date in plannerDates()" :key="date" class="planner-day-column" @dragover.prevent @drop.prevent="onPlannerDrop(date, $event)">
+                            <header><strong>{{ formatPlannerDate(date) }}</strong><button v-if="multiSelectMode && selectedTaskUuids.size" type="button" class="btn small" @click="planSelectedOnDate(date)">Plan selected</button></header>
+                            <div class="planner-task-list"><planner-task-card v-for="task in plannerTasksForDate(date)" :key="task.uuid" :task="task"></planner-task-card></div>
+                        </section>
+                    </div>
+                    <div class="planner-mobile-content">
+                        <section v-if="beforeTodayPlannerTasks().length" class="planner-mobile-before-today">
+                            <button type="button" :aria-expanded="planner.beforeTodayExpanded" @click="planner.beforeTodayExpanded = !planner.beforeTodayExpanded">Before today ({{ beforeTodayPlannerTasks().length }})</button>
+                            <div v-if="planner.beforeTodayExpanded" class="planner-task-list"><planner-task-card v-for="task in beforeTodayPlannerTasks()" :key="task.uuid" :task="task"></planner-task-card></div>
+                        </section>
+                        <section class="planner-mobile-day" @dragover.prevent @drop.prevent="onPlannerDrop(planner.selectedDate, $event)">
+                            <h2>{{ formatPlannerDate(planner.selectedDate) }}</h2>
+                            <div class="planner-task-list"><planner-task-card v-for="task in plannerTasksForDate(planner.selectedDate)" :key="task.uuid" :task="task"></planner-task-card></div>
+                        </section>
+                    </div>
+                    <section class="planner-unplanned" @dragover.prevent @drop.prevent="onPlannerDrop('', $event)">
+                        <h2>Unplanned</h2>
+                        <div class="planner-task-list">
+                            <div v-if="!unplannedPlannerTasks().length" class="empty-state">No unplanned tasks.</div>
+                            <planner-task-card v-for="task in unplannedPlannerTasks()" :key="task.uuid" :task="task" :show-urgency="true"></planner-task-card>
+                        </div>
+                    </section>
                 </div>
 
                 <div v-else-if="mainMode === 'tasks'" class="tasks-view">
@@ -589,9 +653,9 @@
                                              <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
                                              <span>due</span>
                                          </label>
-                                         <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
-                                             <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
-                                             <span>schedule</span>
+                                         <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('scheduled', { preferReschedule: true }) }">
+                                             <input type="checkbox" :checked="isRescheduleFieldSelected('scheduled', { preferReschedule: true })" @change="toggleRescheduleField('scheduled', { preferReschedule: true })">
+                                             <span>scheduled</span>
                                          </label>
                                          <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
                                              <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
@@ -828,183 +892,11 @@
                                             <span class="urgency-value">{{ formatUrgency(getTaskUrgency(task)) }}</span>
                                         </div>
 
-                                        <div v-if="task.status === 'pending'" class="reschedule">
-                                            <button
-                                                class="icon-btn small"
-                                                type="button"
-                                                aria-label="Reschedule task"
-                                                @click.stop="toggleReschedule(task.uuid)"
-                                                :disabled="busyTaskUuids[task.uuid]"
-                                            >
-                                                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                    <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
-                                                </svg>
-                                            </button>
-
-                                            <div
-                                                v-if="reschedule.open && !reschedule.multiSelect && reschedule.taskUuid === task.uuid"
-                                                class="reschedule-pop"
-                                                @click.stop
-                                            >
-                                                 <div class="reschedule-header-row">
-                                                     <div class="reschedule-title">Date</div>
-                                                     <button
-                                                         class="btn small"
-                                                         type="button"
-                                                         @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
-                                                     >
-                                                         {{ rescheduleFieldLabelForClear() }}
-                                                     </button>
-                                                 </div>
-
-                                                 <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
-                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
-                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
-                                                         <span>due</span>
-                                                     </label>
-                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
-                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
-                                                         <span>schedule</span>
-                                                     </label>
-                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
-                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
-                                                         <span>wait</span>
-                                                     </label>
-                                                     <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
-                                                         <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
-                                                         <span>until</span>
-                                                     </label>
-                                                 </div>
- 
-                                                 <div class="reschedule-toolbar">
-                                                    <button
-                                                        class="schedule-btn"
-                                                        type="button"
-                                                        title="Today"
-                                                        aria-label="Today"
-                                                        @click="applyReschedulePreset(task.uuid, 'today')"
-                                                        :disabled="busyTaskUuids[task.uuid]"
-                                                    >
-                                                        <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <circle cx="12" cy="12" r="4"></circle>
-                                                            <path d="M12 2v2"></path>
-                                                            <path d="M12 20v2"></path>
-                                                            <path d="M4.93 4.93l1.41 1.41"></path>
-                                                            <path d="M17.66 17.66l1.41 1.41"></path>
-                                                            <path d="M2 12h2"></path>
-                                                            <path d="M20 12h2"></path>
-                                                            <path d="M4.93 19.07l1.41-1.41"></path>
-                                                            <path d="M17.66 6.34l1.41-1.41"></path>
-                                                        </svg>
-                                                    </button>
-
-                                                    <button
-                                                        class="schedule-btn"
-                                                        type="button"
-                                                        title="Tomorrow"
-                                                        aria-label="Tomorrow"
-                                                        @click="applyReschedulePreset(task.uuid, 'tomorrow')"
-                                                        :disabled="busyTaskUuids[task.uuid]"
-                                                    >
-                                                        <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M3 18h18"></path>
-                                                            <path d="M7 18a5 5 0 0 1 10 0"></path>
-                                                            <path d="M12 8v-2"></path>
-                                                            <path d="M7.5 9.5l-1.5-1.5"></path>
-                                                            <path d="M16.5 9.5l1.5-1.5"></path>
-                                                            <path d="M9 6h6"></path>
-                                                        </svg>
-                                                    </button>
-
-                                                    <button
-                                                        class="schedule-btn"
-                                                        type="button"
-                                                        title="Next week"
-                                                        aria-label="Next week"
-                                                        @click="applyReschedulePreset(task.uuid, 'sonw')"
-                                                        :disabled="busyTaskUuids[task.uuid]"
-                                                    >
-                                                        <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M7 3v2"></path>
-                                                            <path d="M17 3v2"></path>
-                                                            <path d="M4 7h16"></path>
-                                                            <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
-                                                            <path d="M14 11h4"></path>
-                                                            <path d="M14 11v4"></path>
-                                                        </svg>
-                                                    </button>
-
-                                                    <label
-                                                        class="schedule-btn schedule-date-btn"
-                                                        title="Calendar"
-                                                    >
-                                                        <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M7 3v2"></path>
-                                                            <path d="M17 3v2"></path>
-                                                            <path d="M4 7h16"></path>
-                                                            <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
-                                                            <path d="M8 11h.01"></path>
-                                                            <path d="M12 11h.01"></path>
-                                                            <path d="M16 11h.01"></path>
-                                                            <path d="M8 15h.01"></path>
-                                                            <path d="M12 15h.01"></path>
-                                                            <path d="M16 15h.01"></path>
-                                                        </svg>
-                                                        <input
-                                                            type="date"
-                                                            class="reschedule-calendar-input"
-                                                            aria-label="Calendar"
-                                                            @change="onRescheduleCalendarChange(task.uuid, $event)"
-                                                        >
-                                                    </label>
-
-                                                    <button
-                                                        class="schedule-btn danger"
-                                                        type="button"
-                                                        title="Clear"
-                                                        aria-label="Clear"
-                                                        @click="clearRescheduleField(task.uuid)"
-                                                        :disabled="busyTaskUuids[task.uuid]"
-                                                    >
-                                                        <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M18 6L6 18"></path>
-                                                            <path d="M6 6l12 12"></path>
-                                                        </svg>
-                                                    </button>
-                                                </div>
-
-                                                <div class="reschedule-custom">
-                                                    <input
-                                                        type="text"
-                                                        class="text-input compact"
-                                                        v-model="reschedule.custom"
-                                                        :placeholder="`${rescheduleFieldName()} value (e.g. 2025-01-03, eom)`"
-                                                        autocomplete="off"
-                                                        @keydown.enter.prevent="applyRescheduleCustom(task.uuid)"
-                                                    >
-
-                                                    <button
-                                                        class="schedule-btn primary"
-                                                        type="button"
-                                                        title="Set"
-                                                        aria-label="Set"
-                                                        @click="applyRescheduleCustom(task.uuid)"
-                                                        :disabled="!reschedule.custom || busyTaskUuids[task.uuid]"
-                                                    >
-                                                        <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                            <path d="M20 6L9 17l-5-5"></path>
-                                                        </svg>
-                                                    </button>
-                        </div>
-                        <div
-                            class="filter-drop-zone end"
-                            :class="{ active: insertionTarget && insertionTarget.type === 'end' }"
-                            @dragover.prevent="onFilterDragOver(null, 'end', $event)"
-                            @drop.prevent="onFiltersDrop"
-                        ></div>
-                    </div>
-
-                                        </div>
+                                        <task-reschedule-control
+                                            v-if="task.status === 'pending'"
+                                            :task-uuid="task.uuid"
+                                            :disabled="busyTaskUuids[task.uuid]"
+                                        ></task-reschedule-control>
 
                                     </div>
                                 </div>
@@ -1098,177 +990,11 @@
                                         <span class="urgency-value">{{ formatUrgency(getTaskUrgency(task)) }}</span>
                                     </div>
 
-                                    <div v-if="task.status === 'pending'" class="reschedule">
-                                        <button
-                                            v-if="!multiSelectMode"
-                                            class="icon-btn small"
-                                            type="button"
-                                            aria-label="Reschedule task"
-                                            @click.stop="toggleReschedule(task.uuid)"
-                                            :disabled="busyTaskUuids[task.uuid]"
-                                        >
-                                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path fill="currentColor" d="M7 11h2v2H7v-2zm14-7v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h1V0h2v2h8V0h2v2h1a2 2 0 0 1 2 2zm-2 6H5v10h14V10z"/>
-                                            </svg>
-                                        </button>
-
-                                            <div
-                                                v-if="reschedule.open && !reschedule.multiSelect && reschedule.taskUuid === task.uuid"
-                                                class="reschedule-pop"
-                                                @click.stop
-                                            >
-                                             <div class="reschedule-header-row">
-                                                 <div class="reschedule-title">Date</div>
-                                                 <button
-                                                     class="btn small"
-                                                     type="button"
-                                                     @click="reschedule.showFieldPicker = !reschedule.showFieldPicker"
-                                                 >
-                                                     {{ rescheduleFieldLabelForClear() }}
-                                                 </button>
-                                             </div>
-
-                                             <div v-if="reschedule.showFieldPicker" class="settings-multi-chip">
-                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('due', { preferReschedule: true }) }">
-                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('due', { preferReschedule: true })" @change="toggleRescheduleField('due', { preferReschedule: true })">
-                                                     <span>due</span>
-                                                 </label>
-                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('schedule', { preferReschedule: true }) }">
-                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('schedule', { preferReschedule: true })" @change="toggleRescheduleField('schedule', { preferReschedule: true })">
-                                                     <span>schedule</span>
-                                                 </label>
-                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('wait', { preferReschedule: true }) }">
-                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('wait', { preferReschedule: true })" @change="toggleRescheduleField('wait', { preferReschedule: true })">
-                                                     <span>wait</span>
-                                                 </label>
-                                                 <label class="settings-chip" :class="{ active: isRescheduleFieldSelected('until', { preferReschedule: true }) }">
-                                                     <input type="checkbox" :checked="isRescheduleFieldSelected('until', { preferReschedule: true })" @change="toggleRescheduleField('until', { preferReschedule: true })">
-                                                     <span>until</span>
-                                                 </label>
-                                             </div>
- 
-                                             <div class="reschedule-toolbar">
-                                                <button
-                                                    class="schedule-btn"
-                                                    type="button"
-                                                    title="Today"
-                                                    aria-label="Today"
-                                                    @click="applyReschedulePreset(task.uuid, 'today')"
-                                                    :disabled="busyTaskUuids[task.uuid]"
-                                                >
-                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                        <circle cx="12" cy="12" r="4"></circle>
-                                                        <path d="M12 2v2"></path>
-                                                        <path d="M12 20v2"></path>
-                                                        <path d="M4.93 4.93l1.41 1.41"></path>
-                                                        <path d="M17.66 17.66l1.41 1.41"></path>
-                                                        <path d="M2 12h2"></path>
-                                                        <path d="M20 12h2"></path>
-                                                        <path d="M4.93 19.07l1.41-1.41"></path>
-                                                        <path d="M17.66 6.34l1.41-1.41"></path>
-                                                    </svg>
-                                                </button>
-
-                                                <button
-                                                    class="schedule-btn"
-                                                    type="button"
-                                                    title="Tomorrow"
-                                                    aria-label="Tomorrow"
-                                                    @click="applyReschedulePreset(task.uuid, 'tomorrow')"
-                                                    :disabled="busyTaskUuids[task.uuid]"
-                                                >
-                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M3 18h18"></path>
-                                                        <path d="M7 18a5 5 0 0 1 10 0"></path>
-                                                        <path d="M12 8v-2"></path>
-                                                        <path d="M7.5 9.5l-1.5-1.5"></path>
-                                                        <path d="M16.5 9.5l1.5-1.5"></path>
-                                                        <path d="M9 6h6"></path>
-                                                    </svg>
-                                                </button>
-
-                                                <button
-                                                    class="schedule-btn"
-                                                    type="button"
-                                                    title="Next week"
-                                                    aria-label="Next week"
-                                                    @click="applyReschedulePreset(task.uuid, 'sonw')"
-                                                    :disabled="busyTaskUuids[task.uuid]"
-                                                >
-                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M7 3v2"></path>
-                                                        <path d="M17 3v2"></path>
-                                                        <path d="M4 7h16"></path>
-                                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
-                                                        <path d="M14 11h4"></path>
-                                                        <path d="M14 11v4"></path>
-                                                    </svg>
-                                                </button>
-
-                                                <label
-                                                    class="schedule-btn schedule-date-btn"
-                                                    title="Calendar"
-                                                >
-                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M7 3v2"></path>
-                                                        <path d="M17 3v2"></path>
-                                                        <path d="M4 7h16"></path>
-                                                        <path d="M5 5h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"></path>
-                                                        <path d="M8 11h.01"></path>
-                                                        <path d="M12 11h.01"></path>
-                                                        <path d="M16 11h.01"></path>
-                                                        <path d="M8 15h.01"></path>
-                                                        <path d="M12 15h.01"></path>
-                                                        <path d="M16 15h.01"></path>
-                                                    </svg>
-                                                    <input
-                                                        type="date"
-                                                        class="reschedule-calendar-input"
-                                                        aria-label="Calendar"
-                                                        @change="onRescheduleCalendarChange(task.uuid, $event)"
-                                                    >
-                                                </label>
-
-                                                <button
-                                                    class="schedule-btn danger"
-                                                    type="button"
-                                                    title="Clear"
-                                                    aria-label="Clear"
-                                                    @click="clearRescheduleField(task.uuid)"
-                                                    :disabled="busyTaskUuids[task.uuid]"
-                                                >
-                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M18 6L6 18"></path>
-                                                        <path d="M6 6l12 12"></path>
-                                                    </svg>
-                                                </button>
-                                            </div>
-
-                                            <div class="reschedule-custom">
-                                                <input
-                                                    type="text"
-                                                    class="text-input compact"
-                                                    v-model="reschedule.custom"
-                                                    placeholder="due value (e.g. 2025-01-03, eom)"
-                                                    autocomplete="off"
-                                                    @keydown.enter.prevent="applyRescheduleCustom(task.uuid)"
-                                                >
-
-                                                <button
-                                                    class="schedule-btn primary"
-                                                    type="button"
-                                                    title="Set"
-                                                    aria-label="Set"
-                                                    @click="applyRescheduleCustom(task.uuid)"
-                                                    :disabled="!reschedule.custom || busyTaskUuids[task.uuid]"
-                                                >
-                                                    <svg class="svg-icon schedule-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                                        <path d="M20 6L9 17l-5-5"></path>
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <task-reschedule-control
+                                        v-if="task.status === 'pending' && !multiSelectMode"
+                                        :task-uuid="task.uuid"
+                                        :disabled="busyTaskUuids[task.uuid]"
+                                    ></task-reschedule-control>
 
                                 </div>
                             </div>

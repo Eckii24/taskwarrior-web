@@ -551,11 +551,21 @@ function createApp({
                  settings[String(entry.key)] = entry.value;
              }
 
+        const normalizeDateField = (value) => String(value || '').trim() === 'schedule' ? 'scheduled' : String(value || '').trim();
         const rescheduleFieldValue = String(settings.reschedule_field || 'due').trim() || 'due';
+        const normalizedRescheduleField = rescheduleFieldValue.split(',').map(normalizeDateField).filter(Boolean).join(',') || 'due';
+        const plannerDateField = normalizeDateField(settings.planner_date_field || normalizedRescheduleField.split(',')[0]) || 'due';
+        const plannerDays = Number(settings.planner_days) === 7 ? 7 : 5;
+        const upsert = db.prepare('INSERT INTO app_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+        if (settings.reschedule_field !== normalizedRescheduleField) upsert.run('reschedule_field', normalizedRescheduleField);
+        if (settings.planner_date_field !== plannerDateField) upsert.run('planner_date_field', plannerDateField);
+        if (String(settings.planner_days || '') !== String(plannerDays)) upsert.run('planner_days', String(plannerDays));
         res.json({
             success: true,
             settings: {
-                reschedule_field: rescheduleFieldValue,
+                reschedule_field: normalizedRescheduleField,
+                planner_date_field: plannerDateField,
+                planner_days: plannerDays,
             },
         });
          } catch (error) {
@@ -568,11 +578,15 @@ function createApp({
         const db = await ensureSettingsDb();
         const rescheduleFieldRaw = req.body?.reschedule_field;
         const rescheduleFieldValue = typeof rescheduleFieldRaw === 'string' ? String(rescheduleFieldRaw).trim() : '';
+        const normalizeDateField = (value) => String(value || '').trim() === 'schedule' ? 'scheduled' : String(value || '').trim();
+        const plannerDateFieldRaw = normalizeDateField(req.body?.planner_date_field || '');
+        const plannerDaysRaw = req.body?.planner_days;
+        const plannerDays = plannerDaysRaw === undefined ? 5 : Number(plannerDaysRaw);
 
-        const allowedRescheduleFields = new Set(['due', 'schedule', 'wait', 'until']);
+        const allowedRescheduleFields = new Set(['due', 'scheduled', 'wait', 'until']);
         const rescheduleFields = rescheduleFieldValue
             .split(',')
-            .map((value) => String(value).trim())
+            .map(normalizeDateField)
             .filter(Boolean);
 
         if (rescheduleFields.length === 0) {
@@ -585,16 +599,28 @@ function createApp({
             }
         }
 
+        const plannerDateField = plannerDateFieldRaw || rescheduleFields[0];
+        if (!allowedRescheduleFields.has(plannerDateField)) {
+            return res.status(400).json({ success: false, error: 'planner_date_field contains invalid value' });
+        }
+        if (plannerDays !== 5 && plannerDays !== 7) {
+            return res.status(400).json({ success: false, error: 'planner_days must be 5 or 7' });
+        }
+
         const deduped = Array.from(new Set(rescheduleFields));
         const stored = deduped.join(',');
 
-        db.prepare('INSERT INTO app_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-            .run('reschedule_field', stored);
+        const upsert = db.prepare('INSERT INTO app_settings(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+        upsert.run('reschedule_field', stored);
+        upsert.run('planner_date_field', plannerDateField);
+        upsert.run('planner_days', String(plannerDays));
 
         res.json({
             success: true,
             settings: {
                 reschedule_field: stored,
+                planner_date_field: plannerDateField,
+                planner_days: plannerDays,
             },
         });
          } catch (error) {
