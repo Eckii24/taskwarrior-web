@@ -36,8 +36,7 @@ A simple web interface that wraps the taskwarrior CLI, allowing you to manage yo
 
 ### Option 2: Local Installation
 - [Taskwarrior](https://taskwarrior.org/) installed on your system
-- Node.js (v14 or higher)
-- npm
+- [Bun](https://bun.sh/) (v1.3 or higher)
 
 ### Installing Taskwarrior (Local Installation Only)
 
@@ -83,7 +82,7 @@ cd taskwarrior-web
 
 2. Install dependencies:
 ```bash
-npm install
+bun install
 ```
 
 ## Usage
@@ -105,7 +104,7 @@ docker compose down
 
 1. Start the server:
 ```bash
-npm start
+bun run start
 ```
 
 2. Open your browser and navigate to:
@@ -263,10 +262,10 @@ The application uses your existing taskwarrior configuration (`~/.taskrc`). Any 
 
 ### UI tests
 
-Run component-style UI tests (jsdom + mocked backend):
+Run Bun backend and UI tests (jsdom + mocked backend):
 
 ```bash
-npm test
+bun test --preload ./tests/setup.js
 ```
 
 To modify the application:

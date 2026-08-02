@@ -1,7 +1,5 @@
-/**
- * @jest-environment jsdom
- */
-
+const { describe, expect, test } = require('bun:test');
+const { jest } = require('bun:test');
 const TaskColors = require('../../public/task-colors.js');
 
 describe('TaskColors', () => {

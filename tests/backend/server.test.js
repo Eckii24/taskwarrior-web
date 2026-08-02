@@ -1,5 +1,4 @@
-/** @jest-environment node */
-
+const { describe, test, expect } = require('bun:test');
 const { TextDecoder, TextEncoder } = require('util');
 
 global.TextEncoder = global.TextEncoder || TextEncoder;
@@ -8,7 +7,7 @@ global.TextDecoder = global.TextDecoder || TextDecoder;
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const request = require('supertest');
+const { request } = require('../request.js');
 
 const { createApp } = require('../../backend/server.js');
 
@@ -17,7 +16,7 @@ function tmpPath(prefix) {
     return dir;
 }
 
-describe('Backend API (supertest)', () => {
+describe('Backend API (Bun fetch)', () => {
     test('defaults taskrc to ~/.taskrc (not ~/.task/taskrc)', async () => {
         const originalHome = process.env.HOME;
         const originalTaskdata = process.env.TASKDATA;
@@ -29,7 +28,7 @@ describe('Backend API (supertest)', () => {
         delete process.env.TASKDATA;
         delete process.env.TASKRC;
 
-        jest.resetModules();
+        delete require.cache[require.resolve('../../backend/server.js')];
         const { createApp } = require('../../backend/server.js');
 
         const app = createApp({
@@ -88,6 +87,24 @@ describe('Backend API (supertest)', () => {
 
         const getRes2 = await request(app).get('/api/taskrc');
         expect(getRes2.text).toContain('data.location=/tmp');
+    });
+
+    test('rejects malformed JSON request bodies', async () => {
+        const dir = tmpPath('invalid-json');
+        const app = createApp({
+            taskdataPath: dir,
+            taskrcPath: path.join(dir, 'taskrc'),
+            settingsDbPath: path.join(dir, 'settings.sqlite'),
+            execTaskOverride: async () => ({ stdout: '', stderr: '' }),
+        });
+
+        const response = await request(app)
+            .post('/api/task')
+            .set('Content-Type', 'application/json')
+            .send('{');
+
+        expect(response.status).toBe(400);
+        expect(response.body).toEqual({ success: false, error: 'Invalid JSON request body' });
     });
 
     test('filters CRUD + reorder', async () => {

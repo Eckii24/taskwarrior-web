@@ -5,8 +5,7 @@ const os = require('os');
 const path = require('path');
 const { promisify } = require('util');
 
-const Database = require('better-sqlite3');
-const express = require('express');
+const { Database } = require('bun:sqlite');
 
 const execFileAsync = promisify(execFile);
 const PORT = process.env.PORT || 3000;
@@ -29,6 +28,69 @@ const TASK_EXEC_TIMEOUT_MS = (() => {
     if (Number.isFinite(raw) && raw > 0) return raw;
     return 60000;
 })();
+
+const PUBLIC_DIR = path.join(__dirname, '../public');
+const MIME_TYPES = { '.css': 'text/css; charset=utf-8', '.html': 'text/html; charset=utf-8', '.ico': 'image/x-icon', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
+
+function createRouter() {
+    const routes = [];
+    const add = (method, pattern, handler) => routes.push({ method, pattern, handler });
+    async function fetch(request) {
+        const url = new URL(request.url);
+        const route = routes.find((candidate) => {
+            if (candidate.method !== request.method) return false;
+            const expected = candidate.pattern.split('/').filter(Boolean);
+            const actual = url.pathname.split('/').filter(Boolean);
+            return expected.length === actual.length && expected.every((part, index) => part.startsWith(':') || part === actual[index]);
+        });
+        if (!route) return serveStatic(url.pathname);
+        const expected = route.pattern.split('/').filter(Boolean);
+        const actual = url.pathname.split('/').filter(Boolean);
+        const params = {};
+        expected.forEach((part, index) => { if (part.startsWith(':')) params[part.slice(1)] = decodeURIComponent(actual[index]); });
+        const contentType = request.headers.get('content-type') || '';
+        let body = null;
+        if (request.method !== 'GET' && request.method !== 'HEAD') {
+            const text = await request.text();
+            const maxBytes = url.pathname === '/api/taskrc' ? 256 * 1024 : 100 * 1024;
+            if (Buffer.byteLength(text) > maxBytes) return new Response('Request body too large', { status: 413 });
+            if (contentType.includes('application/json')) {
+                try {
+                    body = text ? JSON.parse(text) : {};
+                } catch {
+                    return Response.json({ success: false, error: 'Invalid JSON request body' }, { status: 400 });
+                }
+            } else body = text;
+        }
+        const req = { body, params, query: Object.fromEntries(url.searchParams) };
+        const res = createResponse();
+        try { await route.handler(req, res); return res.response || new Response(null, { status: 204 }); }
+        catch (error) { return Response.json({ success: false, error: error.message }, { status: 500 }); }
+    }
+    return { get: (pattern, handler) => add('GET', pattern, handler), post: (pattern, handler) => add('POST', pattern, handler), put: (pattern, handler) => add('PUT', pattern, handler), delete: (pattern, handler) => add('DELETE', pattern, handler), fetch };
+}
+
+function createResponse() {
+    const state = { status: 200, headers: new Headers(), response: null };
+    const result = {
+        status(code) { state.status = code; return result; },
+        set(name, value) { state.headers.set(name, value); return result; },
+        type(value) { state.headers.set('Content-Type', value.includes('/') ? value + '; charset=utf-8' : value); return result; },
+        json(value) { state.headers.set('Content-Type', 'application/json; charset=utf-8'); state.response = new Response(JSON.stringify(value), state); return result; },
+        send(value) { state.response = new Response(value, state); return result; },
+        get response() { return state.response; },
+    };
+    return result;
+}
+
+async function serveStatic(pathname) {
+    const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+    const resolved = path.resolve(PUBLIC_DIR, relative);
+    if (!resolved.startsWith(PUBLIC_DIR + path.sep)) return new Response('Not found', { status: 404 });
+    const file = Bun.file(resolved);
+    if (!(await file.exists())) return new Response('Not found', { status: 404 });
+    return new Response(file, { headers: { 'Content-Type': MIME_TYPES[path.extname(resolved)] || 'application/octet-stream' } });
+}
 
 function tokenizeShellArgs(text) {
     const src = String(text || '');
@@ -147,7 +209,7 @@ function ensureSqliteColumnExists(db, table, column, columnDefSql) {
 
 function openSettingsDb(settingsDbPath) {
     const db = new Database(settingsDbPath);
-    db.pragma('journal_mode = WAL');
+    db.exec('PRAGMA journal_mode = WAL');
 
     db.exec(`
         CREATE TABLE IF NOT EXISTS filters (
@@ -202,12 +264,7 @@ function createApp({
     settingsDbPath = SETTINGS_DB_PATH_DEFAULT,
     execTaskOverride,
 } = {}) {
-    const app = express();
-
-    // Same-origin API only. Wildcard CORS would let arbitrary websites send
-    // destructive Taskwarrior commands to a locally reachable instance.
-    app.use(express.json());
-    app.use(express.static(path.join(__dirname, '../public')));
+    const app = createRouter();
 
     let settingsDb;
 
@@ -265,7 +322,7 @@ function createApp({
     });
 
     // Overwrite the full taskrc (plain text)
-    app.put('/api/taskrc', express.text({ type: '*/*', limit: '256kb' }), async (req, res) => {
+    app.put('/api/taskrc', async (req, res) => {
         try {
             const content = typeof req.body === 'string' ? req.body : '';
 
@@ -896,12 +953,11 @@ function createApp({
 
 if (require.main === module) {
     const app = createApp();
-    app.listen(PORT, () => {
-        console.log(`Taskwarrior Web Server running on port ${PORT}`);
-        console.log(`Frontend: http://localhost:${PORT}`);
-        console.log(`API: http://localhost:${PORT}/api`);
-        console.log(`TASKRC: ${TASKRC_PATH_DEFAULT}`);
-    });
+    Bun.serve({ port: PORT, fetch: app.fetch });
+    console.log(`Taskwarrior Web Server running on port ${PORT}`);
+    console.log(`Frontend: http://localhost:${PORT}`);
+    console.log(`API: http://localhost:${PORT}/api`);
+    console.log(`TASKRC: ${TASKRC_PATH_DEFAULT}`);
 }
 
 module.exports = {

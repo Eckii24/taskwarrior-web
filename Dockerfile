@@ -1,5 +1,5 @@
 # Build Taskwarrior v3.4.2 from source (requires Rust + CMake >= 3.24)
-FROM node:18-bookworm-slim AS taskwarrior-builder
+FROM oven/bun:1.3.14-debian AS taskwarrior-builder
 
 ARG TASKWARRIOR_VERSION=3.4.2
 
@@ -24,8 +24,8 @@ RUN git clone --branch "v${TASKWARRIOR_VERSION}" --depth 1 --recurse-submodules 
     && DESTDIR=/tmp/taskwarrior-install cmake --install /tmp/taskwarrior/build \
     && rm -rf /tmp/taskwarrior
 
-# Final image: Node.js runtime with Taskwarrior
-FROM node:18-bookworm-slim
+# Final image: Bun runtime with Taskwarrior
+FROM oven/bun:1.3.14-debian
 
 # Taskwarrior runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,16 +43,13 @@ COPY --from=taskwarrior-builder /tmp/taskwarrior-install/ /
 WORKDIR /app
 
 # Copy package files first for better caching
-COPY package*.json ./
+COPY package.json bun.lock ./
 
 # Create public directory for postinstall script
 RUN mkdir -p public
 
-# Install Node.js dependencies. By default, keep strict SSL; allow opting out via build arg for special cases only.
-ARG ALLOW_INSECURE_NPM_SSL=false
-RUN if [ "$ALLOW_INSECURE_NPM_SSL" = "true" ]; then npm config set strict-ssl false; fi && \
-    (npm ci || npm install) && \
-    if [ "$ALLOW_INSECURE_NPM_SSL" = "true" ]; then npm config set strict-ssl true; fi
+# Install locked Bun dependencies.
+RUN bun install --frozen-lockfile
 
 # Copy application files
 COPY backend ./backend
@@ -64,7 +61,7 @@ EXPOSE 3000
 # Set environment variable for port
 ENV PORT=3000
 
-# Ensure Taskwarrior and Node share a consistent timezone.
+# Ensure Taskwarrior and Bun share a consistent timezone.
 # Override at runtime with `-e TZ=Europe/Berlin` (or similar).
 ENV TZ=Etc/UTC
 
@@ -72,4 +69,4 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["npm", "start"]
+CMD ["bun", "run", "start"]

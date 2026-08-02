@@ -4,11 +4,11 @@ This file is guidance for agentic coding agents working in this repository.
 
 ## Project Overview
 
-- Node/Express backend in `backend/server.js`.
+- Bun backend in `backend/server.js` (`Bun.serve`).
 - Static Vue 3 frontend in `public/` (no bundler; served as static files).
 - Jest tests live in `tests/`:
-  - Backend: `tests/backend/*.test.cjs` (supertest; `@jest-environment node`).
-  - UI: `tests/ui/*.test.cjs` (jsdom; mounts via `require('../../public/app.js')`).
+  - Backend: `tests/backend/*.test.js` (Bun Fetch harness).
+  - UI: `tests/ui/*.test.js` (jsdom preload; mounts via `require('../../public/app.js')`).
 
 ## Agent Rules (Cursor/Copilot)
 
@@ -16,8 +16,8 @@ This file is guidance for agentic coding agents working in this repository.
 
 ## Setup
 
-- Install: `npm install` (postinstall copies Vue to `public/vue.js`).
-- Run: `npm start` (starts `node backend/server.js`).
+- Install: `bun install` (postinstall copies Vue to `public/vue.js`).
+- Run: `bun run start` (starts `bun backend/server.js`).
 - Port: `3000` by default (override via `PORT`).
 
 ## Build / Lint / Test
@@ -30,19 +30,12 @@ This file is guidance for agentic coding agents working in this repository.
 
 - No linter is configured; keep changes consistent with existing style.
 
-### Test (Jest)
+### Test (Bun)
 
-- Run all tests: `npm test`
-- Run a single test file:
-  - `npx jest tests/backend/server.test.cjs`
-  - `npx jest tests/ui/app.test.cjs`
-- Run a single test by name (substring match):
-  - `npx jest tests/ui/app.test.cjs -t "mounts and loads initial tasks"`
-  - `npx jest -t "filters CRUD"` (searches all tests)
-- Watch mode during development:
-  - `npx jest --watch`
-
-Jest config: `jest.config.cjs` sets `testMatch: ['**/tests/**/*.test.cjs']`.
+- Run all tests: `bun test --preload ./tests/setup.js`
+- Run one file: `bun test --preload ./tests/setup.js tests/backend/server.test.js`
+- Filter by name: `bun test --preload ./tests/setup.js --test-name-pattern "filters CRUD"`
+- Watch: `bun test --watch --preload ./tests/setup.js`
 
 ### Docker (optional)
 
@@ -61,7 +54,7 @@ Backend env vars used by `backend/server.js`:
 
 - Language: plain JavaScript (no TypeScript).
 - Modules:
-  - Backend uses CommonJS (`require`, `module.exports`).
+  - Backend uses CommonJS (`require`, `module.exports`) on Bun.
   - Frontend is packaged as a UMD-style IIFE with CommonJS support
     (`public/app.js` exports when `module.exports` is available).
 - Indentation: 4 spaces.
@@ -74,7 +67,7 @@ Backend env vars used by `backend/server.js`:
 - Prefer `const X = require('pkg')` at the top of the file.
 - In Node backend, prefer built-ins first, then third-party, then local:
   - built-in: `path`, `os`, `util`, `child_process`, `fs/promises`.
-  - third-party: `express`, `cors`, `better-sqlite3`.
+  - Bun built-ins: `bun:sqlite`, `Bun.serve`.
   - local: project modules.
 
 ### Naming
@@ -84,7 +77,7 @@ Backend env vars used by `backend/server.js`:
 - Constants: `UPPER_SNAKE_CASE` for module-level constants (e.g., `PORT`).
 - Filenames:
   - Runtime JS: `.js`.
-  - Jest tests: `.test.cjs`.
+  - Bun tests: `.test.cjs`.
 
 ### Formatting Patterns to Follow
 
@@ -125,14 +118,14 @@ Frontend (`public/app.js`):
 ### Security / Shell Execution
 
 - Backend executes Taskwarrior via `execFile` (not `exec`) to prevent shell
-  injection.
+  injection. Bun provides Node-compatible `child_process` APIs.
 - Keep/extend this pattern when adding new task invocations.
 - When supporting string commands, tokenize safely (see `tokenizeShellArgs`).
 
 ## Testing Conventions
 
 - Backend tests:
-  - Use `supertest(request(app))` on an app created by `createApp({...})`.
+  - Use `request(app)` from `tests/request.js` against the Fetch router returned by `createApp({...})`.
   - Prefer injecting `execTaskOverride` to avoid depending on a real `task`
     installation.
   - Temporary directories use `fs.mkdtempSync(os.tmpdir())`.

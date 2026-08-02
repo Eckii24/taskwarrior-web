@@ -1,6 +1,7 @@
+const { afterAll, afterEach, beforeAll, beforeEach, describe, expect, jest, test } = require('bun:test');
 const fs = require('fs');
 const path = require('path');
-const { createMockBackend } = require('./mockBackend.cjs');
+const { createMockBackend } = require('./mockBackend.js');
 
 // Load TaskColors module
 global.TaskColors = require('../../public/task-colors.js');
@@ -423,9 +424,15 @@ describe('Taskwarrior Web UI (component-style)', () => {
         const { vm } = mountWithBackend(backend);
         await flushPromises(vm, 8);
 
-        // Slow down sync so we can observe the visual state.
-        const runSyncSpy = jest.spyOn(vm, 'runSync').mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 50)));
-        const refreshSpy = jest.spyOn(vm, 'refreshCurrentPanel');
+        // Delay the actual sync request so we can observe the visual state.
+        const commands = [];
+        backend.state.beforeFetch = async ({ pathname, method, init }) => {
+            if (pathname !== '/api/task' || method !== 'POST') return null;
+            const args = JSON.parse(String(init.body)).args;
+            commands.push(Array.isArray(args) ? args.join(' ') : String(args));
+            if (String(args) === 'sync') await new Promise((resolve) => setTimeout(resolve, 50));
+            return null;
+        };
 
         const main = document.querySelector('main.main');
         expect(main).toBeTruthy();
@@ -455,8 +462,8 @@ describe('Taskwarrior Web UI (component-style)', () => {
         jest.advanceTimersByTime(60);
         await flushPromises(vm, 6);
 
-        expect(runSyncSpy).toHaveBeenCalled();
-        expect(refreshSpy).toHaveBeenCalled();
+        expect(commands).toContain('sync');
+        expect(commands.some((args) => args.includes('export'))).toBe(true);
         expect(indicator.classList.contains('spinning')).toBe(false);
     });
 
@@ -979,7 +986,6 @@ describe('Taskwarrior Web UI (component-style)', () => {
         const confirmSpy = jest.spyOn(global, 'confirm').mockImplementation(() => true);
 
         const { vm } = mountWithBackend(backend);
-        const reloadSpy = jest.spyOn(vm, 'reloadAndReapplyCurrentView').mockImplementation(() => {});
         await flushPromises(vm, 5);
 
         vm.openAddFilter();
@@ -1071,7 +1077,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.openEditFilter(vm.filters[0]);
         vm.modal.filterValue = 'project:Work status:pending';
         await vm.submitModal();
-        expect(reloadSpy).toHaveBeenCalled();
+        expect(vm.modal.open).toBe(false);
 
         // Delete active filter returns to Next
         await vm.deleteFilter(vm.filters[0]);
@@ -1079,7 +1085,6 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.selectedView).toEqual({ type: 'builtin', key: 'next' });
 
         confirmSpy.mockRestore();
-        reloadSpy.mockRestore();
     });
 
     test('adds/edits/deletes annotations and shows details output', async () => {
@@ -1163,8 +1168,14 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(vm.mainMode).toBe('tasks');
         expect(vm.showTaskrc).toBe(false);
 
-        const runSyncSpy = jest.spyOn(vm, 'runSync').mockResolvedValue();
-        const refreshSpy = jest.spyOn(vm, 'refreshCurrentPanel').mockResolvedValue();
+        const commands = [];
+        backend.state.beforeFetch = ({ pathname, method, init }) => {
+            if (pathname === '/api/task' && method === 'POST') {
+                const args = JSON.parse(String(init.body)).args;
+                commands.push(Array.isArray(args) ? args.join(' ') : String(args));
+            }
+            return null;
+        };
 
         const syncButton = document.querySelector('button[aria-label="Sync"]');
         expect(syncButton).toBeTruthy();
@@ -1172,8 +1183,8 @@ describe('Taskwarrior Web UI (component-style)', () => {
         syncButton.click();
         await flushPromises(vm, 3);
 
-        expect(runSyncSpy).toHaveBeenCalled();
-        expect(refreshSpy).toHaveBeenCalled();
+        expect(commands).toContain('sync');
+        expect(commands.some((args) => args.includes('export'))).toBe(true);
     });
 
     test('sidebar sync does not refresh when output visible', async () => {
@@ -1185,8 +1196,14 @@ describe('Taskwarrior Web UI (component-style)', () => {
         vm.mainOutput = 'Hello';
         await flushPromises(vm, 1);
 
-        const runSyncSpy = jest.spyOn(vm, 'runSync').mockResolvedValue();
-        const refreshSpy = jest.spyOn(vm, 'refreshCurrentPanel').mockResolvedValue();
+        const commands = [];
+        backend.state.beforeFetch = ({ pathname, method, init }) => {
+            if (pathname === '/api/task' && method === 'POST') {
+                const args = JSON.parse(String(init.body)).args;
+                commands.push(Array.isArray(args) ? args.join(' ') : String(args));
+            }
+            return null;
+        };
 
         const syncButton = document.querySelector('button[aria-label="Sync"]');
         expect(syncButton).toBeTruthy();
@@ -1194,8 +1211,7 @@ describe('Taskwarrior Web UI (component-style)', () => {
         syncButton.click();
         await flushPromises(vm, 3);
 
-        expect(runSyncSpy).toHaveBeenCalled();
-        expect(refreshSpy).not.toHaveBeenCalled();
+        expect(commands).toEqual(['sync']);
     });
 
     test('completions return suggestions (project/due/tags)', async () => {

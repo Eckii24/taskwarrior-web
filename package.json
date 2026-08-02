@@ -5,20 +5,16 @@
   "main": "index.js",
   "scripts": {
     "postinstall": "cp node_modules/vue/dist/vue.global.js public/vue.js",
-    "start": "node backend/server.js",
-    "test": "jest"
+    "start": "bun backend/server.js",
+    "test": "bun test --preload ./tests/setup.js"
   },
   "devDependencies": {
-    "jest": "^30.0.5",
-    "jest-environment-jsdom": "^30.0.5",
-    "supertest": "^7.1.4"
+    "jsdom": "^26.1.0"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-sqlite3": "^12.4.1",
-    "express": "^5.2.1",
     "vue": "^3.5.25"
   }
 }
