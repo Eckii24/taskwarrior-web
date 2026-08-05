@@ -410,6 +410,21 @@
             return null;
         };
 
+        // Date color precedence: due (including overdue) > scheduled > waiting status.
+        // Apply lower-priority scheduled first so due is never masked by it.
+        // color.scheduled / color.scheduled.<when>
+        if (task?.scheduled) {
+            const specific = matchSpecificDateRule('scheduled', task.scheduled);
+            if (specific) {
+                matchedRule = specific;
+            } else if (colorRules['scheduled']) {
+                const scheduledDate = parseTaskwarriorDateForComparison(task.scheduled);
+                if (scheduledDate && scheduledDate <= now && status !== 'completed' && status !== 'deleted') {
+                    matchedRule = colorRules['scheduled'];
+                }
+            }
+        }
+
         // color.due / color.due.<when>
         if (task?.due) {
             const specific = matchSpecificDateRule('due', task.due);
@@ -426,19 +441,6 @@
             const dueStart = startOfLocalDay(dueDate);
             if (dueStart && todayStart && dueStart < todayStart && status !== 'completed' && status !== 'deleted') {
                 matchedRule = colorRules['overdue'];
-            }
-        }
-
-        // color.scheduled / color.scheduled.<when>
-        if (task?.scheduled) {
-            const specific = matchSpecificDateRule('scheduled', task.scheduled);
-            if (specific) {
-                matchedRule = specific;
-            } else if (colorRules['scheduled']) {
-                const scheduledDate = parseTaskwarriorDateForComparison(task.scheduled);
-                if (scheduledDate && scheduledDate <= now && status !== 'completed' && status !== 'deleted') {
-                    matchedRule = colorRules['scheduled'];
-                }
             }
         }
 

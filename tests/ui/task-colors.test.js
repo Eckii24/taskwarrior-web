@@ -291,6 +291,38 @@ color.due.2025-12-29=cyan
                  expect(style.fontWeight).toBe('bold');
              });
 
+             test('prefers due over scheduled and waiting colors', () => {
+                 const now = new Date('2025-12-29T12:00:00Z');
+                 const rules = {
+                     ...attributeRules,
+                     'waiting': TaskColors.parseColorRule('blue'),
+                 };
+
+                 const dueAndScheduled = TaskColors.getTaskColorStyle({
+                     status: 'waiting',
+                     due: '2025-12-30T00:00:00Z',
+                     scheduled: '2025-12-28T00:00:00Z',
+                 }, rules, { now });
+                 expect(dueAndScheduled.color).toBe('#ff0000');
+
+                 const scheduledAndWaiting = TaskColors.getTaskColorStyle({
+                     status: 'waiting',
+                     scheduled: '2025-12-28T00:00:00Z',
+                 }, rules, { now });
+                 expect(scheduledAndWaiting.color).toBe('#ffff00');
+             });
+
+             test('prefers overdue over scheduled colors', () => {
+                 const now = new Date('2025-12-29T12:00:00Z');
+                 const style = TaskColors.getTaskColorStyle({
+                     status: 'pending',
+                     due: '2025-12-28T00:00:00Z',
+                     scheduled: '2025-12-28T00:00:00Z',
+                 }, attributeRules, { now });
+                 expect(style.color).toBe('#ff0000');
+                 expect(style.fontWeight).toBe('bold');
+             });
+
              test('parses Taskwarrior basic zulu timestamps', () => {
                  const rules = {
                      ...attributeRules,
