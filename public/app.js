@@ -738,6 +738,8 @@ function createTaskwarriorApp({
                 selectedDate: '',
                 beforeTodayExpanded: false,
                 draggedUuid: null,
+                dragSource: null,
+                dragTarget: null,
                 loading: false,
             },
 
@@ -2394,20 +2396,56 @@ function createTaskwarriorApp({
             }
         },
 
-        onPlannerDragStart(taskUuid, event) {
+        onPlannerDragStart(taskUuid, event, fromUnplanned = false) {
             const uuid = String(taskUuid || '').trim();
+            const task = this.planner.tasks.find((candidate) => candidate?.uuid === uuid);
             this.planner.draggedUuid = uuid;
+            this.planner.dragSource = this.localDateKey(task?.[this.plannerFieldName()]) || '';
+            this.planner.dragTarget = null;
             if (event?.dataTransfer) {
                 event.dataTransfer.effectAllowed = 'move';
                 event.dataTransfer.setData('text/plain', uuid);
+                if (fromUnplanned) this.setPlannerCompactDragImage(event, event.currentTarget);
             }
+        },
+
+        setPlannerCompactDragImage(event, card) {
+            if (typeof document === 'undefined' || typeof event?.dataTransfer?.setDragImage !== 'function' || !card?.cloneNode) return;
+
+            const dayList = Array.from(document.querySelectorAll('.planner-day-column:not(.planner-before-today) .planner-task-list, .planner-mobile-day .planner-task-list'))
+                .find((element) => element.getBoundingClientRect().width > 0);
+            const width = dayList?.getBoundingClientRect().width || 160;
+            const preview = card.cloneNode(true);
+            preview.classList.add('planner-drag-preview');
+            preview.style.width = `${width}px`;
+            document.body.appendChild(preview);
+            event.dataTransfer.setDragImage(preview, 16, 16);
+            setTimeout(() => preview.remove(), 0);
+        },
+
+        onPlannerDragOver(target) {
+            if (this.planner.draggedUuid) this.planner.dragTarget = target;
+        },
+
+        onPlannerDragLeave(target, event) {
+            if (!event?.currentTarget?.contains(event.relatedTarget) && this.planner.dragTarget === target) {
+                this.planner.dragTarget = null;
+            }
+        },
+
+        onPlannerDragEnd() {
+            this.planner.draggedUuid = null;
+            this.planner.dragSource = null;
+            this.planner.dragTarget = null;
         },
 
         async onPlannerDrop(date, event) {
             const uuid = String(event?.dataTransfer?.getData('text/plain') || this.planner.draggedUuid || '').trim();
-            this.planner.draggedUuid = null;
-            if (!uuid) return;
-            if (date) await this.planTasksOnDate([uuid], date);
+            const source = this.planner.dragSource;
+            const target = String(date || '').trim();
+            this.onPlannerDragEnd();
+            if (!uuid || source === target) return;
+            if (target) await this.planTasksOnDate([uuid], target);
             else await this.unplanTasks([uuid]);
         },
 
@@ -4079,7 +4117,8 @@ function createTaskwarriorApp({
                 :style="root.getTaskCardStyle(task)"
                 :class="{ 'task-selected': root.multiSelectMode && root.isTaskSelected(task.uuid), 'reschedule-open': root.reschedule.open && !root.reschedule.multiSelect && root.reschedule.taskUuid === task.uuid }"
                 draggable="true"
-                @dragstart="root.onPlannerDragStart(task.uuid, $event)"
+                @dragstart="root.onPlannerDragStart(task.uuid, $event, showUrgency)"
+                @dragend="root.onPlannerDragEnd"
                 @click="root.multiSelectMode ? root.toggleTaskSelection(task.uuid) : root.editTask(task.uuid)"
                 @keydown.enter.prevent="root.multiSelectMode ? root.toggleTaskSelection(task.uuid) : null"
                 @keydown.space.prevent="root.multiSelectMode ? root.toggleTaskSelection(task.uuid) : null"

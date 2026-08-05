@@ -479,7 +479,7 @@
                             <header><strong>Before today</strong></header>
                             <div class="planner-task-list"><planner-task-card v-for="task in beforeTodayPlannerTasks()" :key="task.uuid" :task="task"></planner-task-card></div>
                         </section>
-                        <section v-for="date in plannerDates()" :key="date" class="planner-day-column" @dragover.prevent @drop.prevent="onPlannerDrop(date, $event)">
+                        <section v-for="date in plannerDates()" :key="date" class="planner-day-column" :class="{ 'planner-drop-target': planner.dragTarget === date }" @dragover.prevent="onPlannerDragOver(date)" @dragleave="onPlannerDragLeave(date, $event)" @drop.prevent="onPlannerDrop(date, $event)">
                             <header><strong>{{ formatPlannerDate(date) }}</strong><button v-if="multiSelectMode && selectedTaskUuids.size" type="button" class="btn small" @click="planSelectedOnDate(date)">Plan selected</button></header>
                             <div class="planner-task-list"><planner-task-card v-for="task in plannerTasksForDate(date)" :key="task.uuid" :task="task"></planner-task-card></div>
                         </section>
@@ -489,12 +489,12 @@
                             <button type="button" :aria-expanded="planner.beforeTodayExpanded" @click="planner.beforeTodayExpanded = !planner.beforeTodayExpanded">Before today ({{ beforeTodayPlannerTasks().length }})</button>
                             <div v-if="planner.beforeTodayExpanded" class="planner-task-list"><planner-task-card v-for="task in beforeTodayPlannerTasks()" :key="task.uuid" :task="task"></planner-task-card></div>
                         </section>
-                        <section class="planner-mobile-day" @dragover.prevent @drop.prevent="onPlannerDrop(planner.selectedDate, $event)">
+                        <section class="planner-mobile-day" :class="{ 'planner-drop-target': planner.dragTarget === planner.selectedDate }" @dragover.prevent="onPlannerDragOver(planner.selectedDate)" @dragleave="onPlannerDragLeave(planner.selectedDate, $event)" @drop.prevent="onPlannerDrop(planner.selectedDate, $event)">
                             <h2>{{ formatPlannerDate(planner.selectedDate) }}</h2>
                             <div class="planner-task-list"><planner-task-card v-for="task in plannerTasksForDate(planner.selectedDate)" :key="task.uuid" :task="task"></planner-task-card></div>
                         </section>
                     </div>
-                    <section class="planner-unplanned" @dragover.prevent @drop.prevent="onPlannerDrop('', $event)">
+                    <section class="planner-unplanned" :class="{ 'planner-drop-target': planner.dragTarget === '' }" @dragover.prevent="onPlannerDragOver('')" @dragleave="onPlannerDragLeave('', $event)" @drop.prevent="onPlannerDrop('', $event)">
                         <h2>Unplanned</h2>
                         <div class="planner-task-list">
                             <div v-if="!unplannedPlannerTasks().length" class="empty-state">No unplanned tasks.</div>

@@ -153,6 +153,76 @@ describe('Taskwarrior Web UI (component-style)', () => {
         expect(styles).not.toMatch(/\.planner-unplanned h2, \.planner-mobile-day h2\s*\{[^}]*position:\s*sticky/);
     });
 
+    test('Planner highlights active drop targets and uses a compact ghost for Unplanned tasks', async () => {
+        const backend = createMockBackend();
+        backend.state.settings = { reschedule_field: 'due', planner_date_field: 'scheduled', planner_days: 5 };
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        const [today, tomorrow] = vm.plannerDates();
+        backend.state.tasks.push(
+            { uuid: 'day-task', description: 'Day task', status: 'pending', scheduled: today },
+            { uuid: 'unplanned-task', description: 'Unplanned task', status: 'pending', urgency: 3 },
+        );
+        await vm.selectPlanner();
+        await flushPromises(vm, 4);
+
+        vm.onPlannerDragStart('day-task', { dataTransfer: { effectAllowed: '', setData: jest.fn() } });
+        vm.onPlannerDragOver(tomorrow);
+        await flushPromises(vm, 1);
+        const dayColumns = Array.from(document.querySelectorAll('.planner-day-column:not(.planner-before-today)'));
+        expect(dayColumns.find((column) => column.textContent.includes(vm.formatPlannerDate(tomorrow))).classList.contains('planner-drop-target')).toBe(true);
+        expect(document.querySelector('.planner-unplanned').classList.contains('planner-drop-target')).toBe(false);
+
+        const dataTransfer = { effectAllowed: '', setData: jest.fn(), setDragImage: jest.fn() };
+        const unplannedCard = document.querySelector('.planner-unplanned .planner-card');
+        vm.onPlannerDragStart('unplanned-task', { dataTransfer, currentTarget: unplannedCard }, true);
+        const [preview] = dataTransfer.setDragImage.mock.calls[0];
+        expect(preview.classList.contains('planner-drag-preview')).toBe(true);
+        expect(preview.style.width).toBe('160px');
+        expect(fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'styles.css'), 'utf8')).toMatch(/\.planner-drag-preview \.urgency\s*\{\s*display:\s*none;/);
+
+        vm.onPlannerDragOver(today);
+        await flushPromises(vm, 1);
+        expect(dayColumns.find((column) => column.textContent.includes(vm.formatPlannerDate(today))).classList.contains('planner-drop-target')).toBe(true);
+        vm.onPlannerDragOver('');
+        await flushPromises(vm, 1);
+        expect(document.querySelector('.planner-unplanned').classList.contains('planner-drop-target')).toBe(true);
+
+        vm.onPlannerDragEnd();
+        await flushPromises(vm, 1);
+        expect(document.querySelector('.planner-drop-target')).toBeFalsy();
+    });
+
+    test('Planner skips drops on their source day or Unplanned', async () => {
+        const backend = createMockBackend();
+        const commands = [];
+        backend.state.beforeFetch = ({ pathname, method, init }) => {
+            const args = pathname === '/api/task' && method === 'POST' ? JSON.parse(String(init.body)).args : [];
+            if (args.includes('mod')) commands.push(args);
+            return null;
+        };
+        const { vm } = mountWithBackend(backend);
+        await flushPromises(vm, 6);
+        const today = vm.plannerDates()[0];
+        backend.state.tasks.push(
+            { uuid: 'same-day', description: 'Same day', status: 'pending', due: today },
+            { uuid: 'same-unplanned', description: 'Same Unplanned', status: 'pending' },
+        );
+        await vm.selectPlanner();
+        await flushPromises(vm, 4);
+
+        const dataTransfer = { effectAllowed: '', setData: jest.fn(), getData: jest.fn(() => 'same-day') };
+        vm.onPlannerDragStart('same-day', { dataTransfer });
+        await vm.onPlannerDrop(today, { dataTransfer });
+        dataTransfer.getData.mockReturnValue('same-unplanned');
+        vm.onPlannerDragStart('same-unplanned', { dataTransfer });
+        await vm.onPlannerDrop('', { dataTransfer });
+
+        expect(commands).toEqual([]);
+        expect(vm.planner.draggedUuid).toBeNull();
+        expect(vm.planner.dragSource).toBeNull();
+    });
+
     test('Planner renders urgency-sorted before-today tasks only when present', async () => {
         const backend = createMockBackend();
         backend.state.settings = { reschedule_field: 'due', planner_date_field: 'scheduled', planner_days: 5 };
